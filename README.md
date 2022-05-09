@@ -3,11 +3,16 @@ Process GLDF
 
 WIP
 
-For the GLDF new Luminaire / Sensor Container Definition have a look at
-Basically -gldfis a zip Container, containing the product.xml for the Definition
+For the GLDF new Luminaire / Sensor Container Definition.
+
+
+Basically .gldf is a zip Container, containing the product.xml for the Definition
+
 and as well the needed binaries, e.g. images and soem Eulumdat / or IES files,
 as well as 3D Models characterising the luminaire.
+
 More:
+
 https://gldf.io
 
 This rust lib for now can read the product.xml definition directly from the .gldf Container
