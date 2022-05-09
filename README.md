@@ -3,8 +3,9 @@ Process GLDF
 
 WIP
 
-For the GLDF new Luminaire / Sensor Container Definition.
+A cross platform GLDF processing library.
 
+For the GLDF new Luminaire / Sensor Container Definition.
 
 Basically .gldf is a zip Container, containing the product.xml for the Definition
 
@@ -32,4 +33,18 @@ into Search Engines or in General as JSON Storage now is quite common, last but 
     println!("{}", x_reserialized);
     assert_eq!(x_serialized, x_reserialized);
 
-Passes OK, so we are able to read xml, convert to JSON and again into the same XML.  
+Passes OK, so we are able to read xml, convert to JSON and again into the same XML.
+
+For processing for now there are some implemantations already:
+
+    let phot_files = loaded.get_phot_files().unwrap();
+    let mut ldc_contents: Vec<String> = Vec::new();
+    for f in phot_files.iter(){
+        let mut ldc_content = "".to_owned();
+        let file_id = f.id.to_string();
+        ldc_content.push_str(&loaded.get_ldc_by_id(file_id).unwrap().to_owned());
+        ldc_contents.push(ldc_content);
+        println!("{}", f.file_name)
+    }
+
+    Here it is shown how to read the ldc files from the GLDF Container.
