@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd">
+    <Header>
+        <Author>_empty_</Author>
+        <Manufacturer>demo</Manufacturer>
+        <CreationTimeCode>2022-03-14T12:16:00</CreationTimeCode>
+        <CreatedWithApplication>GLDF Edit</CreatedWithApplication>
+        <FormatVersion>1.0.0-rc.1</FormatVersion>
+        <DefaultLanguage>en-US</DefaultLanguage>
+        <LicenseKeys>
+            <LicenseKey application="RELUX">_empty_</LicenseKey>
+            <LicenseKey application="DIALux">_empty_</LicenseKey>
+        </LicenseKeys>
+        <ReluxMemberId>dmo</ReluxMemberId>
+        <DIALuxMemberId>_empty_</DIALuxMemberId>
+        <Contact>
+            <Address>
+                <FirstName>_empty_1</FirstName>
+                <Name>_empty_2</Name>
+                <Street>Kaspar Pfeiffer Str. 43</Street>
+                <ZIPCode>41425</ZIPCode>
+                <City>Münchenstein4</City>
+                <Country>Switzerland6</Country>
+                <Phone>+41 (0) 61 333 07 707</Phone>
+                <EMailAddresses>
+                    <EMail mailto="info@relux.com8">Relux Info9</EMail>
+                </EMailAddresses>
+            </Address>
+        </Contact>
+    </Header>
+    <GeneralDefinitions>
+        <Files>
+            <File id="ldtfile" contentType="ldc/eulumdat" type="localFileName">diffuse.ldt</File>
+            <File id="pic01" contentType="image/jpg" type="localFileName">bulb.jpg</File>
+            <File id="geo01" contentType="geo/l3d" type="localFileName">recessed_round.l3d</File>
+        </Files>
+        <Photometries>
+            <Photometry id="photom01">
+                <PhotometryFileReference fileId="ldtfile" />
+                <DescriptivePhotometry>
+                    <LuminousEfficacy>98.2</LuminousEfficacy>
+                    <CIE-FluxCode>44 75 94 100 100</CIE-FluxCode>
+                </DescriptivePhotometry>
+            </Photometry>
+        </Photometries>
+        <LightSources>
+            <FixedLightSource id="s01">
+                <Name>
+                    <Locale language="en">LED</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">Module with 1 LED light source.</Locale>
+                </Description>
+                <RatedInputPower>10.2</RatedInputPower>
+                <ColorInformation>
+                    <ColorRenderingIndex>95</ColorRenderingIndex>
+                    <CorrelatedColorTemperature>3000</CorrelatedColorTemperature>
+                </ColorInformation>
+                <LightSourceMaintenance lifetime="50000">
+                    <LedMaintenanceFactor hours="40000">0.94</LedMaintenanceFactor>
+                </LightSourceMaintenance>
+            </FixedLightSource>
+        </LightSources>
+        <ControlGears>
+            <ControlGear id="c01">
+                <Name>
+                    <Locale language="en">LED drive 01</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">vag</Locale>
+                </Description>
+                <StandbyPower>0.011</StandbyPower>
+                <ConstantLightOutputStartPower>0.012</ConstantLightOutputStartPower>
+                <ConstantLightOutputEndPower>0.013</ConstantLightOutputEndPower>
+                <PowerConsumptionControls>0.014</PowerConsumptionControls>
+                <Dimmable>false</Dimmable>
+                <ColorControllable>false</ColorControllable>
+                <Interfaces>
+                    <Interface>DALI Broadcast</Interface>
+                    <Interface>DALI Addressable</Interface>
+                </Interfaces>
+            </ControlGear>
+        </ControlGears>
+        <Emitters>
+            <Emitter id="emitter01">
+                <FixedLightEmitter emergencyBehaviour="None">
+                    <PhotometryReference photometryId="photom01" />
+                    <LightSourceReference fixedLightSourceId="s01" />
+                    <ControlGearReference controlGearId="c01" />
+                    <RatedLuminousFlux>1001</RatedLuminousFlux>
+                </FixedLightEmitter>
+            </Emitter>
+            <Emitter id="emitter02">
+                <FixedLightEmitter emergencyBehaviour="None">
+                    <PhotometryReference photometryId="photom01" />
+                    <LightSourceReference fixedLightSourceId="s01" />
+                    <ControlGearReference controlGearId="c01" />
+                    <RatedLuminousFlux>1002</RatedLuminousFlux>
+                </FixedLightEmitter>
+            </Emitter>
+            <Emitter id="emitter03">
+                <FixedLightEmitter emergencyBehaviour="None">
+                    <PhotometryReference photometryId="photom01" />
+                    <LightSourceReference fixedLightSourceId="s01" />
+                    <ControlGearReference controlGearId="c01" />
+                    <RatedLuminousFlux>1003</RatedLuminousFlux>
+                </FixedLightEmitter>
+            </Emitter>
+            <Emitter id="emitter04">
+                <FixedLightEmitter emergencyBehaviour="None">
+                    <PhotometryReference photometryId="photom01" />
+                    <LightSourceReference fixedLightSourceId="s01" />
+                    <ControlGearReference controlGearId="c01" />
+                    <RatedLuminousFlux>1004</RatedLuminousFlux>
+                </FixedLightEmitter>
+            </Emitter>
+        </Emitters>
+        <Geometries>
+            <ModelGeometry id="geometry01">
+                <GeometryFileReference fileId="geo01" />
+            </ModelGeometry>
+        </Geometries>
+    </GeneralDefinitions>
+    <ProductDefinitions>
+        <ProductMetaData>
+            <ProductNumber>
+                <Locale language="en">_empty_</Locale>
+            </ProductNumber>
+            <Name>
+                <Locale language="en">_empty_</Locale>
+            </Name>
+            <Description>
+                <Locale language="en">_empty_</Locale>
+            </Description>
+            <TenderText>
+                <Locale language="en">_empty_</Locale>
+            </TenderText>
+            <ProductSeries>
+                <ProductSerie>
+                    <Name>
+                        <Locale language="en">_empty_</Locale>
+                    </Name>
+                    <Hyperlinks>
+                        <Hyperlink href="https://relux.com">Manufacturer URL</Hyperlink>
+                    </Hyperlinks>
+                </ProductSerie>
+            </ProductSeries>
+            <Pictures>
+                <Image imageType="Product Picture" fileId="pic01" />
+            </Pictures>
+            <LuminaireMaintenance>
+                <Cie97LuminaireType>Open Top Housing (Natural Ventilated)</Cie97LuminaireType>
+                <CieLuminaireMaintenanceFactors>
+                    <LuminaireMaintenanceFactor years="4" roomCondition="Normal">0.91</LuminaireMaintenanceFactor>
+                </CieLuminaireMaintenanceFactors>
+            </LuminaireMaintenance>
+            <DescriptiveAttributes>
+                <Mechanical>
+                    <ProductSize>
+                        <Length>140</Length>
+                        <Width>0</Width>
+                        <Height>100</Height>
+                    </ProductSize>
+                    <IKRating>IK06</IKRating>
+                    <Weight>0.56</Weight>
+                </Mechanical>
+                <Electrical>
+                    <ClampingRange>
+                        <Lower>0.01</Lower>
+                        <Upper>99.9</Upper>
+                    </ClampingRange>
+                    <SwitchingCapacity>_empty_sw</SwitchingCapacity>
+                    <ElectricalSafetyClass>III</ElectricalSafetyClass>
+                    <IngressProtectionIPCode>IP51</IngressProtectionIPCode>
+                    <PowerFactor>0.012</PowerFactor>
+                    <ConstantLightOutput>true</ConstantLightOutput>
+                </Electrical>
+                <Marketing>
+                    <Designer>Relux Web Team</Designer>
+                    <DesignAwards>
+                        <DesignAward>Perfect light award</DesignAward>
+                    </DesignAwards>
+                    <Applications>
+                        <Application>Interior: Shop Lighting: Retail</Application>
+                        <Application>Interior: Office: Office Desks</Application>
+                        <Application>Interior: Office: Discussions</Application>
+                    </Applications>
+                </Marketing>
+                <OperationsAndMaintenance>
+                    <UsefulLifeTimes>
+                        <UsefulLife>L80B50 50000h 25°C</UsefulLife>
+                    </UsefulLifeTimes>
+                </OperationsAndMaintenance>
+            </DescriptiveAttributes>
+        </ProductMetaData>
+        <Variants>
+            <Variant id="var_01">
+                <ProductNumber>
+                    <Locale language="en">_empty_</Locale>
+                </ProductNumber>
+                <Name>
+                    <Locale language="en">_var-01_</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">_empty_</Locale>
+                </Description>
+                <TenderText>
+                    <Locale language="en">_empty_</Locale>
+                </TenderText>
+                <GTIN>00000000</GTIN>
+                <Geometry>
+                    <ModelGeometryReference geometryId="geometry01">
+                        <EmitterReference emitterId="emitter01">
+                            <EmitterObjectExternalName>leo</EmitterObjectExternalName>
+                        </EmitterReference>
+                    </ModelGeometryReference>
+                </Geometry>
+            </Variant>
+            <Variant id="var_02">
+                <ProductNumber>
+                    <Locale language="en">_empty_</Locale>
+                </ProductNumber>
+                <Name>
+                    <Locale language="en">_var-02_</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">_empty_</Locale>
+                </Description>
+                <TenderText>
+                    <Locale language="en">_empty_</Locale>
+                </TenderText>
+                <GTIN>00000000</GTIN>
+                <Geometry>
+                    <ModelGeometryReference geometryId="geometry01">
+                        <EmitterReference emitterId="emitter02">
+                            <EmitterObjectExternalName>leo</EmitterObjectExternalName>
+                        </EmitterReference>
+                    </ModelGeometryReference>
+                </Geometry>
+            </Variant>
+            <Variant id="var_03">
+                <ProductNumber>
+                    <Locale language="en">_empty_</Locale>
+                </ProductNumber>
+                <Name>
+                    <Locale language="en">_var-03_</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">_empty_</Locale>
+                </Description>
+                <TenderText>
+                    <Locale language="en">_empty_</Locale>
+                </TenderText>
+                <GTIN>00000000</GTIN>
+                <Geometry>
+                    <ModelGeometryReference geometryId="geometry01">
+                        <EmitterReference emitterId="emitter03">
+                            <EmitterObjectExternalName>leo</EmitterObjectExternalName>
+                        </EmitterReference>
+                    </ModelGeometryReference>
+                </Geometry>
+            </Variant>
+            <Variant id="var_04">
+                <ProductNumber>
+                    <Locale language="en">_empty_</Locale>
+                </ProductNumber>
+                <Name>
+                    <Locale language="en">_var-04_</Locale>
+                </Name>
+                <Description>
+                    <Locale language="en">_empty_</Locale>
+                </Description>
+                <TenderText>
+                    <Locale language="en">_empty_</Locale>
+                </TenderText>
+                <GTIN>00000000</GTIN>
+                <Geometry>
+                    <ModelGeometryReference geometryId="geometry01">
+                        <EmitterReference emitterId="emitter04">
+                            <EmitterObjectExternalName>leo</EmitterObjectExternalName>
+                        </EmitterReference>
+                    </ModelGeometryReference>
+                </Geometry>
+            </Variant>
+        </Variants>
+    </ProductDefinitions>
+</Root>
