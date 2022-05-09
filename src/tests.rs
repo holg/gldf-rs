@@ -4,7 +4,6 @@ use crate::gldf;
 
 #[test]
 fn parsing_gldf_container() {
-    use yaserde::de::from_str;
     use serde_json::from_str as serde_from_str;
     let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
     println!("{:?}", loaded);
@@ -36,4 +35,19 @@ fn test_gldf_product_impls() {
     let x_reserialized =  j_loaded.to_xml().unwrap();
     println!("{}", x_reserialized);
     assert_eq!(x_serialized, x_reserialized);
+}
+
+#[test]
+fn test_gldf_get_phot_files() {
+    use std::string::String;
+    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    let phot_files = loaded.get_phot_files().unwrap();
+    let mut ldc_contents: Vec<String> = Vec::new();
+    for f in phot_files.iter(){
+        let mut ldc_content = "".to_owned();
+        let file_id = f.id.to_string();
+        ldc_content.push_str(&loaded.get_ldc_by_id(file_id).unwrap().to_owned());
+        ldc_contents.push(ldc_content);
+        println!("{}", f.file_name)
+    }
 }
