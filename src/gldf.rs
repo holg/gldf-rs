@@ -1,8 +1,12 @@
+use std::borrow::Borrow;
 use serde::Serialize;
 use serde::Deserialize;
+use zip::ZipArchive;
+
 #[derive(Default, Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
 #[yaserde(rename = "Root")]
 pub struct GldfProduct {
+
   #[yaserde(rename = "Header")]
   #[yaserde(child)]
   pub header: Header,
@@ -1701,5 +1705,50 @@ pub struct Voltage {
   pub type_attr: String,
   #[yaserde(rename = "Frequency")]
   pub frequency: String,
+}
+use std::fs::File as StdFile;
+use std::path::PathBuf;
+use std::io::Read;
+use std::error::Error as StdError;
+use std::path::Path;
+use yaserde::de::from_str;
+use serde_json::from_str as serde_from_str;
+impl GldfProduct{
+  pub fn  get_xml_str_from_gldf(path: PathBuf) -> Result<String, Box<dyn StdError>> {
+    let zipfile = StdFile::open(path)?;
+    let mut zip = ZipArchive::new(zipfile)?;
+    let mut xmlfile = zip.by_name("product.xml")?;
+    let mut xml_str = String::new();
+    //println!("file is {}, size {} bytes", xmlfile.name(), xmlfile.size());
+    let xml_size: usize = xmlfile.size() as usize;
+    xmlfile.read_to_string(&mut xml_str)?;
+    Ok(xml_str)
+  }
+  pub fn from_xml(xml_str: &str) -> Result<GldfProduct, Box<dyn StdError>> {
+    let loaded = from_str(xml_str).unwrap();
+    Ok(loaded)
+  }
+  pub fn load_gldf(path: &str) -> Result<GldfProduct, Box<dyn StdError>> {
+    let path_buf = Path::new(path).to_path_buf();
+    let loaded: GldfProduct = from_str(&GldfProduct::get_xml_str_from_gldf(path_buf).unwrap()).unwrap();
+    Ok(loaded)
+  }
+  pub fn to_json(self: &Self) -> Result<String, Box<dyn StdError>> {
+    let json_str = serde_json::to_string(&self).unwrap();
+    Ok(json_str)
+  }
+  pub fn from_json(json_str: &str) -> Result<GldfProduct, Box<dyn StdError>> {
+    let j_loaded: GldfProduct = serde_from_str(&json_str).unwrap();
+    Ok(j_loaded)
+  }
+  pub fn to_xml(self: &Self) -> Result<String, Box<dyn StdError>> {
+    let yaserde_cfg = yaserde::ser::Config {
+      perform_indent: true,
+      ..Default::default()
+    };
+    let x_serialized = yaserde::ser::to_string_with_config(self, &yaserde_cfg).unwrap();
+    Ok(x_serialized)
+  }
+
 }
 
