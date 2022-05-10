@@ -2,6 +2,8 @@
 name = "gldf-rs"
 version = "0.1.0"
 edition = "2021"
+authors = ["Holger Trahe<trahe@mac.com>"]
+license = "GPL"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,4 +12,10 @@ yaserde = {version = "0.8"}
 yaserde_derive = {version = "0.8"}
 serde = { version = "1.0", features = ["derive"] }
 serde_json = {version = "1.0"}
-zip = {version = "0.5"}
+zip = {version="0.6", features = ["deflate", "time"], default-features = false}
+#zip = {path = "../zip", features = ["deflate", "time"], default-features = false}
+
+[lib]
+name = "gldf_rs"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
