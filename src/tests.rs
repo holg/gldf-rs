@@ -1,5 +1,5 @@
 use gldf::GldfProduct;
-use crate::gldf;
+use crate::{gldf, StdFile};
 
 
 #[test]
@@ -25,6 +25,30 @@ fn parsing_gldf_container() {
 #[test]
 fn test_gldf_product_impls() {
     let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    println!("{:?}", loaded);
+    // Display pretty printed XML
+    let x_serialized = loaded.to_xml().unwrap();
+    println!("{}", x_serialized);
+    let json_str = loaded.to_json().unwrap();
+    println!("{}", json_str);
+    let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
+    let x_reserialized =  j_loaded.to_xml().unwrap();
+    println!("{}", x_reserialized);
+    assert_eq!(x_serialized, x_reserialized);
+}
+
+fn read_a_file() -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut gldf_file = StdFile::open("./tests/data/test.gldf").unwrap();
+    let mut file_buf = Vec::new();
+    gldf_file.read_to_end(&mut file_buf);
+    return Ok(file_buf);
+}
+
+#[test]
+fn test_gldf_from_buf() {
+    let file_buf = read_a_file().unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf_from_buf(file_buf).unwrap();
     println!("{:?}", loaded);
     // Display pretty printed XML
     let x_serialized = loaded.to_xml().unwrap();
