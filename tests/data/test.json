@@ -1,0 +1,569 @@
+{
+  "product": {
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:noNamespaceSchemaLocation": "https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd",
+    "Header": {
+      "Author": "_empty_",
+      "Manufacturer": "demo",
+      "CreationTimeCode": "2022-03-14T12:16:00",
+      "CreatedWithApplication": "GLDF Edit",
+      "FormatVersion": "1.0.0-rc.1",
+      "DefaultLanguage": "en-US",
+      "LicenseKeys": {
+        "LicenseKey": [
+          {
+            "@application": "RELUX",
+            "$": "_empty_"
+          },
+          {
+            "@application": "DIALux",
+            "$": "_empty_"
+          }
+        ]
+      },
+      "ReluxMemberId": "dmo",
+      "DIALuxMemberId": "_empty_",
+      "Contact": {
+        "Address": [
+          {
+            "FirstName": "_empty_1",
+            "Name": "_empty_2",
+            "Street": "Kaspar Pfeiffer Str. 43",
+            "ZIPCode": "41425",
+            "City": "Münchenstein4",
+            "Country": "Switzerland6",
+            "Phone": "+41 (0) 61 333 07 707",
+            "EMailAddresses": {
+              "EMail": [
+                {
+                  "@mailto": "info@relux.com8",
+                  "$": "Relux Info9"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GeneralDefinitions": {
+      "Files": {
+        "File": [
+          {
+            "@id": "ldtfile",
+            "@contentType": "ldc/eulumdat",
+            "@type": "localFileName",
+            "$": "diffuse.ldt"
+          },
+          {
+            "@id": "pic01",
+            "@contentType": "image/jpg",
+            "@type": "localFileName",
+            "$": "bulb.jpg"
+          },
+          {
+            "@id": "geo01",
+            "@contentType": "geo/l3d",
+            "@type": "localFileName",
+            "$": "recessed_round.l3d"
+          }
+        ]
+      },
+      "Photometries": {
+        "Photometry": [
+          {
+            "@id": "photom01",
+            "PhotometryFileReference": {
+              "@fileId": "ldtfile"
+            },
+            "DescriptivePhotometry": {
+              "LuminousEfficacy": 98.2,
+              "CIE-FluxCode": "44 75 94 100 100"
+            }
+          }
+        ]
+      },
+      "LightSources": {
+        "ChangeableLightSource": [],
+        "FixedLightSource": [
+          {
+            "@id": "s01",
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "LED"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "Module with 1 LED light source."
+                }
+              ]
+            },
+            "RatedInputPower": 10.2,
+            "ColorInformation": {
+              "ColorRenderingIndex": 95,
+              "CorrelatedColorTemperature": 3000
+            },
+            "LightSourceMaintenance": {
+              "@lifetime": 50000,
+              "LedMaintenanceFactor": {
+                "@hours": 40000,
+                "$": "0.94"
+              }
+            }
+          }
+        ]
+      },
+      "ControlGears": {
+        "ControlGear": [
+          {
+            "@id": "c01",
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "LED drive 01"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "vag"
+                }
+              ]
+            },
+            "StandbyPower": 0.011,
+            "ConstantLightOutputStartPower": 0.012,
+            "ConstantLightOutputEndPower": 0.013,
+            "PowerConsumptionControls": 0.014,
+            "Dimmable": false,
+            "ColorControllable": false,
+            "Interfaces": {
+              "Interface": [
+                "DALI Broadcast",
+                "DALI Addressable"
+              ]
+            }
+          }
+        ]
+      },
+      "Emitters": {
+        "Emitter": [
+          {
+            "@id": "emitter01",
+            "ChangeableLightEmitter": [],
+            "FixedLightEmitter": [
+              {
+                "@emergencyBehaviour": "None",
+                "PhotometryReference": {
+                  "@photometryId": "photom01"
+                },
+                "LightSourceReference": {
+                  "@fixedLightSourceId": "s01"
+                },
+                "ControlGearReference": {
+                  "@controlGearId": "c01"
+                },
+                "RatedLuminousFlux": 1001
+              }
+            ],
+            "Sensor": []
+          },
+          {
+            "@id": "emitter02",
+            "ChangeableLightEmitter": [],
+            "FixedLightEmitter": [
+              {
+                "@emergencyBehaviour": "None",
+                "PhotometryReference": {
+                  "@photometryId": "photom01"
+                },
+                "LightSourceReference": {
+                  "@fixedLightSourceId": "s01"
+                },
+                "ControlGearReference": {
+                  "@controlGearId": "c01"
+                },
+                "RatedLuminousFlux": 1002
+              }
+            ],
+            "Sensor": []
+          },
+          {
+            "@id": "emitter03",
+            "ChangeableLightEmitter": [],
+            "FixedLightEmitter": [
+              {
+                "@emergencyBehaviour": "None",
+                "PhotometryReference": {
+                  "@photometryId": "photom01"
+                },
+                "LightSourceReference": {
+                  "@fixedLightSourceId": "s01"
+                },
+                "ControlGearReference": {
+                  "@controlGearId": "c01"
+                },
+                "RatedLuminousFlux": 1003
+              }
+            ],
+            "Sensor": []
+          },
+          {
+            "@id": "emitter04",
+            "ChangeableLightEmitter": [],
+            "FixedLightEmitter": [
+              {
+                "@emergencyBehaviour": "None",
+                "PhotometryReference": {
+                  "@photometryId": "photom01"
+                },
+                "LightSourceReference": {
+                  "@fixedLightSourceId": "s01"
+                },
+                "ControlGearReference": {
+                  "@controlGearId": "c01"
+                },
+                "RatedLuminousFlux": 1004
+              }
+            ],
+            "Sensor": []
+          }
+        ]
+      },
+      "Geometries": {
+        "SimpleGeometry": [],
+        "ModelGeometry": [
+          {
+            "@id": "geometry01",
+            "GeometryFileReference": [
+              {
+                "@fileId": "geo01"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "ProductDefinitions": {
+      "ProductMetaData": {
+        "ProductNumber": {
+          "Locale": [
+            {
+              "@language": "en",
+              "$": "_empty_"
+            }
+          ]
+        },
+        "Name": {
+          "Locale": [
+            {
+              "@language": "en",
+              "$": "_empty_"
+            }
+          ]
+        },
+        "Description": {
+          "Locale": [
+            {
+              "@language": "en",
+              "$": "_empty_"
+            }
+          ]
+        },
+        "TenderText": {
+          "Locale": [
+            {
+              "@language": "en",
+              "$": "_empty_"
+            }
+          ]
+        },
+        "ProductSeries": {
+          "ProductSerie": [
+            {
+              "Name": {
+                "Locale": [
+                  {
+                    "@language": "en",
+                    "$": "_empty_"
+                  }
+                ]
+              },
+              "Hyperlinks": {
+                "Hyperlink": [
+                  {
+                    "@href": "https://relux.com",
+                    "$": "Manufacturer URL"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "Pictures": {
+          "Image": [
+            {
+              "@imageType": "Product Picture",
+              "@fileId": "pic01"
+            }
+          ]
+        },
+        "LuminaireMaintenance": {
+          "Cie97LuminaireType": "Open Top Housing (Natural Ventilated)",
+          "CieLuminaireMaintenanceFactors": {
+            "LuminaireMaintenanceFactor": [
+              {
+                "@years": "4",
+                "@roomCondition": "Normal",
+                "$": "0.91"
+              }
+            ]
+          }
+        },
+        "DescriptiveAttributes": {
+          "Mechanical": {
+            "ProductSize": {
+              "Length": 140,
+              "Width": 0,
+              "Height": 100
+            },
+            "IKRating": "IK06",
+            "Weight": 0.56
+          },
+          "Electrical": {
+            "ClampingRange": {
+              "Lower": 0.01,
+              "Upper": 99.9
+            },
+            "SwitchingCapacity": "_empty_sw",
+            "ElectricalSafetyClass": "III",
+            "IngressProtectionIPCode": "IP51",
+            "PowerFactor": 0.012,
+            "ConstantLightOutput": true
+          },
+          "Marketing": {
+            "Designer": "Relux Web Team",
+            "DesignAwards": {
+              "DesignAward": [
+                "Perfect light award"
+              ]
+            },
+            "Applications": {
+              "Application": [
+                "Interior: Shop Lighting: Retail",
+                "Interior: Office: Office Desks",
+                "Interior: Office: Discussions"
+              ]
+            }
+          },
+          "OperationsAndMaintenance": {
+            "UsefulLifeTimes": {
+              "UsefulLife": [
+                "L80B50 50000h 25°C"
+              ]
+            }
+          }
+        }
+      },
+      "Variants": {
+        "Variant": [
+          {
+            "@id": "var_01",
+            "ProductNumber": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_var-01_"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "TenderText": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "GTIN": "00000000",
+            "Geometry": {
+              "ModelGeometryReference": {
+                "@geometryId": "geometry01",
+                "EmitterReference": [
+                  {
+                    "@emitterId": "emitter01",
+                    "EmitterObjectExternalName": "leo"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "@id": "var_02",
+            "ProductNumber": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_var-02_"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "TenderText": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "GTIN": "00000000",
+            "Geometry": {
+              "ModelGeometryReference": {
+                "@geometryId": "geometry01",
+                "EmitterReference": [
+                  {
+                    "@emitterId": "emitter02",
+                    "EmitterObjectExternalName": "leo"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "@id": "var_03",
+            "ProductNumber": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_var-03_"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "TenderText": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "GTIN": "00000000",
+            "Geometry": {
+              "ModelGeometryReference": {
+                "@geometryId": "geometry01",
+                "EmitterReference": [
+                  {
+                    "@emitterId": "emitter03",
+                    "EmitterObjectExternalName": "leo"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "@id": "var_04",
+            "ProductNumber": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "Name": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_var-04_"
+                }
+              ]
+            },
+            "Description": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "TenderText": {
+              "Locale": [
+                {
+                  "@language": "en",
+                  "$": "_empty_"
+                }
+              ]
+            },
+            "GTIN": "00000000",
+            "Geometry": {
+              "ModelGeometryReference": {
+                "@geometryId": "geometry01",
+                "EmitterReference": [
+                  {
+                    "@emitterId": "emitter04",
+                    "EmitterObjectExternalName": "leo"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

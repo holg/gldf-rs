@@ -39,11 +39,11 @@ impl GldfProduct {
         Ok(loaded)
     }
     pub fn load_gldf_from_buf(file_buf: Vec<u8>) -> Result<GldfProduct, Box<dyn StdError>> {
-        let mut zip_buf = std::io::Cursor::new(file_buf);
-        let mut zip = zip::ZipArchive::new(zip_buf)?;
+        let zip_buf = std::io::Cursor::new(file_buf);
+        let mut zip = ZipArchive::new(zip_buf)?;
         for i in 0..zip.len()
         {
-            let mut file = zip.by_index(i).unwrap();
+            let  file = zip.by_index(i).unwrap();
             println!("Filename: {}", file.name());
             let first_byte = file.bytes().next().unwrap()?;
             println!("{}", first_byte);
@@ -51,16 +51,26 @@ impl GldfProduct {
         let mut xmlfile = zip.by_name("product.xml")?;
         let mut xml_str = String::new();
         xmlfile.read_to_string(&mut xml_str)?;
-        let mut loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
+        let loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
         Ok(loaded)
     }
     pub fn to_json(self: &Self) -> Result<String, Box<dyn StdError>> {
         let json_str = serde_json::to_string(&self).unwrap();
         Ok(json_str)
     }
+    pub fn to_pretty_json(self: &Self) -> Result<String, Box<dyn StdError>> {
+        let json_str = serde_json::to_string_pretty(&self).unwrap();
+        Ok(json_str)
+    }
     pub fn from_json(json_str: &str) -> Result<GldfProduct, Box<dyn StdError>> {
         let j_loaded: GldfProduct = serde_from_str(&json_str).unwrap();
         Ok(j_loaded)
+    }
+    pub fn from_json_file(path: PathBuf) -> Result<GldfProduct, Box<dyn StdError>> {
+        let mut json_file = StdFile::open(path)?;
+        let mut json_str = String::new();
+        json_file.read_to_string(& mut json_str);
+        Ok(GldfProduct::from_json(&json_str).unwrap())
     }
     pub fn to_xml(self: &Self) -> Result<String, Box<dyn StdError>> {
         let yaserde_cfg = yaserde::ser::Config {

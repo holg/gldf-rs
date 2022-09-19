@@ -30,10 +30,15 @@ fn test_gldf_product_impls() {
     let x_serialized = loaded.to_xml().unwrap();
     println!("{}", x_serialized);
     let json_str = loaded.to_json().unwrap();
-    println!("{}", json_str);
     let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
     let x_reserialized =  j_loaded.to_xml().unwrap();
     println!("{}", x_reserialized);
+    println!{r#"{{"product":"#}
+    println!("{}", loaded.to_json().unwrap());
+    //println!("{}", loaded.to_pretty_json().unwrap());
+    println!("}}");
+
+
     assert_eq!(x_serialized, x_reserialized);
 }
 
