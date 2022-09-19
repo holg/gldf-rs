@@ -642,7 +642,7 @@ pub struct LedMaintenanceFactor {
   #[serde(rename = "@hours")]
   pub hours: i32,
   #[yaserde(text, rename="$value")]
-  #[serde(rename = "$", deserialize_with="%r.as_f64")] //, getter = "get_f64_from_string")]
+  #[serde(rename = "$")] // , deserialize_with="%r.as_f64")] //, getter = "get_f64_from_string")]
   pub value: String, //# TODO this shall be f64, but yaserde(text) must be it seems
 }
 // LightSourceMaintenance ...
