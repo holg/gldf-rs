@@ -112,7 +112,7 @@
               "@lifetime": 50000,
               "LedMaintenanceFactor": {
                 "@hours": 40000,
-                "$": "0.94"
+                "$": 0.94
               }
             }
           }
@@ -320,9 +320,9 @@
           "CieLuminaireMaintenanceFactors": {
             "LuminaireMaintenanceFactor": [
               {
-                "@years": "4",
+                "@years": 4,
                 "@roomCondition": "Normal",
-                "$": "0.91"
+                "$": 0.91
               }
             ]
           }
