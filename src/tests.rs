@@ -1,4 +1,7 @@
-use gldf::GldfProduct;
+use std::borrow::Borrow;
+use std::io::Bytes;
+use gldf::{GldfProduct};
+
 use crate::{gldf, StdFile};
 
 
@@ -42,7 +45,7 @@ fn test_gldf_product_impls() {
     assert_eq!(x_serialized, x_reserialized);
 }
 
-fn read_a_file() -> std::io::Result<Vec<u8>> {
+fn read_test_gldf() -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     let mut gldf_file = StdFile::open("./tests/data/test.gldf").unwrap();
     let mut file_buf = Vec::new();
@@ -52,18 +55,18 @@ fn read_a_file() -> std::io::Result<Vec<u8>> {
 
 #[test]
 fn test_gldf_from_buf() {
-    let file_buf = read_a_file().unwrap();
-    let loaded: GldfProduct = GldfProduct::load_gldf_from_buf(file_buf).unwrap();
-    println!("{:?}", loaded);
+    let file_buf = read_test_gldf().unwrap();
+    let loaded= GldfProduct::load_gldf_from_buf_all(file_buf).unwrap();
+    println!("{:?}", loaded.gldf);
     // Display pretty printed XML
-    let x_serialized = loaded.to_xml().unwrap();
+    let x_serialized = loaded.gldf.to_xml().unwrap();
     println!("{}", x_serialized);
-    let json_str = loaded.to_json().unwrap();
+    let json_str = loaded.gldf.to_json().unwrap();
     println!("{}", json_str);
     let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
-    let x_reserialized =  j_loaded.to_xml().unwrap();
-    println!("{}", x_reserialized);
-    assert_eq!(x_serialized, x_reserialized);
+    let j_reserialized =  j_loaded.to_xml().unwrap();
+    println!("{}", j_reserialized);
+    assert_eq!(x_serialized, j_reserialized);
 }
 
 #[test]
@@ -78,5 +81,24 @@ fn test_gldf_get_phot_files() {
         ldc_content.push_str(&loaded.get_ldc_by_id(file_id).unwrap().to_owned());
         ldc_contents.push(ldc_content);
         println!("{}", f.file_name)
+    }
+}
+
+#[test]
+fn test_gldf_get_pic_files() {
+    use std::string::String;
+    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    let image_files = loaded.get_image_def_files().unwrap();
+    //let mut image_contents = Vec::new();
+    for f in image_files.iter(){
+        let mut image_content = "".to_owned();
+        //let buf = loaded.load_gldf_file(f.id.as_str());
+        // match  buf {
+        //     Ok(fc) => image_contents.push(fc.to_owned()),
+        //     Err(e) =>{
+        //         println!("Error: {}", e)
+        //     }
+        // }
+
     }
 }
