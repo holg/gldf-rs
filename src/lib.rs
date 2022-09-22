@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate yaserde_derive;
 pub mod gldf;
 pub use gldf::*;
@@ -11,6 +10,20 @@ use std::path::Path;
 use yaserde::de::from_str;
 use serde_json::from_str as serde_from_str;
 use zip::ZipArchive;
+
+#[derive(Clone, Debug)]
+pub struct BufFile{
+    pub name: Option<String>,
+    pub content: Option<Vec<u8>>,
+    pub file_id: Option<String>,
+    pub path: Option<String>,
+}
+pub struct FileBufGldf{
+    pub files: Vec<BufFile>,
+    pub gldf: GldfProduct,
+}
+
+
 impl GldfProduct {
     pub fn load_gldf_file_str(self: &Self, path: String) -> Result<String, Box<dyn StdError>> {
         let zipfile = StdFile::open(Path::new(&self.path))?;
@@ -19,6 +32,14 @@ impl GldfProduct {
         let mut some_file = zip.by_name(&path)?;
         some_file.read_to_string(&mut some_str)?;
         Ok(some_str)
+    }
+    pub fn load_gldf_file(self: &Self, path: String) -> Result<Vec<u8>, Box<dyn StdError>> {
+        let zipfile = StdFile::open(Path::new(&self.path))?;
+        let mut zip = ZipArchive::new(zipfile)?;
+        let mut file_buf = Vec::new();
+        let mut some_file = zip.by_name(&path)?;
+        some_file.read_to_end(&mut file_buf)?;
+        Ok(file_buf)
     }
     pub fn get_xml_str_from_gldf(path: PathBuf) -> Result<String, Box<dyn StdError>> {
         let zipfile = StdFile::open(path)?;
@@ -37,6 +58,36 @@ impl GldfProduct {
         let mut loaded: GldfProduct = GldfProduct::from_xml(&GldfProduct::get_xml_str_from_gldf(path_buf).unwrap()).unwrap();
         loaded.path = path.to_string();
         Ok(loaded)
+    }
+    pub fn load_gldf_from_buf_all(gldf_buf: Vec<u8>) -> Result<FileBufGldf, Box<dyn StdError>> {
+        let zip_buf = std::io::Cursor::new(gldf_buf);
+        let mut zip = ZipArchive::new(zip_buf)?;
+        let mut file_bufs:Vec<BufFile>= Vec::new();
+        let mut xmlfile = zip.by_name("product.xml")?;
+        let mut xml_str = String::new();
+        xmlfile.read_to_string(&mut xml_str)?;
+        let loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
+        drop(xmlfile);
+
+        for i in 0..zip.len() {
+            let mut file = zip.by_index(i).unwrap();
+            println!("Filename: {}", file.name());
+            // println!("{}", file.bytes().next().unwrap()?);
+            if file.is_file() {
+                let mut buf: Vec<u8> = Vec::new();
+                file.read_to_end(&mut buf);
+                let buf_file = BufFile {
+                    name: Some(file.name().to_string()),
+                    content: Some(buf),
+                    file_id: None,
+                    path: Some(file.name().to_string()),
+                };
+                file_bufs.push(buf_file);
+            }
+        }
+        let mut file_buf = FileBufGldf{files: file_bufs, gldf: loaded};
+
+        Ok(file_buf)
     }
     pub fn load_gldf_from_buf(file_buf: Vec<u8>) -> Result<GldfProduct, Box<dyn StdError>> {
         let zip_buf = std::io::Cursor::new(file_buf);
@@ -85,6 +136,27 @@ impl GldfProduct {
         for f in self.general_definitions.files.file.iter() {
             let content_type = &f.content_type;
             if content_type.starts_with("ldc") {
+                result.push(f)
+            }
+        }
+        Ok(result.to_owned())
+    }
+    pub fn get_image_def_files(self: &Self) -> Result<Vec<&File>, Box<dyn StdError>> {
+        let mut result: Vec<&File> = Vec::new();
+        for f in self.general_definitions.files.file.iter() {
+            let content_type = &f.content_type;
+            if content_type.starts_with("image") {
+                result.push(f)
+            }
+        }
+        Ok(result.to_owned())
+    }
+
+    pub fn get_image_zip_files(self: &Self) -> Result<Vec<&File>, Box<dyn StdError>> {
+        let mut result: Vec<&File> = Vec::new();
+        for f in self.general_definitions.files.file.iter() {
+            let content_type = &f.content_type;
+            if content_type.starts_with("image") {
                 result.push(f)
             }
         }
