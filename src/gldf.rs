@@ -1,4 +1,4 @@
-use serde::{Serialize, Serializer};
+use serde::{Serialize};
 use serde::Deserialize;
 use yaserde_derive::YaDeserialize;
 use yaserde_derive::YaSerialize;
@@ -633,9 +633,9 @@ pub struct CieLampMaintenanceFactors {
   #[serde(rename = "CieLampMaintenanceFactor")]
   pub cie_lamp_maintenance_factor: Vec<CieLampMaintenanceFactor>,
 }
-fn get_f64_from_string(some:String) ->f64{
-  return some.parse::<f64>().unwrap();
-}
+// fn get_f64_from_string(some:String) ->f64{
+//   return some.parse::<f64>().unwrap();
+// }
 
 #[derive(Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
 pub struct LedMaintenanceFactor {
