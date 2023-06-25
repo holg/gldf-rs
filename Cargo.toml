@@ -1,8 +1,10 @@
 [package]
+readme = "README.md"
 name = "gldf-rs"
 version = "0.1.0"
 edition = "2021"
 authors = ["Holger Trahe<trahe@mac.com>"]
+description = "GLDF (General Lighting Data Format) parser and writer for Rust"
 license = "GPL"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
