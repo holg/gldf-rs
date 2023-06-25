@@ -75,7 +75,7 @@ impl GldfProduct {
             // println!("{}", file.bytes().next().unwrap()?);
             if file.is_file() {
                 let mut buf: Vec<u8> = Vec::new();
-                file.read_to_end(&mut buf);
+                file.read_to_end(&mut buf)?;
                 let buf_file = BufFile {
                     name: Some(file.name().to_string()),
                     content: Some(buf),
@@ -85,7 +85,7 @@ impl GldfProduct {
                 file_bufs.push(buf_file);
             }
         }
-        let mut file_buf = FileBufGldf{files: file_bufs, gldf: loaded};
+        let file_buf = FileBufGldf{files: file_bufs, gldf: loaded};
 
         Ok(file_buf)
     }
@@ -120,7 +120,7 @@ impl GldfProduct {
     pub fn from_json_file(path: PathBuf) -> Result<GldfProduct, Box<dyn StdError>> {
         let mut json_file = StdFile::open(path)?;
         let mut json_str = String::new();
-        json_file.read_to_string(& mut json_str);
+        json_file.read_to_string(& mut json_str)?;
         Ok(GldfProduct::from_json(&json_str).unwrap())
     }
     pub fn to_xml(self: &Self) -> Result<String, Box<dyn StdError>> {

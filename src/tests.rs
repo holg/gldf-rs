@@ -1,5 +1,4 @@
-use std::borrow::Borrow;
-use std::io::Bytes;
+#![allow(unused_variables)]
 use gldf::{GldfProduct};
 
 use crate::{gldf, StdFile};
@@ -49,7 +48,7 @@ fn read_test_gldf() -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     let mut gldf_file = StdFile::open("./tests/data/test.gldf").unwrap();
     let mut file_buf = Vec::new();
-    gldf_file.read_to_end(&mut file_buf);
+    gldf_file.read_to_end(&mut file_buf)?;
     return Ok(file_buf);
 }
 
@@ -86,19 +85,10 @@ fn test_gldf_get_phot_files() {
 
 #[test]
 fn test_gldf_get_pic_files() {
-    use std::string::String;
     let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
     let image_files = loaded.get_image_def_files().unwrap();
     //let mut image_contents = Vec::new();
     for f in image_files.iter(){
-        let mut image_content = "".to_owned();
-        //let buf = loaded.load_gldf_file(f.id.as_str());
-        // match  buf {
-        //     Ok(fc) => image_contents.push(fc.to_owned()),
-        //     Err(e) =>{
-        //         println!("Error: {}", e)
-        //     }
-        // }
-
+        let image_content = "".to_owned();
     }
 }
