@@ -1,6 +1,7 @@
 extern crate yaserde_derive;
 pub mod gldf;
 pub use gldf::*;
+#[cfg(test)]
 mod tests;
 use std::fs::File as StdFile;
 use std::path::PathBuf;
