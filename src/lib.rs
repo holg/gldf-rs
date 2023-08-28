@@ -6,12 +6,19 @@ mod tests;
 use std::fs::File as StdFile;
 use std::path::PathBuf;
 use std::io::Read;
-use std::error::Error as StdError;
+//use std::error::Error as StdError;
 use std::path::Path;
 use yaserde::de::from_str;
 use serde_json::from_str as serde_from_str;
 use zip::ZipArchive;
+use anyhow::{Context, Result, Error, anyhow};
+use regex::Regex;
 
+impl GldfProduct {
+    pub fn detach(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
 #[derive(Clone, Debug)]
 pub struct BufFile{
     pub name: Option<String>,
@@ -23,10 +30,21 @@ pub struct FileBufGldf{
     pub files: Vec<BufFile>,
     pub gldf: GldfProduct,
 }
-
+//
+// impl TryFrom<T as TryFrom<_>>::Error: Into<anyhow::Error> for GldfProduct {
+//     type Error = &'static str;
+//
+//     fn try_from(value: String) -> Result<Self, Self::Error> {
+//         if value.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>").is_none() {
+//             Err("GreaterThanZero only accepts values greater than zero!")
+//         } else {
+//             Ok(GldfProduct::from_xml(&value).unwrap())
+//         }
+//     }
+// }
 
 impl GldfProduct {
-    pub fn load_gldf_file_str(self: &Self, path: String) -> Result<String, Box<dyn StdError>> {
+    pub fn load_gldf_file_str(self: &Self, path: String) -> anyhow::Result<String> {
         let zipfile = StdFile::open(Path::new(&self.path))?;
         let mut zip = ZipArchive::new(zipfile)?;
         let mut some_str = String::new();
@@ -34,7 +52,7 @@ impl GldfProduct {
         some_file.read_to_string(&mut some_str)?;
         Ok(some_str)
     }
-    pub fn load_gldf_file(self: &Self, path: String) -> Result<Vec<u8>, Box<dyn StdError>> {
+    pub fn load_gldf_file(self: &Self, path: String) -> anyhow::Result<Vec<u8>> {
         let zipfile = StdFile::open(Path::new(&self.path))?;
         let mut zip = ZipArchive::new(zipfile)?;
         let mut file_buf = Vec::new();
@@ -42,7 +60,7 @@ impl GldfProduct {
         some_file.read_to_end(&mut file_buf)?;
         Ok(file_buf)
     }
-    pub fn get_xml_str_from_gldf(path: PathBuf) -> Result<String, Box<dyn StdError>> {
+    pub fn get_xml_str_from_gldf(path: PathBuf) -> anyhow::Result<String> {
         let zipfile = StdFile::open(path)?;
         let mut zip = ZipArchive::new(zipfile)?;
         let mut xmlfile = zip.by_name("product.xml")?;
@@ -50,17 +68,33 @@ impl GldfProduct {
         xmlfile.read_to_string(&mut xml_str)?;
         Ok(xml_str)
     }
-    pub fn from_xml(xml_str: &str) -> Result<GldfProduct, Box<dyn StdError>> {
-        let loaded = from_str(xml_str).unwrap();
+    pub fn remove_bom(s: &str) -> String {
+        if s.starts_with("\u{FEFF}") {
+            (&s[3..]).to_string()
+        } else {
+            s.to_string()
+        }
+    }
+    pub fn sanitize_xml_str(xml_str: &str) -> String {
+        let cleaned_str = Self::remove_bom(xml_str);
+        let re = Regex::new(r"<Root .*?>").unwrap();
+        // well we are lazy for now and simple replace the root element with a generic one
+        re.replace_all(&cleaned_str, "<Root>").to_string()
+    }
+    pub fn from_xml(xml_str: &String) -> anyhow::Result<GldfProduct> {
+        let my_xml_str = Self::sanitize_xml_str(&xml_str);
+        let loaded = from_str(&my_xml_str).map_err(anyhow::Error::msg).context("Failed to parse XML string")?;
+
         Ok(loaded)
     }
-    pub fn load_gldf(path: &str) -> Result<GldfProduct, Box<dyn StdError>> {
+    pub fn load_gldf(path: &str) -> anyhow::Result<GldfProduct> {
         let path_buf = Path::new(path).to_path_buf();
-        let mut loaded: GldfProduct = GldfProduct::from_xml(&GldfProduct::get_xml_str_from_gldf(path_buf).unwrap()).unwrap();
+        let xml_str = GldfProduct::get_xml_str_from_gldf(path_buf).map_err(anyhow::Error::msg).context("Failed to parse XML string")?;
+        let mut loaded: GldfProduct = GldfProduct::from_xml(&xml_str)?;
         loaded.path = path.to_string();
         Ok(loaded)
     }
-    pub fn load_gldf_from_buf_all(gldf_buf: Vec<u8>) -> Result<FileBufGldf, Box<dyn StdError>> {
+    pub fn load_gldf_from_buf_all(gldf_buf: Vec<u8>) -> anyhow::Result<FileBufGldf> {
         let zip_buf = std::io::Cursor::new(gldf_buf);
         let mut zip = ZipArchive::new(zip_buf)?;
         let mut file_bufs:Vec<BufFile>= Vec::new();
@@ -90,7 +124,7 @@ impl GldfProduct {
 
         Ok(file_buf)
     }
-    pub fn load_gldf_from_buf(file_buf: Vec<u8>) -> Result<GldfProduct, Box<dyn StdError>> {
+    pub fn load_gldf_from_buf(file_buf: Vec<u8>) -> anyhow::Result<GldfProduct> {
         let zip_buf = std::io::Cursor::new(file_buf);
         let mut zip = ZipArchive::new(zip_buf)?;
         for i in 0..zip.len()
@@ -106,25 +140,25 @@ impl GldfProduct {
         let loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
         Ok(loaded)
     }
-    pub fn to_json(self: &Self) -> Result<String, Box<dyn StdError>> {
-        let json_str = serde_json::to_string(&self).unwrap();
+    pub fn to_json(self: &Self) -> anyhow::Result<String> {
+        let json_str = serde_json::to_string(&self)?;
         Ok(json_str)
     }
-    pub fn to_pretty_json(self: &Self) -> Result<String, Box<dyn StdError>> {
+    pub fn to_pretty_json(self: &Self) -> anyhow::Result<String> {
         let json_str = serde_json::to_string_pretty(&self).unwrap();
         Ok(json_str)
     }
-    pub fn from_json(json_str: &str) -> Result<GldfProduct, Box<dyn StdError>> {
-        let j_loaded: GldfProduct = serde_from_str(&json_str).unwrap();
+    pub fn from_json(json_str: &str) -> anyhow::Result<GldfProduct> {
+        let j_loaded: GldfProduct = serde_from_str(&json_str)?;
         Ok(j_loaded)
     }
-    pub fn from_json_file(path: PathBuf) -> Result<GldfProduct, Box<dyn StdError>> {
+    pub fn from_json_file(path: PathBuf) -> anyhow::Result<GldfProduct> {
         let mut json_file = StdFile::open(path)?;
         let mut json_str = String::new();
         json_file.read_to_string(& mut json_str)?;
         Ok(GldfProduct::from_json(&json_str).unwrap())
     }
-    pub fn to_xml(self: &Self) -> Result<String, Box<dyn StdError>> {
+    pub fn to_xml(self: &Self) -> anyhow::Result<String> {
         let yaserde_cfg = yaserde::ser::Config {
             perform_indent: true,
             ..Default::default()
@@ -132,7 +166,7 @@ impl GldfProduct {
         let x_serialized = yaserde::ser::to_string_with_config(self, &yaserde_cfg).unwrap();
         Ok(x_serialized)
     }
-    pub fn get_phot_files(self: &Self) -> Result<Vec<&File>, Box<dyn StdError>> {
+    pub fn get_phot_files(self: &Self) -> anyhow::Result<Vec<&File>> {
         let mut result: Vec<&File> = Vec::new();
         for f in self.general_definitions.files.file.iter() {
             let content_type = &f.content_type;
@@ -142,7 +176,7 @@ impl GldfProduct {
         }
         Ok(result.to_owned())
     }
-    pub fn get_image_def_files(self: &Self) -> Result<Vec<&File>, Box<dyn StdError>> {
+    pub fn get_image_def_files(self: &Self) -> Result<Vec<&File>> {
         let mut result: Vec<&File> = Vec::new();
         for f in self.general_definitions.files.file.iter() {
             let content_type = &f.content_type;
@@ -153,7 +187,7 @@ impl GldfProduct {
         Ok(result.to_owned())
     }
 
-    pub fn get_image_zip_files(self: &Self) -> Result<Vec<&File>, Box<dyn StdError>> {
+    pub fn get_image_zip_files(self: &Self) -> anyhow::Result<Vec<&File>> {
         let mut result: Vec<&File> = Vec::new();
         for f in self.general_definitions.files.file.iter() {
             let content_type = &f.content_type;
@@ -164,7 +198,7 @@ impl GldfProduct {
         Ok(result.to_owned())
     }
 
-    pub fn get_ldc_by_id(self: &Self, file_id: String) -> Result<String, Box<dyn StdError>> {
+    pub fn get_ldc_by_id(self: &Self, file_id: String) -> anyhow::Result<String> {
         let mut result: String = "".to_owned();
         for f in self.general_definitions.files.file.iter() {
             if f.id == file_id{

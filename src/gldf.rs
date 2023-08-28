@@ -12,14 +12,19 @@ fn get_xmlns_xsi() -> String {
 
 
 #[derive(Default, Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
-#[yaserde(strict, rename = "Root", root = "Root")]
+#[yaserde(
+  rename = "Root", root = "Root",
+  namespace  =  "xsi: http://www.w3.org/2001/XMLSchema-instance"
+  namespace = "xsi:noNamespaceSchemaLocation: https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd"
+  xsi:noNamespaceSchemaLocation="https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd"
+)]
 #[serde(rename = "Root")]
 //#[yaserde(namespace: "xsi: \"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd\"") ]
 pub struct GldfProduct {
   #[serde(skip_serializing, skip_deserializing)]
   #[yaserde(skip_serializing, skip_deserializing)]
   pub path: String,
-  #[yaserde(attribute, rename = "xmlns:xsi", default="get_xmlns_xsi")]
+  #[yaserde(attribute, rename = "xmlns:xsi", default="get_xmlns_xsi", skip_deserializing)]
   #[serde(rename = "@xmlns:xsi")]
   pub xmlns_xsi: String,
   #[serde(rename = "@xsi:noNamespaceSchemaLocation")]
