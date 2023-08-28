@@ -1,19 +1,34 @@
 #![allow(unused_variables)]
 use gldf::{GldfProduct};
-
+use anyhow::{Result};
+use serde::de::StdError;
 use crate::{gldf, StdFile};
 
 
 #[test]
-fn parsing_gldf_container() {
+fn test_default() {
+    let mut gldf = GldfProduct::default();
+    println!("{:?}", gldf);
+    println!("{:?}", gldf.to_json());
+}
+#[test]
+fn parsing_gldf_container() -> Result<(), Box<dyn StdError>> {
     use serde_json::from_str as serde_from_str;
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    // let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/rzb___311619_002_5_8630.gldf").unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/R2MCOBSIK-30.gldf").unwrap();
+    //let loaded: GldfProduct = GldfProduct::load_gldf("/opt/reluxnet/webapi/gldfapi/rzb___582014_002_f1a6.gldf").unwrap();
     println!("{:?}", loaded);
     // Display pretty printed XML
     let yaserde_cfg = yaserde::ser::Config {
         perform_indent: true,
         ..Default::default()
     };
+    let gldf_to_json = loaded.to_json()?;
+    let gldf_to_xml = loaded.to_xml()?;
+    let json_to_xml = GldfProduct::from_json(&gldf_to_json)?.to_xml()?;
+    assert_eq!(gldf_to_xml, json_to_xml);
+    let result = GldfProduct::from_xml(&gldf_to_xml)?;
+    let xml_to_json = GldfProduct::from_xml(&gldf_to_xml).unwrap().to_json().unwrap();
     let x_serialized = yaserde::ser::to_string_with_config(&loaded, &yaserde_cfg).unwrap();
     println!("{}", x_serialized);
     let json_str = serde_json::to_string(&loaded).unwrap();
@@ -22,6 +37,7 @@ fn parsing_gldf_container() {
     let x_reserialized = yaserde::ser::to_string_with_config(&j_loaded, &yaserde_cfg).unwrap();
     println!("{}", x_reserialized);
     assert_eq!(x_serialized, x_reserialized);
+    Ok(())
 }
 
 #[test]
