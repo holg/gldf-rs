@@ -1,51 +1,55 @@
-extern crate yaserde_derive;
-/// GLDF (Global Lighting Data Format) Library
-///
-/// The GLDF crate provides a set of structures and tools for working with the Global Lighting Data Format (GLDF),
-/// a standardized format for describing lighting products, their characteristics, and technical details.
-///
-/// GLDF is used in the lighting industry to exchange product information between manufacturers, designers,
-/// and other stakeholders, ensuring consistent representation and interoperability across various software tools.
-///
-/// This crate offers utilities for serializing and deserializing GLDF data, enabling you to read and write GLDF files
-/// while adhering to the ISO 7127 standard. It also provides helper macros for working with GLDF-specific attributes.
-///
-/// For more information about GLDF and its specifications, <https::gldf.io> and refer to the ISO 7127 standard.
-///
-/// # Features
-///
-/// - Serialize and deserialize GLDF files in compliance with ISO 7127 standard.
-/// - From XML into JSON and vice versa.
-/// - Define GLDF-specific attributes using custom procedural macros.
-/// - Easily work with GLDF data structures and their components.
-///
-/// For more usage examples and detailed documentation, please refer to the documentation of individual modules and structs.
-///
-/// # Example
-/// ```rust
-/// use gldf_rs::gldf::GldfProduct;
-/// let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
-/// println!("{:?}", loaded);
-/// // Display pretty printed XML
-/// let x_serialized = loaded.to_xml().unwrap();
-/// println!("{}", x_serialized);
-/// let json_str = loaded.to_json().unwrap();
-/// println!("{}", json_str);
-/// let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
-/// let x_reserialized =  j_loaded.to_xml().unwrap();
-/// println!("{}", x_reserialized);
-/// assert_eq!(x_serialized, x_reserialized);
-/// ```
-///
-///
-/// For more information about GLDF and its specifications, refer to the ISO 7127 standard.
-///
-/// # License
-///
-/// This project is licensed under the terms of the MIT license.
-
+//! # gldf_rs
+//! GLDF (Global Lighting Data Format) Library
+//!
+//! The GLDF crate provides a set of structures and tools for working with the Global Lighting Data Format (GLDF),
+//! a standardized format for describing lighting products, their characteristics, and technical details.
+//!
+//! GLDF is used in the lighting industry to exchange product information between manufacturers, designers,
+//! and other stakeholders, ensuring consistent representation and interoperability across various software tools.
+//!
+//! This crate offers utilities for serializing and deserializing GLDF data, enabling you to read and write GLDF files
+//! while adhering to the ISO 7127 standard. It also provides helper macros for working with GLDF-specific attributes.
+//!
+//! For more information about GLDF and its specifications, <https::gldf.io> and refer to the ISO 7127 standard.
+//!
+//! # Features
+//!
+//! - Serialize and deserialize GLDF files in compliance with ISO 7127 standard.
+//! - From XML into JSON and vice versa.
+//! - Define GLDF-specific attributes using custom procedural macros.
+//! - Easily work with GLDF data structures and their components.
+//!
+//! For more usage examples and detailed documentation, please refer to the documentation of individual modules and structs.
+//! Most functions are implemented as methods on the struct GldfProduct, which shall represent the Root of the XML structure.
+//! **For more information see : gldf_rs::gldf::GldfProduct**
+//!
+//! [`GldfProduct`]
+//! # Example
+//! ```rust
+//! use gldf_rs::gldf::GldfProduct;
+//! let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+//! println!("{:?}", loaded);
+//! // Display pretty printed XML
+//! let x_serialized = loaded.to_xml().unwrap();
+//! println!("{}", x_serialized);
+//! let json_str = loaded.to_json().unwrap();
+//! println!("{}", json_str);
+//! let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
+//! let x_reserialized =  j_loaded.to_xml().unwrap();
+//! println!("{}", x_reserialized);
+//! assert_eq!(x_serialized, x_reserialized);
+//! ```
+//!
+//!
+//! For more information about GLDF and its specifications, refer to the ISO 7127 standard.
+//!
+//! # License
+//!
+//! This project is licensed under the terms of the MIT license.
+/// the gldf module (src/gldf/mod.rs)
 pub mod gldf;
 pub use gldf::*;
+extern crate yaserde_derive;
 #[cfg(test)]
 mod tests;
 use std::fs::File as StdFile;
@@ -88,7 +92,9 @@ pub struct FileBufGldf{
 //     }
 // }
 
+/// Implementations for the per se informational GldfProduct struct
 impl GldfProduct {
+    /// Loads a GLDF file from a given path as String and return the XML String of the product.xml file
     pub fn load_gldf_file_str(self: &Self, path: String) -> anyhow::Result<String> {
         let zipfile = StdFile::open(Path::new(&self.path))?;
         let mut zip = ZipArchive::new(zipfile)?;
