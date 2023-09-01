@@ -5,18 +5,20 @@ use serde::de::StdError;
 use crate::{gldf, StdFile};
 
 
+const GLDF_FILE_NAME: &str =  "./tests/data/R2MCOBSIK-30.gldf";
+// const GLDF_FILE_NAME: &str =  "./tests/data/test.gldf";
 #[test]
 fn test_default() {
-    let mut gldf = GldfProduct::default();
+    let gldf = GldfProduct::default();
     println!("{:?}", gldf);
     println!("{:?}", gldf.to_json());
 }
+
 #[test]
 fn parsing_gldf_container() -> Result<(), Box<dyn StdError>> {
     use serde_json::from_str as serde_from_str;
-    // let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/rzb___311619_002_5_8630.gldf").unwrap();
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/R2MCOBSIK-30.gldf").unwrap();
-    //let loaded: GldfProduct = GldfProduct::load_gldf("/opt/reluxnet/webapi/gldfapi/rzb___582014_002_f1a6.gldf").unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME).unwrap();
+    let general_files = loaded.get_all_file_definitions().unwrap();
     println!("{:?}", loaded);
     // Display pretty printed XML
     let yaserde_cfg = yaserde::ser::Config {
@@ -28,7 +30,7 @@ fn parsing_gldf_container() -> Result<(), Box<dyn StdError>> {
     let json_to_xml = GldfProduct::from_json(&gldf_to_json)?.to_xml()?;
     assert_eq!(gldf_to_xml, json_to_xml);
     let result = GldfProduct::from_xml(&gldf_to_xml)?;
-    let xml_to_json = GldfProduct::from_xml(&gldf_to_xml).unwrap().to_json().unwrap();
+    let xml_to_json = result.to_json().unwrap();
     let x_serialized = yaserde::ser::to_string_with_config(&loaded, &yaserde_cfg).unwrap();
     println!("{}", x_serialized);
     let json_str = serde_json::to_string(&loaded).unwrap();
@@ -42,7 +44,7 @@ fn parsing_gldf_container() -> Result<(), Box<dyn StdError>> {
 
 #[test]
 fn test_gldf_product_impls() {
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME).unwrap();
     println!("{:?}", loaded);
     // Display pretty printed XML
     let x_serialized = loaded.to_xml().unwrap();
@@ -62,7 +64,7 @@ fn test_gldf_product_impls() {
 
 fn read_test_gldf() -> std::io::Result<Vec<u8>> {
     use std::io::Read;
-    let mut gldf_file = StdFile::open("./tests/data/test.gldf").unwrap();
+    let mut gldf_file = StdFile::open(GLDF_FILE_NAME).unwrap();
     let mut file_buf = Vec::new();
     gldf_file.read_to_end(&mut file_buf)?;
     return Ok(file_buf);
@@ -87,7 +89,7 @@ fn test_gldf_from_buf() {
 #[test]
 fn test_gldf_get_phot_files() {
     use std::string::String;
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME).unwrap();
     let phot_files = loaded.get_phot_files().unwrap();
     let mut ldc_contents: Vec<String> = Vec::new();
     for f in phot_files.iter(){
@@ -101,7 +103,7 @@ fn test_gldf_get_phot_files() {
 
 #[test]
 fn test_gldf_get_pic_files() {
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+    let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME).unwrap();
     let image_files = loaded.get_image_def_files().unwrap();
     //let mut image_contents = Vec::new();
     for f in image_files.iter(){

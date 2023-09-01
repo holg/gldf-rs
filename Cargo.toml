@@ -1,11 +1,11 @@
 [package]
 readme = "README.md"
 name = "gldf-rs"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Holger Trahe<trahe@mac.com>"]
-documentation = "https://github.com/holg/gldf-rs"
-description = "GLDF (General Lighting Data Format) parser and writer for Rust"
+documentation = "https://docs.rs/gldf-rs/"
+description = "GLDF (General Lighting Data Format) parser and writer for Rust, specifically for the Rust/WASM target as such designed for JSON format"
 repository = "https://github.com/holg/gldf-rs"
 homepage = "https://github.com/holg/gldf-rs"
 license = "GPL-3.0-or-later"
@@ -22,7 +22,7 @@ serde_json = {version = "1.0"}
 anyhow = {version = "1.0"}
 zip = {version="0.6", features = ["deflate", "time"], default-features = false}
 regex = { version = "1.9" }
-reqwest = { version = "0.11.20" }
+reqwest = { version = "0.11.20", features = ["blocking"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.regex]
 version = "1.9"

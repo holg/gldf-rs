@@ -1,4 +1,6 @@
 extern crate yaserde_derive;
+//the gldf struct defines the gldf product
+/// The gldf struct defines the gldf product (gldf.rs)
 pub mod gldf;
 pub use gldf::*;
 #[cfg(test)]
@@ -11,8 +13,9 @@ use std::path::Path;
 use yaserde::de::from_str;
 use serde_json::from_str as serde_from_str;
 use zip::ZipArchive;
-use anyhow::{Context, Result, Error, anyhow};
+use anyhow::{Context, Result};
 use regex::Regex;
+use reqwest;
 
 impl GldfProduct {
     pub fn detach(&mut self) -> anyhow::Result<()> {
@@ -83,7 +86,8 @@ impl GldfProduct {
     }
     pub fn from_xml(xml_str: &String) -> anyhow::Result<GldfProduct> {
         let my_xml_str = Self::sanitize_xml_str(&xml_str);
-        let loaded = from_str(&my_xml_str).map_err(anyhow::Error::msg).context("Failed to parse XML string")?;
+        let result = from_str(&my_xml_str);
+        let loaded = result.map_err(anyhow::Error::msg).context("Failed to parse XML string")?;
 
         Ok(loaded)
     }
@@ -204,10 +208,34 @@ impl GldfProduct {
             if f.id == file_id{
                 let mut ldc_path = "ldc/".to_owned();
                 let file_name = f.file_name.to_owned();
-                ldc_path.push_str(&file_name);
-                result.push_str(&self.load_gldf_file_str(ldc_path).unwrap());
+                if f.type_attr == "url" {
+                    result.push_str(fetch_text_from_url(&file_name)?.as_str());
+                } else {
+                    ldc_path.push_str(&file_name);
+                    result.push_str(&self.load_gldf_file_str(ldc_path).unwrap());
+                }
             }
         }
         Ok(result)
     }
+    pub fn get_all_file_definitions(self: &Self) -> anyhow::Result<Vec<File>> {
+        let mut result:Vec<File> = Vec::new();
+        for f in self.general_definitions.files.file.iter() {
+            result.push(f.to_owned());
+        }
+        Ok(result)
+    }
+    pub fn get_url_file_definitions(self: &Self) -> anyhow::Result<Vec<File>> {
+        let mut result:Vec<File> = Vec::new();
+        for f in self.general_definitions.files.file.iter() {
+            if f.content_type == "url" {
+                result.push(f.to_owned());
+            }
+        }
+        Ok(result)
+    }
+}
+pub  fn fetch_text_from_url(url: &str) -> Result<String, reqwest::Error> {
+    let response = reqwest::blocking::get(url)?;
+    response.text()
 }
