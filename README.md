@@ -10,7 +10,8 @@ Release notes:
 - added better documentation fo the main page
 - for wasm support some refactoring was needed, to use reqwest::blocking 
 
-- 0.2.0 
+
+0.2.0 
 - refactored gldf.rs into submodules
 - added support for BOM encoded UTF8 product.xml
 - added support for url file_types
