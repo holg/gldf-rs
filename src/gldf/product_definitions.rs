@@ -48,9 +48,9 @@ pub struct LuminaireMaintenanceFactor {
     pub room_condition: Option<String>,
 
     /// The value  maintenance factor.
-    #[yaserde(textf64, rename = "$value")]
+    #[yaserde(text, rename = "$value")]
     #[serde(rename = "$")]
-    pub value: f64,
+    pub value: String,
 }
 
 /// Represents CIE-specific luminaire maintenance factors in the GLDF data structure.
@@ -217,22 +217,22 @@ pub struct RectangularCutout {
     /// The width of the rectangular cutout.
     ///
     /// ISO 7127:2017 - Section 4.27.2.1
-    #[yaserde(rename = "Width")]
-    #[serde(rename = "Width")]
+    #[yaserde(attribute, rename = "Width")]
+    #[serde(rename = "@Width")]
     pub width: i32,
 
     /// The length of the rectangular cutout.
     ///
     /// ISO 7127:2017 - Section 4.27.2.2
-    #[yaserde(rename = "Length")]
-    #[serde(rename = "Length")]
+    #[yaserde(attribute, rename = "Length")]
+    #[serde(rename = "@Length")]
     pub length: i32,
 
     /// The depth of the rectangular cutout.
     ///
     /// ISO 7127:2017 - Section 4.27.2.3
-    #[yaserde(rename = "Depth")]
-    #[serde(rename = "Depth")]
+    #[yaserde(attribute, rename = "Depth")]
+    #[serde(rename = "@Depth")]
     pub depth: i32,
 }
 
@@ -246,15 +246,15 @@ pub struct CircularCutout {
     /// The diameter of the circular cutout.
     ///
     /// ISO 7127:2017 - Section 4.27.3.1
-    #[yaserde(rename = "Diameter")]
-    #[serde(rename = "Diameter")]
+    #[yaserde(attribute, rename = "Diameter")]
+    #[serde(rename = "@Diameter")]
     pub diameter: i32,
 
     /// The depth of the circular cutout.
     ///
     /// ISO 7127:2017 - Section 4.27.3.2
-    #[yaserde(rename = "Depth")]
-    #[serde(rename = "Depth")]
+    #[yaserde(attribute, rename = "Depth")]
+    #[serde(rename = "@Depth")]
     pub depth: i32,
 }
 
@@ -268,24 +268,24 @@ pub struct Recessed {
     /// The recessed depth .
     ///
     /// ISO 7127:2017 - Section 4.27.4.1
-    #[yaserde(rename = "recessedDepth")]
-    #[serde(rename = "recessedDepth")]
+    #[yaserde(attribute, rename = "recessedDepth")]
+    #[serde(rename = "@recessedDepth")]
     // the recessed depth in mm (millimeter)
     pub recessed_depth: i32,
 
     /// The rectangular cutout details for the recessed luminaire.
     ///
     /// ISO 7127:2017 - Section 4.27.4.2
-    #[yaserde(rename = "RectangularCutout")]
-    #[serde(rename = "RectangularCutout")]
+    #[yaserde(attribute, rename = "RectangularCutout")]
+    #[serde(rename = "@RectangularCutout")]
     /// the rectangular cutout details for the recessed luminaire.
     pub rectangular_cutout: RectangularCutout,
 
     /// The overall depth of the recessed luminaire.
     ///
     /// ISO 7127:2017 - Section 4.27.4.3
-    #[yaserde(rename = "Depth")]
-    #[serde(rename = "Depth")]
+    #[yaserde(attribute, rename = "Depth")]
+    #[serde(rename = "@Depth")]
     /// the depth of the recessed luminaire in mm (millimeter)
     pub depth: i32,
 }
@@ -327,14 +327,14 @@ pub struct Ceiling {
 /// Luminaire on the  Wall ...
 #[derive(Default, Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
 pub struct Wall {
-    #[yaserde(rename = "mountingHeight")]
-    #[serde(rename = "mountingHeight")]
+    #[yaserde(attribute, rename = "mountingHeight")]
+    #[serde(rename = "@mountingHeight")]
     /// the mounting height in mm (millimeter)
     pub mounting_height: i32,
     #[yaserde(rename = "Recessed")]
     #[serde(rename = "Recessed")]
     /// the recessed height in mm (millimeter)
-    pub recessed: Recessed,
+    pub recessed: Option<Recessed>,
     #[yaserde(rename = "Depth")]
     #[serde(rename = "Depth")]
     /// the depth in mm (millimeter)
@@ -403,19 +403,19 @@ pub struct Mountings {
     #[yaserde(rename = "Ceiling")]
     #[serde(rename = "Ceiling")]
     /// the ceiling type
-    pub ceiling: Ceiling,
+    pub ceiling: Option<Ceiling>,
     #[yaserde(rename = "Wall")]
     #[serde(rename = "Wall")]
     /// the wall type
-    pub wall: Wall,
+    pub wall: Option<Wall>,
     #[yaserde(rename = "WorkingPlane")]
     #[serde(rename = "WorkingPlane")]
     /// the working plane type
-    pub working_plane: WorkingPlane,
+    pub working_plane: Option<WorkingPlane>,
     #[yaserde(rename = "Ground")]
     #[serde(rename = "Ground")]
     /// the ground type
-    pub ground: Ground,
+    pub ground: Option<Ground>,
 }
 
 /// EmitterReference ...

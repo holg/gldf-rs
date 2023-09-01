@@ -42,6 +42,8 @@ xsi: noNamespaceSchemaLocation = "https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd"
 pub struct GldfProduct {
     /// This field is not serialized or deserialized but can be used to store the path to the
     /// GLDF product file.
+    #[serde(skip_serializing, skip_deserializing)]
+    #[yaserde(skip_serializing, skip_deserializing)]
     pub path: String,
 
     /// The XML namespace for xsi (XML Schema Instance).

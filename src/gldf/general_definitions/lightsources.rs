@@ -349,12 +349,16 @@ pub struct CieLampMaintenanceFactors {
 #[derive(Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
 pub struct LedMaintenanceFactor {
     /// The number of hours corresponding to the maintenance factor.
+    /// Handeled as an attribute in the XML.
     #[yaserde(rename = "hours", attribute)]
     #[serde(rename = "@hours")]
     pub hours: i32,
 
     /// The value of the maintenance factor.
-    #[yaserde(textf64, rename = "$value")]
+    #[yaserde(textf64)]
+    // #[yaserde(text)]
+    #[serde(rename = "$")]
+    // pub value: String,
     pub value: f64,
 }
 /// Represents maintenance information for a light source.
@@ -486,7 +490,7 @@ pub struct FixedLightSource {
     /// Name of the fixed light source.
     ///
     /// Corresponds to ISO 7127:2017(E) section 4.3.
-    #[yaserde(rename = "Name", attribute)]
+    #[yaserde(rename = "Name")]
     #[serde(rename = "Name")]
     pub name: LocaleFoo,
     /// Description of the fixed light source.
