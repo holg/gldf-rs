@@ -1,6 +1,49 @@
 extern crate yaserde_derive;
-//the gldf struct defines the gldf product
-/// The gldf struct defines the gldf product (gldf.rs)
+/// GLDF (Global Lighting Data Format) Library
+///
+/// The GLDF crate provides a set of structures and tools for working with the Global Lighting Data Format (GLDF),
+/// a standardized format for describing lighting products, their characteristics, and technical details.
+///
+/// GLDF is used in the lighting industry to exchange product information between manufacturers, designers,
+/// and other stakeholders, ensuring consistent representation and interoperability across various software tools.
+///
+/// This crate offers utilities for serializing and deserializing GLDF data, enabling you to read and write GLDF files
+/// while adhering to the ISO 7127 standard. It also provides helper macros for working with GLDF-specific attributes.
+///
+/// For more information about GLDF and its specifications, <https::gldf.io> and refer to the ISO 7127 standard.
+///
+/// # Features
+///
+/// - Serialize and deserialize GLDF files in compliance with ISO 7127 standard.
+/// - From XML into JSON and vice versa.
+/// - Define GLDF-specific attributes using custom procedural macros.
+/// - Easily work with GLDF data structures and their components.
+///
+/// For more usage examples and detailed documentation, please refer to the documentation of individual modules and structs.
+///
+/// # Example
+/// ```rust
+/// use gldf_rs::gldf::GldfProduct;
+/// let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
+/// println!("{:?}", loaded);
+/// // Display pretty printed XML
+/// let x_serialized = loaded.to_xml().unwrap();
+/// println!("{}", x_serialized);
+/// let json_str = loaded.to_json().unwrap();
+/// println!("{}", json_str);
+/// let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
+/// let x_reserialized =  j_loaded.to_xml().unwrap();
+/// println!("{}", x_reserialized);
+/// assert_eq!(x_serialized, x_reserialized);
+/// ```
+///
+///
+/// For more information about GLDF and its specifications, refer to the ISO 7127 standard.
+///
+/// # License
+///
+/// This project is licensed under the terms of the MIT license.
+
 pub mod gldf;
 pub use gldf::*;
 #[cfg(test)]
@@ -15,7 +58,6 @@ use serde_json::from_str as serde_from_str;
 use zip::ZipArchive;
 use anyhow::{Context, Result};
 use regex::Regex;
-use reqwest;
 
 impl GldfProduct {
     pub fn detach(&mut self) -> anyhow::Result<()> {
@@ -201,7 +243,7 @@ impl GldfProduct {
         }
         Ok(result.to_owned())
     }
-
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_ldc_by_id(self: &Self, file_id: String) -> anyhow::Result<String> {
         let mut result: String = "".to_owned();
         for f in self.general_definitions.files.file.iter() {
@@ -235,7 +277,8 @@ impl GldfProduct {
         Ok(result)
     }
 }
-pub  fn fetch_text_from_url(url: &str) -> Result<String, reqwest::Error> {
-    let response = reqwest::blocking::get(url)?;
+#[cfg(not(target_arch = "wasm32"))]
+pub  fn fetch_text_from_url(url: &str) -> Result<String, reqwest_wasm::Error> {
+    let response = reqwest_wasm::blocking::get(url)?;
     response.text()
 }
