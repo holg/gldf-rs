@@ -28,16 +28,16 @@
           {
             "FirstName": "_empty_1",
             "Name": "_empty_2",
-            "Street": "Kaspar Pfeiffer Str. 43",
-            "ZIPCode": "41425",
-            "City": "Münchenstein4",
-            "Country": "Switzerland6",
+            "Street": "Baronweg1 ",
+            "ZIPCode": "12345",
+            "City": "Münchhausen",
+            "Country": "Swaziland",
             "Phone": "+41 (0) 61 333 07 707",
             "EMailAddresses": {
               "EMail": [
                 {
-                  "@mailto": "info@relux.com8",
-                  "$": "Relux Info9"
+                  "@mailto": "info@gldf.icu",
+                  "$": "Trahe Consult"
                 }
               ]
             }
