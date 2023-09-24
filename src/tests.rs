@@ -5,8 +5,8 @@ use serde::de::StdError;
 use crate::{gldf, StdFile};
 
 
-const GLDF_FILE_NAME: &str =  "./tests/data/R2MCOBSIK-30.gldf";
-// const GLDF_FILE_NAME: &str =  "./tests/data/test.gldf";
+// const GLDF_FILE_NAME: &str =  "./tests/data/R2MCOBSIK-30.gldf";
+const GLDF_FILE_NAME: &str =  "./tests/data/test.gldf";
 #[test]
 fn test_default() {
     let gldf = GldfProduct::default();
