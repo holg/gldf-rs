@@ -7,10 +7,10 @@ Process GLDF
 Release notes:
 0.2.2
 - added support meta-information.xml
-- 
 
 
-- 0.2.1
+
+0.2.1
 - added better documentation fo the main page
 - for wasm support some refactoring was needed, to use reqwest::blocking 
 
