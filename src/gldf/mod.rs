@@ -4,8 +4,13 @@
 /// The gldf header module (src/gldf/header.rs)
 pub mod header;
 pub use header::*;
-mod general_definitions;
-mod product_definitions;
+/// The gldf general definitions module (src/gldf/general_definitions.rs)
+pub mod general_definitions;
+/// The gldf product definitions module (src/gldf/product_definitions.rs)
+pub mod product_definitions;
+/// The gldf meta information module (src/gldf/meta_information.rs)
+/// not strictly neded but it is used in the gldf-sign
+pub mod meta_information;
 
 use serde::{Serialize};
 use serde::Deserialize;
