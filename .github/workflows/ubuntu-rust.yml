@@ -28,9 +28,8 @@ jobs:
 
     - name: Set up QEMU
       if: matrix.architecture == 'aarch64'
-      uses: docker/setup-qemu-action@v2
-      with:
-        platforms: arm64v8
+      run: |
+        docker run --rm --privileged tonistiigi/binfmt:latest --install aarch64
 
     - name: Build with Docker
       run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --verbose
