@@ -16,25 +16,18 @@ jobs:
     strategy:
       matrix:
         architecture: [x86_64, aarch64]
+        include:
+          - architecture: x86_64
+            docker_image: rust:latest
+          - architecture: aarch64
+            docker_image: arm64v8/rust:latest
 
     steps:
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
-      with:
-        platforms: all
-
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: ${{ matrix.architecture }}-unknown-linux-gnu
-        override: true
-
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build
-      run: cargo build --verbose --target ${{ matrix.architecture }}-unknown-linux-gnu
+    - name: Set up Docker for ${{ matrix.architecture }}
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --verbose
 
-    - name: Run tests
-      run: cargo test --verbose --target ${{ matrix.architecture }}-unknown-linux-gnu
+    - name: Run tests on ${{ matrix.architecture }}
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo test --verbose
