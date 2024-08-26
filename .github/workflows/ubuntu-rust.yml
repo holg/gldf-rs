@@ -26,8 +26,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker for ${{ matrix.architecture }}
+    - name: Set up QEMU
+      if: matrix.architecture == 'aarch64'
+      uses: docker/setup-qemu-action@v2
+      with:
+        platforms: arm64v8
+
+    - name: Build with Docker
       run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --verbose
 
-    - name: Run tests on ${{ matrix.architecture }}
+    - name: Run tests with Docker
       run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo test --verbose
