@@ -11,12 +11,32 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        target: [x86_64, aarch64]
+      fail-fast: false
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        target: ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+        toolchain: stable
+        override: true
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+    - name: Package artifact
+      run: |
+        mkdir -p artifacts
+        cp target/${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}/debug/libgldf_rs.* artifacts/
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: gldf_rs-${{ matrix.os }}-${{ matrix.target }}
+        path: artifacts/
