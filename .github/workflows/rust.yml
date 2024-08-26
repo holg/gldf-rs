@@ -22,12 +22,14 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Install dependencies on Linux
+    # Install dependencies only for Linux
+    - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
-
+        sudo apt-get install -y pkg-config libssl-dev gcc-aarch64-linux-gnu
+    
+    # Set up Rust toolchain
     - name: Set up Rust toolchain
       run: |
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
@@ -40,10 +42,8 @@ jobs:
           rustup set default-host x86_64-pc-windows-msvc
         fi
         rustup toolchain install stable
-        if [ "${{ matrix.target }}" != "x86_64" ] || [ "${{ matrix.os }}" != "windows-latest" ]; then
-          rustup target add ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-        fi
-
+        rustup target add ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+    
     - name: Build
       run: cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
 
