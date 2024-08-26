@@ -20,7 +20,7 @@ jobs:
           - architecture: x86_64
             docker_image: rust:latest
           - architecture: aarch64
-            docker_image: arm64v8/rust:latest
+            docker_image: rust:latest
 
     steps:
     - name: Checkout code
