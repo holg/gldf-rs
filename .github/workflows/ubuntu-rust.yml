@@ -11,12 +11,30 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        architecture: [x86_64, aarch64]
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+      with:
+        platforms: all
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.architecture }}-unknown-linux-gnu
+        override: true
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --target ${{ matrix.architecture }}-unknown-linux-gnu
+
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --target ${{ matrix.architecture }}-unknown-linux-gnu
