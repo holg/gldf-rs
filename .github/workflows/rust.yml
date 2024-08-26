@@ -2,85 +2,46 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "master" ]
-
-env:
-  CARGO_TERM_COLOR: always
+    branches:
+      - main
 
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-latest, windows-latest]
         target: [x86_64, aarch64]
-      fail-fast: false
-
-    runs-on: ${{ matrix.os }}
-
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-    # Install dependencies for Linux
-    - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev gcc-aarch64-linux-gnu
-
-    # Set OpenSSL environment variables for Linux aarch64
-    - name: Set OpenSSL environment variables (Linux aarch64)
-      if: runner.os == 'Linux' && matrix.target == 'aarch64'
-      run: |
-        export OPENSSL_DIR=/usr/lib/aarch64-linux-gnu
-        export OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu
-        export OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu
-        echo "OPENSSL_DIR=$OPENSSL_DIR" >> $GITHUB_ENV
-        echo "OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR" >> $GITHUB_ENV
-        echo "OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> $GITHUB_ENV
-
-    # Install dependencies for macOS
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew update
-        brew install openssl
-
-    # Set OpenSSL environment variables for macOS
-    - name: Set OpenSSL environment variables (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        export OPENSSL_DIR=$(brew --prefix openssl)
-        export OPENSSL_LIB_DIR=$(brew --prefix openssl)/lib
-        export OPENSSL_INCLUDE_DIR=$(brew --prefix openssl)/include
-        echo "OPENSSL_DIR=$OPENSSL_DIR" >> $GITHUB_ENV
-        echo "OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR" >> $GITHUB_ENV
-        echo "OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> $GITHUB_ENV
-
-    # Set up Rust toolchain
-    - name: Set up Rust toolchain
-      run: |
-        rustup toolchain install stable
-        rustup target add ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-
-    # Build the project
-    - name: Build
-      run: cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-
-    # Run tests
-    - name: Run tests
-      run: cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-
-    # Package the artifacts
-    - name: Package artifact
-      run: |
-        mkdir -p artifacts
-        cp target/${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}/debug/libgldf_rs.* artifacts/
-
-    # Upload the artifacts
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
       with:
-        name: gldf_rs-${{ matrix.os }}-${{ matrix.target }}
-        path: artifacts/
+        profile: minimal
+        toolchain: stable
+        target: ${{ matrix.target }}
+
+    - name: Install dependencies
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          sudo apt-get update && sudo apt-get install -y build-essential
+        fi
+        rustup target add ${{ matrix.target }}
+
+    - name: Build project
+      run: cargo build --target ${{ matrix.target }} --release
+
+    - name: Run tests
+      run: cargo test --target ${{ matrix.target }} --verbose
+
+    - name: Run Clippy
+      run: cargo clippy -- -D warnings
+
+    - name: Run fmt check
+      run: cargo fmt -- --check
