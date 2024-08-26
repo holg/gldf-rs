@@ -39,7 +39,7 @@ jobs:
     - name: Build
       run: |
         if [ "${{ matrix.target }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-          cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'linux-latest' && 'linux-gnu' }} --features "vendored"
+          cargo build --verbose --target aarch64-unknown-linux-gnu --features "vendored"
         else
           cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
         fi
@@ -48,7 +48,7 @@ jobs:
     - name: Run tests
       run: |
         if [ "${{ matrix.target }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-          cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'linux-latest' && 'linux-gnu' }} --features "vendored"
+          cargo test --verbose --target aarch64-unknown-linux-gnu --features "vendored"
         else
           cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
         fi
