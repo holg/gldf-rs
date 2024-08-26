@@ -21,44 +21,52 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
-    # Install dependencies only for Linux
+
+    # Install dependencies for Linux
     - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config gcc-aarch64-linux-gnu
-        
+        sudo apt-get install -y pkg-config libssl-dev gcc-aarch64-linux-gnu
+
+    # Install dependencies for macOS
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew update
+        brew install openssl
+
+    # Set OpenSSL environment variables for macOS
+    - name: Set OpenSSL environment variables (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        export OPENSSL_DIR=$(brew --prefix openssl)
+        export OPENSSL_LIB_DIR=$(brew --prefix openssl)/lib
+        export OPENSSL_INCLUDE_DIR=$(brew --prefix openssl)/include
+        echo "OPENSSL_DIR=$OPENSSL_DIR" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR" >> $GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> $GITHUB_ENV
+
     # Set up Rust toolchain
     - name: Set up Rust toolchain
       run: |
         rustup toolchain install stable
         rustup target add ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-    
-    # Build the project with vendored OpenSSL on aarch64
+
+    # Build the project
     - name: Build
-      run: |
-        if [ "${{ matrix.target }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-          cargo build --verbose --target aarch64-unknown-linux-gnu --features "vendored"
-        else
-          cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-        fi
-    
+      run: cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+
     # Run tests
     - name: Run tests
-      run: |
-        if [ "${{ matrix.target }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-          cargo test --verbose --target aarch64-unknown-linux-gnu --features "vendored"
-        else
-          cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-        fi
-    
+      run: cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+
     # Package the artifacts
     - name: Package artifact
       run: |
         mkdir -p artifacts
         cp target/${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}/debug/libgldf_rs.* artifacts/
-    
+
     # Upload the artifacts
     - name: Upload artifact
       uses: actions/upload-artifact@v3
