@@ -1,40 +1,67 @@
-name: Rust CI
+name: Rust-CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "master" ]
   pull_request:
-    branches:
-      - main
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        architecture: [x86_64, aarch64]
+        include:
+          - os: ubuntu-latest
+            architecture: x86_64
+            docker_image: rust:latest
+          - os: ubuntu-latest
+            architecture: aarch64
+            docker_image: rust:latest
+          - os: windows-latest
+            architecture: x86_64
+            docker_image: mcr.microsoft.com/windows/servercore:ltsc2022
+          - os: macos-latest
+            architecture: x86_64
+          - os: macos-latest
+            architecture: aarch64
+
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-        target: ${{ matrix.target }}
-
-    - name: Install dependencies for OpenSSL
+    - name: Set up QEMU
+      if: matrix.os == 'ubuntu-latest' && matrix.architecture == 'aarch64'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        docker run --rm --privileged tonistiigi/binfmt:latest --install aarch64
 
-    - name: Build the project
-      run: cargo build --target ${{ matrix.target }} --verbose
+    - name: Build with Docker
+      if: matrix.os == 'ubuntu-latest'
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --verbose
 
-    - name: Run tests
-      run: cargo test --target ${{ matrix.target }} --verbose
+    - name: Build on Windows or macOS
+      if: matrix.os != 'ubuntu-latest'
+      run: cargo build --verbose
+
+    - name: Run tests with Docker
+      if: matrix.os == 'ubuntu-latest'
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo test --verbose
+
+    - name: Run tests on Windows or macOS
+      if: matrix.os != 'ubuntu-latest'
+      run: cargo test --verbose
+
+    - name: Upload build artifacts
+      if: ${{ success() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.os }}-${{ matrix.architecture }}-build
+        path: |
+          target/debug
+          target/release
