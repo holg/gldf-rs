@@ -21,20 +21,40 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        target: ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
-        toolchain: stable
-        override: true
+    
+    - name: Install dependencies on Linux
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Set up Rust toolchain
+      run: |
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          if [ "${{ matrix.target }}" == "x86_64" ]; then
+            rustup set default-host x86_64-apple-darwin
+          else
+            rustup set default-host aarch64-apple-darwin
+          fi
+        elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          rustup set default-host x86_64-pc-windows-msvc
+        fi
+        rustup toolchain install stable
+        if [ "${{ matrix.target }}" != "x86_64" ] || [ "${{ matrix.os }}" != "windows-latest" ]; then
+          rustup target add ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+        fi
+
     - name: Build
       run: cargo build --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+
     - name: Run tests
       run: cargo test --verbose --target ${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}
+
     - name: Package artifact
       run: |
         mkdir -p artifacts
         cp target/${{ matrix.target }}-unknown-${{ matrix.os == 'windows-latest' && 'pc-windows-msvc' || matrix.os == 'macos-latest' && 'apple-darwin' || 'linux-gnu' }}/debug/libgldf_rs.* artifacts/
+
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
