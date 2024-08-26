@@ -2,50 +2,39 @@ name: Rust CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+
+    runs-on: ubuntu-latest
+
     strategy:
       matrix:
         target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-    - name: Set up Rust toolchain
+    - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         override: true
         target: ${{ matrix.target }}
 
-    - name: Install dependencies
+    - name: Install dependencies for OpenSSL
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev gcc-aarch64-linux-gnu
+        sudo apt-get install -y pkg-config libssl-dev
 
-    - name: Set environment variables for OpenSSL
-      run: |
-        if [ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]; then
-          echo "OPENSSL_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu" >> $GITHUB_ENV
-        else
-          echo "OPENSSL_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=/usr/include/x86_64-linux-gnu" >> $GITHUB_ENV
-        fi
-
-    - name: Install Rust target for cross-compilation
-      run: rustup target add ${{ matrix.target }}
-
-    - name: Build project
-      run: cargo build --verbose --target ${{ matrix.target }}
+    - name: Build the project
+      run: cargo build --target ${{ matrix.target }} --verbose
 
     - name: Run tests
-      run: cargo test --verbose --target ${{ matrix.target }}
+      run: cargo test --target ${{ matrix.target }} --verbose
