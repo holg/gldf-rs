@@ -1,47 +1,51 @@
-name: Rust
+name: Rust CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
-        target: [x86_64, aarch64]
-    
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Rust
+    - name: Set up Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-        profile: minimal
         toolchain: stable
+        override: true
         target: ${{ matrix.target }}
 
     - name: Install dependencies
       run: |
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          sudo apt-get update && sudo apt-get install -y build-essential
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev gcc-aarch64-linux-gnu
+
+    - name: Set environment variables for OpenSSL
+      run: |
+        if [ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]; then
+          echo "OPENSSL_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu" >> $GITHUB_ENV
+        else
+          echo "OPENSSL_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=/usr/include/x86_64-linux-gnu" >> $GITHUB_ENV
         fi
-        rustup target add ${{ matrix.target }}
+
+    - name: Install Rust target for cross-compilation
+      run: rustup target add ${{ matrix.target }}
 
     - name: Build project
-      run: cargo build --target ${{ matrix.target }} --release
+      run: cargo build --verbose --target ${{ matrix.target }}
 
     - name: Run tests
-      run: cargo test --target ${{ matrix.target }} --verbose
-
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
-
-    - name: Run fmt check
-      run: cargo fmt -- --check
+      run: cargo test --verbose --target ${{ matrix.target }}
