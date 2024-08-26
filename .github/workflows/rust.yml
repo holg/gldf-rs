@@ -1,4 +1,4 @@
-name: Rust-CI
+name: Rust
 
 on:
   push:
@@ -21,10 +21,11 @@ jobs:
             docker_image: rust:latest
           - os: ubuntu-latest
             architecture: aarch64
-            docker_image: rust:latest
+            docker_image: rustembedded/cross:aarch64-unknown-linux-gnu
           - os: windows-latest
             architecture: x86_64
-            docker_image: mcr.microsoft.com/windows/servercore:ltsc2022
+          - os: windows-latest
+            architecture: aarch64
           - os: macos-latest
             architecture: x86_64
           - os: macos-latest
@@ -41,21 +42,37 @@ jobs:
       run: |
         docker run --rm --privileged tonistiigi/binfmt:latest --install aarch64
 
+    - name: Install Rust toolchain for aarch64
+      if: matrix.architecture == 'aarch64' && matrix.os == 'ubuntu-latest'
+      run: rustup target add aarch64-unknown-linux-gnu
+
+    - name: Install Rust toolchain for Windows aarch64
+      if: matrix.architecture == 'aarch64' && matrix.os == 'windows-latest'
+      run: rustup target add aarch64-pc-windows-msvc
+
     - name: Build with Docker
       if: matrix.os == 'ubuntu-latest'
-      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --verbose
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo build --target aarch64-unknown-linux-gnu --verbose
 
-    - name: Build on Windows or macOS
-      if: matrix.os != 'ubuntu-latest'
-      run: cargo build --verbose
+    - name: Build on Windows
+      if: matrix.os == 'windows-latest'
+      run: cargo build --target ${{ matrix.architecture == 'aarch64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }} --verbose
+
+    - name: Build on macOS
+      if: matrix.os == 'macos-latest'
+      run: cargo build --target ${{ matrix.architecture == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} --verbose
 
     - name: Run tests with Docker
       if: matrix.os == 'ubuntu-latest'
-      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo test --verbose
+      run: docker run --rm -v ${{ github.workspace }}:/usr/src/myapp -w /usr/src/myapp ${{ matrix.docker_image }} cargo test --target aarch64-unknown-linux-gnu --verbose
 
-    - name: Run tests on Windows or macOS
-      if: matrix.os != 'ubuntu-latest'
-      run: cargo test --verbose
+    - name: Run tests on Windows
+      if: matrix.os == 'windows-latest'
+      run: cargo test --target ${{ matrix.architecture == 'aarch64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }} --verbose
+
+    - name: Run tests on macOS
+      if: matrix.os == 'macos-latest'
+      run: cargo test --target ${{ matrix.architecture == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }} --verbose
 
     - name: Upload build artifacts
       if: ${{ success() }}
