@@ -1,0 +1,46 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        arch: [x86_64, aarch64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: stable
+
+      - name: Install cross (for cross-compilation)
+        run: cargo install cross
+        if: runner.os == 'Linux'
+
+      - name: Build
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            cross build --target ${{ matrix.arch }}-unknown-linux-gnu --release
+          else
+            cargo build --release
+          fi
+
+      - name: Run tests
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            cross test --target ${{ matrix.arch }}-unknown-linux-gnu
+          else
+            cargo test
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ runner.os }}-build-${{ matrix.arch }}
+          path: target/release/
