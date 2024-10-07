@@ -5,12 +5,18 @@
 Process GLDF
 
 Release notes:
+0.2.3
+- added new header definition, because FormatVersion changed
+- added Logger to pass into some methods
+- added test to completely check and compare to URL based gldf
+- bumped up versions of dependencies
+
 0.2.2
 - added support meta-information.xml
-- 
 
 
-- 0.2.1
+
+0.2.1
 - added better documentation fo the main page
 - for wasm support some refactoring was needed, to use reqwest::blocking 
 
