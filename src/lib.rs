@@ -62,7 +62,14 @@ use serde_json::from_str as serde_from_str;
 use zip::ZipArchive;
 use anyhow::{Context, Result};
 use regex::Regex;
+use reqwest;
 
+pub trait Logger {
+    fn log(&self, message: &str);
+}
+pub trait AsyncLogger {
+    fn log(&self, message: &str) -> impl std::future::Future<Output = ()> + Send;
+}
 impl GldfProduct {
     pub fn detach(&mut self) -> anyhow::Result<()> {
         Ok(())
@@ -73,8 +80,11 @@ pub struct BufFile{
     pub name: Option<String>,
     pub content: Option<Vec<u8>>,
     pub file_id: Option<String>,
+    pub content_type: Option<String>,
     pub path: Option<String>,
+    pub size: Option<u64>,
 }
+#[derive(Clone, Debug, Default)]
 pub struct FileBufGldf{
     pub files: Vec<BufFile>,
     pub gldf: GldfProduct,
@@ -196,12 +206,53 @@ impl GldfProduct {
                 let buf_file = BufFile {
                     name: Some(file.name().to_string()),
                     content: Some(buf),
+                    content_type: None,
                     file_id: None,
                     path: Some(file.name().to_string()),
+                    size: Some(file.size() as u64),
                 };
                 file_bufs.push(buf_file);
             }
         }
+        let file_buf = FileBufGldf{files: file_bufs, gldf: loaded};
+
+        Ok(file_buf)
+    }
+
+
+    pub fn load_gldf_from_buf_all_proxied(gldf_buf: Vec<u8>, proxy_url: Option<String>) -> anyhow::Result<FileBufGldf> {
+        GldfProduct::load_gldf_from_buf_all_proxied_with_logger(gldf_buf, proxy_url, None)
+    }
+    pub fn load_gldf_from_buf_all_proxied_with_logger(gldf_buf: Vec<u8>, proxy_url: Option<String>, logger: Option<&dyn Logger>) -> anyhow::Result<FileBufGldf> {
+        if let Some(logger) = logger {
+            logger.log("Starting load_gldf_from_buf_all_proxied_with_logger function");
+        }
+        let zip_buf = std::io::Cursor::new(gldf_buf);
+        let mut zip = ZipArchive::new(zip_buf)?;
+        let mut xmlfile = zip.by_name("product.xml")?;
+        let mut xml_str = String::new();
+        xmlfile.read_to_string(&mut xml_str)?;
+        let loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
+        drop(xmlfile);
+
+        let file_bufs = loaded.get_buf_files_proxied_with_logger(proxy_url, &Some(zip), logger);
+        let file_buf = FileBufGldf{files: file_bufs?, gldf: loaded};
+
+        Ok(file_buf)
+    }
+    pub async fn load_gldf_from_buf_all_proxied_with_logger_async(gldf_buf: Vec<u8>, proxy_url: Option<String>, logger: Option<&dyn Logger>) -> anyhow::Result<FileBufGldf> {
+        if let Some(logger) = logger {
+            logger.log("Starting load_gldf_from_buf_all_proxied_with_logger_async function");
+        }
+        let zip_buf = std::io::Cursor::new(gldf_buf);
+        let mut zip = ZipArchive::new(zip_buf)?;
+        let mut xmlfile = zip.by_name("product.xml")?;
+        let mut xml_str = String::new();
+        xmlfile.read_to_string(&mut xml_str)?;
+        let loaded: GldfProduct = GldfProduct::from_xml(&xml_str).unwrap();
+        drop(xmlfile);
+
+        let file_bufs = loaded.get_buf_files_proxied_with_logger_async(proxy_url, &Some(zip), logger).await?;
         let file_buf = FileBufGldf{files: file_bufs, gldf: loaded};
 
         Ok(file_buf)
@@ -293,7 +344,6 @@ impl GldfProduct {
     /// from the given file_id of the ldc file reference, return the ldc file as String
     /// it could as well be the type_attr "url", which wil be fetched from the web first
     /// overriden for the WASM portage, so not used for WASM portage
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_ldc_by_id(self: &Self, file_id: String) -> anyhow::Result<String> {
         let mut result: String = "".to_owned();
         for f in self.general_definitions.files.file.iter() {
@@ -323,17 +373,172 @@ impl GldfProduct {
     pub fn get_url_file_definitions(self: &Self) -> anyhow::Result<Vec<File>> {
         let mut result:Vec<File> = Vec::new();
         for f in self.general_definitions.files.file.iter() {
-            if f.content_type == "url" {
+            if f.content_type.to_lowercase() == "url" {
                 result.push(f.to_owned());
             }
         }
         Ok(result)
     }
+
+    pub fn get_buf_files(&self, proxy_url: Option<String>, zip_buf: &Option<ZipArchive<std::io::Cursor<Vec<u8>>>>) -> anyhow::Result<Vec<BufFile>> {
+        use futures::executor::block_on;
+        block_on(self.get_buf_files_proxied_with_logger_async(proxy_url, zip_buf, None))
+    }
+
+    pub fn get_buf_files_proxied_with_logger(&self, proxy_url: Option<String>, zip_buf: &Option<ZipArchive<std::io::Cursor<Vec<u8>>>>, logger: Option<&dyn Logger>) -> anyhow::Result<Vec<BufFile>> {
+        use futures::executor::block_on;
+        block_on(self.get_buf_files_proxied_with_logger_async(proxy_url, zip_buf, logger))
+    }
+    pub async fn get_buf_files_proxied_with_logger_async(&self, proxy_url: Option<String>, zip_buf: &Option<ZipArchive<std::io::Cursor<Vec<u8>>>>, logger: Option<&dyn Logger>) -> anyhow::Result<Vec<BufFile>> {
+        if let Some(logger) = logger {
+            logger.log("Starting get_buf_files_proxied_with_logger_async function");
+        }
+        let mut buf_files: Vec<BufFile> = Vec::new();
+        let mut referenced_files: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for file in &self.general_definitions.files.file {
+            let mut buf_file = BufFile {
+                name: Some(file.file_name.clone()),
+                content: None,
+                file_id: Some(file.id.clone()),
+                content_type: Some(file.content_type.clone()),
+                path: None,
+                size: None,
+            };
+
+            if file.type_attr == "url" {
+                let url = if let Some(ref proxy) = proxy_url {
+                    format!("{}{}", proxy, file.file_name)
+                } else {
+                    file.file_name.clone()
+                };
+                if let Some(logger) = logger {
+                    logger.log(&format!("Going to fetch: {}", url));
+                }
+                let content = match fetch_binary_from_url_with_logging_async(&url, logger).await {
+                    Ok(data) => data,
+                    Err(e) => {
+                        if let Some(logger) = logger {
+                            logger.log(&format!("Failed file from URL: {}, {:?}", url, e));
+                        }
+                        Vec::new()// Err(anyhow::Error::msg("Failed to fetch file from URL"))?;
+                    }
+                };
+                if let Some(logger) = logger {
+                    logger.log(&format!("Fetched file from URL: {}", url));
+                }
+                let file_name = url.split('/').last().unwrap_or(&url).to_string();
+                buf_file.content = Some(content);
+                buf_file.path = Some(file.file_name.clone());
+                buf_file.name = Some(file_name);
+            } else {
+                let mut zip: Box<ZipArchive<std::io::Cursor<Vec<u8>>>> = if let Some(ref zip_buf) = zip_buf {
+                    Box::new(zip_buf.clone())
+                } else {
+                    let mut zipfile = Vec::new();
+                    StdFile::open(Path::new(&self.path))?.read_to_end(&mut zipfile)?;
+                    Box::new(ZipArchive::new(std::io::Cursor::new(zipfile))?)
+                };
+                let mut found = false;
+
+                for i in 0..zip.len() {
+                    let mut file_in_zip = zip.by_index(i)?;
+                    if file_in_zip.name().ends_with(&file.file_name) {
+                        let mut content = Vec::new();
+                        file_in_zip.read_to_end(&mut content)?;
+                        buf_file.content = Some(content);
+                        buf_file.path = Some(file_in_zip.name().to_string());
+                        found = true;
+                        break;
+                    }
+                }
+
+                if !found {
+                    eprintln!("File not found in zip archive: {}", file.file_name);
+                    continue;
+                }
+            }
+
+            referenced_files.insert(buf_file.path.as_ref().map_or("".to_string(), |p| p.to_string()) + &file.file_name);
+            if !buf_files.iter().any(|bf| bf.path.as_ref().map_or(false, |p| p.ends_with(&file.file_name))) {
+                buf_files.push(buf_file);
+            }
+        }
+
+        // Add unreferenced files from the zip archive
+        let mut zip: Box<ZipArchive<std::io::Cursor<Vec<u8>>>> = if let Some(ref zip_buf) = zip_buf {
+            Box::new(zip_buf.clone())
+        } else {
+            let mut zipfile = Vec::new();
+            StdFile::open(Path::new(&self.path))?.read_to_end(&mut zipfile)?;
+            Box::new(ZipArchive::new(std::io::Cursor::new(zipfile))?)
+        };
+        for i in 0..zip.len() {
+            let mut file_in_zip = zip.by_index(i)?;
+            let file_name = file_in_zip.name().to_string();
+            if file_name == "product.xml" {
+                continue; // Skip product.xml
+            }
+            if !referenced_files.contains(&file_name) && !buf_files.iter().any(|bf| bf.path.as_ref().map_or(false, |p| p.ends_with(&file_name))) {
+                let mut content = Vec::new();
+                file_in_zip.read_to_end(&mut content)?;
+                let buf_file = BufFile {
+                    name: Some(file_name.clone()),
+                    content: Some(content),
+                    file_id: None,
+                    content_type: None,
+                    path: Some(file_name),
+                    size: None,
+                };
+                buf_files.push(buf_file);
+            }
+        }
+
+        Ok(buf_files)
+    }
+
+    pub fn get_buf_files_default(&self) -> anyhow::Result<Vec<BufFile>> {
+        self.get_buf_files(None, &None)
+    }
 }
 /// helper function to get the content of the url as File from the given url
 /// not used for the wasm portage, which overrides this function
-#[cfg(not(target_arch = "wasm32"))]
-pub  fn fetch_text_from_url(url: &str) -> Result<String, reqwest_wasm::Error> {
-    let response = reqwest_wasm::blocking::get(url)?;
-    response.text()
+
+
+pub async fn fetch_binary_data_async(url: &str) -> std::result::Result<Vec<u8>, reqwest::Error> {
+    let response = reqwest::get(url).await?;
+    response.bytes().await.map(|b| b.to_vec())
 }
+pub fn fetch_binary_from_url(url: &str) -> std::result::Result<Vec<u8>, reqwest::Error> {
+    use futures::executor::block_on;
+    block_on(fetch_binary_data_async(url))
+}
+pub fn fetch_binary_from_url_with_logging(url: &str,  logger: Option<&dyn Logger>) -> std::result::Result<Vec<u8>, reqwest::Error> {
+    use futures::executor::block_on;
+    block_on(fetch_binary_from_url_with_logging_async(url, logger))
+}
+pub async fn fetch_binary_from_url_with_logging_async(url: &str,  logger: Option<&dyn Logger>) -> std::result::Result<Vec<u8>, reqwest::Error> {
+    if let Some(logger) = logger {
+        logger.log(&format!("fetch_binary_from_url_with_logging_async URL: {}", url));
+    }
+    let result = reqwest::get(url).await?.bytes().await.map(|b| b.to_vec());
+    if let Some(logger) = logger {
+        match &result {
+            Ok(_) => logger.log(&format!("Successfully fetched binary data from URL: {}", url)),
+            Err(e) => logger.log(&format!("Failed to fetch binary data from URL: {}. Error: {:?}", url, e)),
+        }
+    }
+    result
+}
+pub fn fetch_text_from_url(url: &str) -> anyhow::Result<String> {
+    use futures::executor::block_on;
+    block_on(fetch_text_from_url_async(url))
+}
+
+pub async fn fetch_text_from_url_async(url: &str) -> anyhow::Result<String> {
+    let response = reqwest::get(url).await?;
+    let content = response.text().await?;
+    Ok(content)
+}
+
+
