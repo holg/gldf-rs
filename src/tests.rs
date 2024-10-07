@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+use crate::BufFile;
 use gldf::{GldfProduct};
 use anyhow::{Result};
 use serde::de::StdError;
@@ -7,6 +8,7 @@ use crate::{gldf, StdFile};
 
 // const GLDF_FILE_NAME: &str =  "./tests/data/R2MCOBSIK-30.gldf";
 const GLDF_FILE_NAME: &str =  "./tests/data/test.gldf";
+const GLDF_FILE_NAME_URL: &str =  "./tests/data/R2MCOBSIK-30.gldf";
 #[test]
 fn test_default() {
     let gldf = GldfProduct::default();
@@ -109,4 +111,79 @@ fn test_gldf_get_pic_files() {
     for f in image_files.iter(){
         let image_content = "".to_owned();
     }
+}
+
+
+#[tokio::test]
+async fn test_get_buf_files() -> Result<()> {
+    let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME_URL).unwrap();
+    let buf_files = loaded.get_buf_files_proxied_with_logger_async(None, &None, None).await?;
+    for buf_file in buf_files.iter() {
+        println!(
+            "BufFile {{ name: {:?}, file_id: {:?}, content_type: {:?}, path: {:?}, content_length: {:?} }}",
+            buf_file.name,
+            buf_file.file_id,
+            buf_file.content_type,
+            buf_file.path,
+            buf_file.content.as_ref().map(|c| c.len())
+        );
+    }
+    // Define expected values for the test
+    let expected_files = vec![
+        BufFile {
+            name: Some("R2MCOBSIK-30_flexi-strip_vegas-cob-2M-IP20-LED-Stripkit_main.jpg".to_string()),
+            file_id: Some("file_12071".to_string()),
+            content_type: Some("image/jpg".to_string()),
+            path: Some("https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30_flexi-strip_vegas-cob-2M-IP20-LED-Stripkit_main.jpg".to_string()),
+            content: Some(vec![0; 1712152]),
+            size: None,
+        },
+        BufFile {
+            name: Some("Instruction Manual for R2MCOBSIK-30 R2MCOBSIK-40 ISSUE 1 AU.pdf".to_string()),
+            file_id: Some("file_12112".to_string()),
+            content_type: Some("other".to_string()),
+            path: Some("https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/Instruction Manual for R2MCOBSIK-30 R2MCOBSIK-40 ISSUE 1 AU.pdf".to_string()),
+            content: Some(vec![0; 194844]),
+            size: None,
+        },
+        BufFile {
+            name: Some("R2MCOBSIK-30-Photometrics.ldt".to_string()),
+            file_id: Some("file_12419".to_string()),
+            content_type: Some("ldc/eulumdat".to_string()),
+            path: Some("https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30-Photometrics.ldt".to_string()),
+            content: Some(vec![0; 22164]),
+            size: None,
+        },
+        BufFile {
+            name: Some("R2MCOBSIK-30-Photometrics.IES".to_string()),
+            file_id: Some("file_12420".to_string()),
+            content_type: Some("ldc/eulumdat".to_string()),
+            path: Some("https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30-Photometrics.IES".to_string()),
+            content: Some(vec![0; 31640]),
+            size: None,
+        },
+        BufFile {
+            name: Some("VEGAS COB KITS-AU-RxMCOBSIK-ROBUS Product Information Document.pdf".to_string()),
+            file_id: Some("file_12481".to_string()),
+            content_type: Some("document/pdf".to_string()),
+            path: Some("https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/VEGAS COB KITS-AU-RxMCOBSIK-ROBUS Product Information Document.pdf".to_string()),
+            content: Some(vec![0; 481564]),
+            size: None,
+        },
+    ];
+
+    assert_eq!(buf_files.len(), expected_files.len());
+
+    for (buf_file, expected) in buf_files.iter().zip(expected_files.iter()) {
+        assert_eq!(buf_file.name, expected.name);
+        assert_eq!(buf_file.file_id, expected.file_id);
+        assert_eq!(buf_file.content_type, expected.content_type);
+        assert_eq!(buf_file.path, expected.path);
+        assert_eq!(
+            buf_file.content.as_ref().map(|c| c.len()),
+            expected.content.as_ref().map(|c| c.len())
+        );
+    }
+
+    Ok(())
 }

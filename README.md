@@ -1,10 +1,15 @@
-[![Rust](https://github.com/holg/gldf-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/rust.yml)
-
+[![CI](https://github.com/holg/gldf-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/ci.yml)
 
 # gldf-rs
 Process GLDF
 
 Release notes:
+0.2.3
+- added new header definition, because FormatVersion changed
+- added Logger to pass into some methods
+- added test to completely check and compare to URL based gldf
+- bumped up versions of dependencies
+
 0.2.2
 - added support meta-information.xml
 
