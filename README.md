@@ -1,5 +1,4 @@
-[![Rust](https://github.com/holg/gldf-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/rust.yml)
-
+[![CI](https://github.com/holg/gldf-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/ci.yml)
 
 # gldf-rs
 Process GLDF
