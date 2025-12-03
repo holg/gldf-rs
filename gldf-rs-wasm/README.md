@@ -1,48 +1,69 @@
-[![Rust](https://github.com/holg/gldf-rs-wasm/actions/workflows/rust.yml/badge.svg)](https://github.com/holg/gldf-rs-wasm/actions/workflows/rust.yml)
-[![Build and Test WASM](https://github.com/holg/gldf-rs-wasm/actions/workflows/wasm-pack.yml/badge.svg)](https://github.com/holg/gldf-rs-wasm/actions/workflows/wasm-pack.yml)
 # GLDF-RS-WASM
 
-#### The wasm version of [gldr-rs](https://crates.io/gldr-rs)
+A WebAssembly-based GLDF (General Lighting Data Format) viewer and editor.
 
-GLDF-RS-WASM is a WebAssembly (Wasm) version of the Global Lighting Data Format (GLDF) library. It allows you to work with GLDF data directly in the browser by leveraging WebAssembly technology. GLDF is a standardized format for describing lighting products and their technical details.
-### Release Notes
-- 0.2.1 usage of new gldf-rs 0.2.1
-- Inheritance and overwriting of properties (needed bcs of reqwest)
+## Overview
 
+GLDF-RS-WASM provides an interactive web application for viewing and editing GLDF files directly in the browser. It leverages WebAssembly for high-performance parsing and rendering of lighting product data.
 
 ## Features
 
-- Deserialize GLDF files on the client-side using WebAssembly.
-- Interact with GLDF data directly within web applications.
-- Use GLDF data for dynamic visualization and analysis in the browser.
+- **Modern UI**: Clean, responsive interface built with Tailwind CSS
+- **GLDF Parsing**: Load and parse GLDF container files client-side
+- **L3D 3D Viewer**: WebGL-based 3D rendering of L3D luminaire models with orbit/zoom controls
+- **LDT/IES Diagrams**: Interactive photometry polar diagrams with C-plane visualization
+- **Tabbed Editor**: Edit header, variants, light sources, and files in organized tabs
+- **File Browser**: View and download embedded assets (images, photometry, 3D models)
+- **Drag & Drop**: Easy file upload via drag and drop
+- **Multi-L3D Support**: Render GLDF files containing multiple L3D geometries
 
-## Usage
+## Dependencies
 
-1. Include the GLDF-RS-WASM JavaScript module in your HTML:
+This crate relies on excellent Rust libraries for the heavy lifting:
 
-```html
-<!DOCTYPE html><html lang="en"><head>
-    <meta charset="utf-8">
-    <title>GLDF • File Upload</title>
+| Crate | Purpose |
+|-------|---------|
+| [gldf-rs](https://crates.io/crates/gldf-rs) | Core GLDF parsing and manipulation |
+| [l3d-rs](https://crates.io/crates/l3d_rs) | L3D 3D model format parsing |
+| [eulumdat](https://crates.io/crates/eulumdat) | Eulumdat/LDT photometry file parsing |
+| [three-d](https://crates.io/crates/three-d) | WebGL 3D rendering |
+| [yew](https://crates.io/crates/yew) | Reactive web framework |
 
-    <script type="module">import init from '/gldf-rs-wasm-e633e9b682fa57a5.js';init('/gldf-rs-wasm-e633e9b682fa57a5_bg.wasm');</script>
-    <link rel="stylesheet" href="/styles-a8c36e60fd065d7c.css">
-    <link rel="stylesheet" href="/font-awesome.min.css">
-  
-<link rel="preload" href="/gldf-rs-wasm-e633e9b682fa57a5_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
-<link rel="modulepreload" href="/gldf-rs-wasm-e633e9b682fa57a5.js"></head>
+## Live Demo
 
-  <body>
+Try it at: **https://gldf.icu**
 
-</body></html>
+Embedded Eulumdat files can be opened directly in **https://eulumdat.icu** - a WASM-based Eulumdat editor and viewer that can also export to IESNA format.
+
+## Running Locally
+
+```bash
+# Install trunk (WASM bundler)
+cargo install trunk
+
+# Build and serve
+cd gldf-rs-wasm
+trunk serve
+
+# Open http://127.0.0.1:8080
 ```
 
-That's it! You can now use the `gldf-rs-wasm` module in your JavaScript code.
-The working example can be found here:   
+## Release Notes
 
-### https://gldf.icu
+### 0.3.0
+- Complete rewrite with modern UI using Yew framework and Tailwind CSS
+- New tabbed interface for editing header, variants, light sources, and files
+- L3D 3D viewer with WebGL rendering via three-d
+- Interactive orbit/zoom controls for 3D models
+- LDT/IES photometry polar diagram viewer with C-plane visualization
+- Support for GLDF files containing multiple L3D geometries
+- Fixed L3D rendering for OBJ files with missing MTL materials (auto-generates stub materials)
+- File browser with image preview and download support
 
-There you have the advantage, that included eulumdat files, can be directly opened into  
-### https://eulumdat.icu,  
+### 0.2.1
+- Usage of new gldf-rs 0.2.1
+- Inheritance and overwriting of properties (needed for reqwest)
 
-which is an WASM Eulumdat Editor and Viewer, which can as well export to IESNA Format.
+## License
+
+MIT License
