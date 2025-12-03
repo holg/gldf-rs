@@ -4,7 +4,7 @@
 
 A cross-platform GLDF (General Lighting Data Format) processing library and suite of applications.
 
-![gldf-rs logo](gldf-rs-logo.jpg)
+![gldf-rs logo](gldf-rs-logo.png)
 
 ## Overview
 
