@@ -25,32 +25,6 @@ fn is_zero(val: &i32) -> bool {
     *val == 0
 }
 
-/// Represents the format version of the GLDF file.
-///
-/// The `FormatVersion` struct models the version information of the GLDF file format.
-/// It includes major, minor, and pre-release version numbers.
-#[derive(Default, Debug, Clone, PartialEq, YaDeserialize, YaSerialize, Serialize, Deserialize)]
-#[yaserde(rename = "FormatVersion")]
-pub struct FormatVersion {
-    /// The application associated with the license key.
-    #[yaserde(attribute)]
-    #[yaserde(rename = "major")]
-    #[serde(rename = "major")]
-    pub major: i32,
-
-    /// The application associated with the license key.
-    #[yaserde(attribute)]
-    #[yaserde(rename = "minor")]
-    #[serde(rename = "minor")]
-    pub minor: i32,
-
-    /// The application associated with the license key.
-    #[yaserde(attribute)]
-    #[yaserde(rename = "pre-release")]
-    #[serde(rename = "pre-release")]
-    pub pre_release: i32,
-}
-
 /// Represents a license key.
 /// Optionally, a license key can be associated with an application.
 /// LicenseKey is a Rust struct that models a license key. It provides serialization and
