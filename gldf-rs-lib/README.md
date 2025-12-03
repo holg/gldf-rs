@@ -92,7 +92,7 @@ This crate is part of the gldf-rs ecosystem:
 | Crate | Description |
 |-------|-------------|
 | [gldf-rs](https://crates.io/crates/gldf-rs) | Core library (this crate) |
-| [gldf_rs_wasm](https://crates.io/crates/gldf_rs_wasm) | WebAssembly viewer application |
+| [gldf-rs-wasm](https://crates.io/crates/gldf-rs-wasm) | WebAssembly viewer application |
 | [l3d-rs](https://crates.io/crates/l3d_rs) | L3D 3D model format parsing |
 | [eulumdat](https://crates.io/crates/eulumdat) | Eulumdat/LDT photometry parsing |
 

@@ -1,5 +1,5 @@
 [package]
-name = "gldf_rs_wasm"
+name = "gldf-rs-wasm"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
