@@ -17,7 +17,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs-lib = { path = "gldf-rs-lib" }
+gldf-rs = { path = "gldf-rs-lib" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

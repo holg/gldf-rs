@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Root xsi:noNamespaceSchemaLocation="https://gldf.io/xsd/gldf/1.0.0-rc.2/gldf.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Header>
+    <Manufacturer>Robus</Manufacturer>
+    <FormatVersion major="1" minor="0" />
+    <CreatedWithApplication>DataProcessor</CreatedWithApplication>
+    <GldfCreationTimeCode>2023-08-17T12:29:38.233+02:00</GldfCreationTimeCode>
+    <UniqueGldfId>fa7e47be-d90e-41e3-b05e-af97a2231456</UniqueGldfId>
+    <DefaultLanguage>en-GB</DefaultLanguage>
+    <LicenseKeys>
+      <LicenseKey application="RELUX">di12PdDw3ooVuVNX</LicenseKey>
+      <LicenseKey application="DIALux">Key2</LicenseKey>
+    </LicenseKeys>
+    <ReluxMemberId>rbs</ReluxMemberId>
+    <DIALuxMemberId>__empty__</DIALuxMemberId>
+    <Contact>
+      <Address>
+        <FirstName>Joey</FirstName>
+        <Name>Wondergem</Name>
+        <Street>Europalaan 12</Street>
+        <ZIPCode>5232 BC</ZIPCode>
+        <City>'s-Hertogenbosch</City>
+        <Country>The Netherlands</Country>
+        <Phone>+31 735 13 06 37</Phone>
+        <EMailAddresses>
+          <EMail mailto="joey.wondergem@proplanet.nl">Proplanet Joey Wondergem</EMail>
+        </EMailAddresses>
+      </Address>
+    </Contact>
+  </Header>
+  <GeneralDefinitions>
+    <Files>
+      <File id="file_12071" contentType="image/jpg" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30_flexi-strip_vegas-cob-2M-IP20-LED-Stripkit_main.jpg</File>
+      <File id="file_12112" contentType="other" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/Instruction Manual for R2MCOBSIK-30 R2MCOBSIK-40 ISSUE 1 AU.pdf</File>
+      <File id="file_12419" contentType="ldc/eulumdat" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30-Photometrics.ldt</File>
+      <File id="file_12420" contentType="ldc/eulumdat" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/R2MCOBSIK-30-Photometrics.IES</File>
+      <File id="file_12481" contentType="document/pdf" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/VEGAS COB KITS-AU-RxMCOBSIK-ROBUS Product Information Document.pdf</File>
+    </Files>
+    <Photometries>
+      <Photometry id="photometry_3000_1550_17">
+        <PhotometryFileReference fileId="file_12419" />
+      </Photometry>
+    </Photometries>
+    <LightSources>
+      <FixedLightSource id="fixedLightSource_3000_17">
+        <Name>
+          <Locale language="en">LED COB Strip Light</Locale>
+        </Name>
+        <Description>
+          <Locale language="en">VEGAS COB 2m IP20 LED Stripkit 3000K</Locale>
+        </Description>
+        <RatedInputPower>17.4</RatedInputPower>
+        <ColorInformation>
+          <ColorRenderingIndex>80</ColorRenderingIndex>
+          <CorrelatedColorTemperature>3000</CorrelatedColorTemperature>
+        </ColorInformation>
+      </FixedLightSource>
+    </LightSources>
+    <Emitters>
+      <Emitter id="emi_3000_1550">
+        <FixedLightEmitter emergencyBehaviour="None">
+          <PhotometryReference photometryId="photometry_3000_1550_17" />
+          <LightSourceReference fixedLightSourceId="fixedLightSource_3000_17" />
+          <RatedLuminousFlux>1550</RatedLuminousFlux>
+        </FixedLightEmitter>
+      </Emitter>
+    </Emitters>
+  </GeneralDefinitions>
+  <ProductDefinitions>
+    <ProductMetaData>
+      <UniqueProductId>BC88D2CE-E198-41CB-ABB8-65E70765841C</UniqueProductId>
+      <ProductNumber>
+        <Locale language="en">R2MCOBSIK-30</Locale>
+      </ProductNumber>
+      <Name>
+        <Locale language="en">LED COB Strip Light</Locale>
+      </Name>
+      <Description>
+        <Locale language="en">VEGAS COB 2m IP20 LED Stripkit 3000K</Locale>
+      </Description>
+      <ProductSeries>
+        <ProductSerie id="productserie_R2MCOBSIK-30">
+          <Name>
+            <Locale language="en">LED Strip Lighting</Locale>
+          </Name>
+        </ProductSerie>
+      </ProductSeries>
+      <Pictures>
+        <Image imageType="Product Picture" fileId="file_12071" />
+      </Pictures>
+    </ProductMetaData>
+    <Variants>
+      <Variant id="variant_3000_1550">
+        <ProductNumber>
+          <Locale language="en">1550</Locale>
+        </ProductNumber>
+        <Name>
+          <Locale language="en">VEGAS COB 2m IP20 LED Stripkit 3000K</Locale>
+        </Name>
+        <Mountings>
+          <Ceiling>
+            <SurfaceMounted />
+          </Ceiling>
+          <Wall mountingHeight="900">
+            <SurfaceMounted />
+          </Wall>
+        </Mountings>
+        <Geometry>
+          <EmitterReference emitterId="emi_3000_1550" />
+        </Geometry>
+      </Variant>
+    </Variants>
+  </ProductDefinitions>
+</Root>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Root xsi:noNamespaceSchemaLocation="https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Header>
+    <Manufacturer>Relux Demo GLDF</Manufacturer>
+    <FormatVersion major="1" minor="0" pre-release="3"></FormatVersion>
+    <CreatedWithApplication>DataProcessor</CreatedWithApplication>
+    <GldfCreationTimeCode>2022-12-21T12:11:04.67+01:00</GldfCreationTimeCode>
+    <UniqueGldfId>1Pv8VD119DAhLYBMd0IIx0</UniqueGldfId>
+    <DefaultLanguage>en-GB</DefaultLanguage>
+    <LicenseKeys>
+      <LicenseKey application="RELUX">tai3XzzSXWjXra1U</LicenseKey>
+      <LicenseKey application="DIALux">Key2</LicenseKey>
+    </LicenseKeys>
+    <ReluxMemberId>rdg</ReluxMemberId>
+    <DIALuxMemberId>__empty__</DIALuxMemberId>
+    <Author>Robus</Author>
+  </Header>
+  <GeneralDefinitions>
+    <Files>
+      <File id="file_1535" contentType="image/png" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/RAM40406060-01.png</File>
+      <File id="file_5919" contentType="ldc/eulumdat" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/RAM40306060-01-Photometrics.ldt</File>
+      <File id="file_5925" contentType="ldc/eulumdat" type="url" language="en">https://asset.eezybridge.com/896646eb-5f86-4ce5-bedd-82bfbbcca160/RAM40306060-01 Emergency Mode-Photometrics.ldt</File>
+    </Files>
+    <Photometries>
+      <Photometry id="photometry_5919">
+        <PhotometryFileReference fileId="file_5919" />
+      </Photometry>
+      <Photometry id="photometry_5925">
+        <PhotometryFileReference fileId="file_5925" />
+      </Photometry>
+    </Photometries>
+    <LightSources>
+      <FixedLightSource id="fixedlightsource_RAM40306060-01">
+        <Name>
+          <Locale language="en">ATMOS LED PANEL</Locale>
+        </Name>
+        <Description>
+          <Locale language="en">ATMOS 38W LED panel, IP20, 600x600mm, White, 3000K</Locale>
+        </Description>
+        <RatedInputPower>38.1</RatedInputPower>
+        <ColorInformation>
+          <ColorRenderingIndex>80</ColorRenderingIndex>
+          <CorrelatedColorTemperature>3000</CorrelatedColorTemperature>
+        </ColorInformation>
+      </FixedLightSource>
+    </LightSources>
+	<ControlGears>
+		<ControlGear id="c01">
+			<Name>
+				<Locale language="en">LED drive 01</Locale>
+			</Name>
+			<Description>
+				<Locale language="en">LED driver</Locale>
+			</Description>
+		</ControlGear>
+	</ControlGears>
+    <Emitters>
+      <Emitter id="emi_---">
+        <FixedLightEmitter emergencyBehaviour="None">
+          <PhotometryReference photometryId="photometry_5919" />
+          <LightSourceReference fixedLightSourceId="fixedlightsource_RAM40306060-01" />
+          <ControlGearReference controlGearId="c01"/>
+		  <RatedLuminousFlux>3390</RatedLuminousFlux>
+        </FixedLightEmitter>
+      </Emitter>
+    </Emitters>
+	
+  </GeneralDefinitions>
+  <ProductDefinitions>
+    <ProductMetaData>
+    <UniqueProductId>1XxvYknq99QwMMFe02r8Sj</UniqueProductId>
+      <ProductNumber>
+        <Locale language="en">RAM40306060-01</Locale>
+      </ProductNumber>
+      <Name>
+        <Locale language="en">ATMOS LED PANEL</Locale>
+      </Name>
+		            <ProductSeries>
+				<ProductSerie id="justURL">
+					<Name>
+				<Locale language="en">just URL</Locale>
+				</Name>
+				 <Pictures>
+					<Image fileId="file_1535" imageType="Product Picture" />
+				</Pictures>
+				</ProductSerie>
+			    </ProductSeries>
+	   <Pictures>
+                <Image fileId="file_1535" imageType="Product Picture" />
+            </Pictures>
+    </ProductMetaData>
+    <Variants>
+      <Variant id="simple-variant">
+		<ProductNumber>
+                    <Locale language="en">---</Locale>
+        </ProductNumber>
+        <Name>
+          <Locale language="en">ATMOS 38W LED panel, IP20, 600x600mm, White, 3000K</Locale>
+        </Name>
+	<GTIN>00000000</GTIN>
+		 <Geometry>
+                    <EmitterReference emitterId="emi_---" />
+		</Geometry>
+	
+      </Variant>
+    </Variants>
+  </ProductDefinitions>
+</Root>

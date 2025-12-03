@@ -20,7 +20,7 @@ path = "uniffi-bindgen.rs"
 uniffi = { version = "0.28", features = ["cli"] }
 
 # Core GLDF library (no HTTP for mobile/FFI builds)
-gldf-rs-lib = { path = "../gldf-rs-lib", default-features = false, features = [] }
+gldf-rs = { path = "../gldf-rs-lib", default-features = false, features = [] }
 
 # Error handling
 thiserror = "1.0"

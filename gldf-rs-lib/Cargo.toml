@@ -1,5 +1,5 @@
 [package]
-name = "gldf-rs-lib"
+name = "gldf-rs"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

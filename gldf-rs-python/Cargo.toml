@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Core library
-gldf-rs-lib.workspace = true
+gldf-rs.workspace = true
 
 # Python bindings
 pyo3.workspace = true

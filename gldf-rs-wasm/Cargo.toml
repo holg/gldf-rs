@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core library - disable http feature for WASM compatibility
-gldf-rs-lib = { path = "../gldf-rs-lib", default-features = false }
+gldf-rs = { path = "../gldf-rs-lib", default-features = false }
 
 # Error handling
 anyhow.workspace = true
