@@ -1,0 +1,51 @@
+[package]
+name = "gldf_rs_wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage = "https://gldf.icu"
+documentation = "https://github.com/holg/gldf-rs"
+description = "The Webassembly package for the GLDF (General Lighting Data Format) parser and writer for Rust https://crates.io/crates/gldf-rs"
+
+[[bin]]
+name = "gldf_rs_wasm"
+path = "src/main.rs"
+
+[dependencies]
+# Core library - disable http feature for WASM compatibility
+gldf-rs-lib = { path = "../gldf-rs-lib", default-features = false }
+
+# Error handling
+anyhow.workspace = true
+
+# Utilities
+base64.workspace = true
+
+# WASM
+js-sys.workspace = true
+yew.workspace = true
+reqwest-wasm.workspace = true
+gloo.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+# L3D 3D rendering
+#three-d = { path = "../gldf-editor/three-d" }
+#three-d-asset = { path = "../gldf-editor/three-d-asset", features = ["obj"] }
+eulumdat = "0.1.0"
+three-d = "0.18"
+three-d-asset = { version = "0.9", features = ["obj"] }
+serde = { version = "1.0", features = ["derive"] }
+l3d_rs = { version = "0.2" }
+zip = { version = "6", default-features = false, features = ["deflate"] }
+
+[dependencies.web-sys]
+workspace = true
+features = ["File", "DragEvent", "DataTransfer", "HtmlSelectElement", "HtmlCanvasElement", "Window", "Document", "HtmlCollection"]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
