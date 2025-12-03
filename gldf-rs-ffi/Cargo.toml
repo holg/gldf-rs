@@ -1,0 +1,37 @@
+[package]
+name = "gldf-rs-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "FFI bindings for GLDF library - iOS/macOS/Android support via UniFFI"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+name = "gldf_ffi"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+# UniFFI for cross-language bindings
+uniffi = { version = "0.28", features = ["cli"] }
+
+# Core GLDF library (no HTTP for mobile/FFI builds)
+gldf-rs-lib = { path = "../gldf-rs-lib", default-features = false, features = [] }
+
+# Error handling
+thiserror = "1.0"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# ZIP archive handling
+zip = { workspace = true }
+
+# XML parsing for L3D structure
+serde-xml-rs = "0.6"
+

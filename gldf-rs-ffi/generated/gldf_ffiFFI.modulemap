@@ -1,0 +1,4 @@
+module gldf_ffiFFI {
+    header "gldf_ffiFFI.h"
+    export *
+}

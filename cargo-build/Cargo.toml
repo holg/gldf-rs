@@ -1,0 +1,8 @@
+[package]
+name = "cargo-build"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cargo-build"
+path = "src/main.rs"

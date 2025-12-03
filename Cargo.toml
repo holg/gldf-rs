@@ -1,45 +1,55 @@
-[package]
-readme = "README.md"
-name = "gldf-rs"
-version = "0.2.3"
+[workspace]
+resolver = "2"
+members = [
+    "gldf-rs-lib",
+    "gldf-rs-wasm",
+    "gldf-rs-python",
+    "gldf-rs-ffi",
+]
+
+[workspace.package]
+version = "0.3.0"
 edition = "2021"
-authors = ["Holger Trahe<trahe@mac.com>"]
-documentation = "https://docs.rs/gldf-rs/"
-description = "GLDF (General Lighting Data Format) parser and writer for Rust, specifically for the Rust/WASM target as such designed for JSON format"
+authors = ["Holger Trahe <trahe@mac.com>"]
+license = "GPL-3.0-or-later"
 repository = "https://github.com/holg/gldf-rs"
 homepage = "https://github.com/holg/gldf-rs"
-license = "GPL-3.0-or-later"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.dependencies]
+# Core library
+gldf-rs-lib = { path = "gldf-rs-lib" }
 
-[dependencies]
-#yaserde = {version = "0.8"}
-# we do need our own branch anymore, as now we use the one from yaserde
-#yaserde = {path = "../yaserde/yaserde"} #, branch="gldf"}
-yaserde = {version="0.8", git = "https://github.com/holg/yaserde/", branch="gldf"}
-#yaserde_derive = {path = "../yaserde/yaserde_derive"} #, branch="gldf"}
-yaserde_derive = {version = "0.8", git = "https://github.com/holg/yaserde/", branch="gldf"}
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
-serde_json = {version = "1.0"}
-anyhow = {version = "1.0"}
-zip = {version="2.2", features = ["deflate", "time"], default-features = false}
-regex = { version = "1.9" }
-reqwest = { version = "0.12.8", features = ["json", "blocking"] }
-futures = "0.3"
-[target.'cfg(target_arch = "wasm32")'.dependencies.regex]
-version = "1.9"
+serde_json = "1.0"
+quick-xml = { version = "0.37", features = ["serialize"] }
 
-[dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+# Error handling
+anyhow = "1.0"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies.reqwest-wasm]
-version = "0.11.16"
-default-features = false
-features = ["json", "blocking"]
+# Async runtime
+tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
+async-std = "1.12"
 
-#zip = {path = "../zip", features = ["deflate", "time"], default-features = false}
+# HTTP client
+reqwest = { version = "0.12", features = ["rustls-tls"] }
+reqwest-wasm = { version = "0.11", features = ["blocking"] }
 
-[lib]
-name = "gldf_rs"
-path = "src/lib.rs"
-crate-type = ["cdylib", "rlib"]
+# Compression
+zip = { version = "0.6", features = ["deflate", "time"], default-features = false }
+
+# Utilities
+regex = "1.10"
+base64 = "0.22"
+
+# WASM
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+wasm-bindgen-test = "0.3"
+js-sys = "0.3"
+web-sys = "0.3"
+gloo = "0.11"
+yew = { version = "0.21", features = ["csr"] }
+
+# Python
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py37"] }
