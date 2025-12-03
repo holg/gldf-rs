@@ -1,4 +1,68 @@
+# Rust build artifacts
 /target
 Cargo.lock
+/*/target/
+
+# IDE settings
 /.zed
 /.idea
+
+# Python build artifacts
+gldf-rs-python/gldf-py
+gldf-rs-python/dist
+gldf-rs-python/gldf_rs_python-*
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Xcode user data (contains personal info)
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.pbxuser
+*.perspectivev3
+*.mode1v3
+*.mode2v3
+
+# Xcode workspace settings
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/xcode/xcuserdata/
+.build/
+
+# Built apps
+GldfApp/GldfViewer.app
+GldfApp/GldfViewer.zip
+
+# Xcode build outputs
+**/build/
+**/DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# XCFramework binary contents (keep Info.plist, exclude binaries)
+*.xcframework/ios-*/
+*.xcframework/macos-*/
+*.xcframework/tvos-*/
+*.xcframework/watchos-*/
+
+# Android build
+GldfApp/android/**/build/
+GldfApp/android/.gradle/
+*.apk
+*.aab
+
+# Test keys (don't commit private keys!)
+tests/data/*.pem
+tests/data/*.signature
+
+# WASM build output
+gldf-rs-wasm/dist/
+
+# Temporary files
+*.tmp
+*.swp
+*~

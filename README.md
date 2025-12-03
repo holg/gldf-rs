@@ -1,73 +1,119 @@
-[![CI](https://github.com/holg/gldf-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/ci.yml)
+[![Rust](https://github.com/holg/gldf-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/rust.yml)
 
 # gldf-rs
-Process GLDF
 
-Release notes:
-0.2.3
-- added new header definition, because FormatVersion changed
-- added Logger to pass into some methods
-- added test to completely check and compare to URL based gldf
-- bumped up versions of dependencies
+A cross-platform GLDF (General Lighting Data Format) processing library and suite of applications.
 
-0.2.2
-- added support meta-information.xml
+![gldf-rs logo](gldf-rs-logo.jpg)
 
+## Overview
 
+gldf-rs provides comprehensive tools for working with GLDF files - the modern container format for luminaire and sensor data. GLDF files are ZIP containers containing `product.xml` definitions along with associated binaries like images, Eulumdat/IES photometry files, and L3D 3D models.
 
-0.2.1
-- added better documentation fo the main page
-- for wasm support some refactoring was needed, to use reqwest::blocking 
+Learn more at: https://gldf.io
 
+## Packages
 
-0.2.0 
-- refactored gldf.rs into submodules
-- added support for BOM encoded UTF8 product.xml
-- added support for url file_types
-- added better documentation
+This monorepo contains multiple packages:
 
-A cross platform GLDF processing library.
+| Package | Description |
+|---------|-------------|
+| `gldf-rs-lib` | Core Rust library for GLDF parsing and manipulation |
+| `gldf-rs-wasm` | WebAssembly app with interactive GLDF viewer and L3D 3D rendering |
+| `gldf-rs-ffi` | FFI bindings for Swift/Kotlin (iOS, macOS, Android) |
+| `gldf-rs-python` | Python bindings via PyO3 |
+| `GldfApp` | Native applications for iOS, macOS, and Android |
 
-For the GLDF new Luminaire / Sensor Container Definition.
+## Features
 
-Basically .gldf is a zip Container, containing the product.xml for the Definition
+- Parse GLDF containers and `product.xml` definitions
+- Convert between XML and JSON representations
+- Extract and process embedded files (images, photometry, 3D models)
+- Support for meta-information.xml
+- WebGL-based L3D 3D model viewer
+- LDT/IES photometry diagram rendering
+- Native apps with Swift Package Manager support
 
-and as well the needed binaries, e.g. images and soem Eulumdat / or IES files,
-as well as 3D Models characterising the luminaire.
+## Quick Start
 
-More:
+### Rust Library
 
-https://gldf.io
+```rust
+use gldf_rs_lib::GldfProduct;
 
-This rust lib for now can read the product.xml definition directly from the .gldf Container
-and is able to represent the content as well as JSON, which is the preferred way for feeding some content of it
-into Search Engines or in General as JSON Storage now is quite common, last but not least Postgres.
+let loaded = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
 
+// Display pretty printed XML
+let x_serialized = loaded.to_xml().unwrap();
+println!("{}", x_serialized);
 
-    let loaded: GldfProduct = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
-    println!("{:?}", loaded);
-    // Display pretty printed XML
-    let x_serialized = loaded.to_xml().unwrap();
-    println!("{}", x_serialized);
-    let json_str = loaded.to_json().unwrap();
-    println!("{}", json_str);
-    let j_loaded: GldfProduct = GldfProduct::from_json(&json_str).unwrap();
-    let x_reserialized =  j_loaded.to_xml().unwrap();
-    println!("{}", x_reserialized);
-    assert_eq!(x_serialized, x_reserialized);
+// Convert to JSON
+let json_str = loaded.to_json().unwrap();
+println!("{}", json_str);
 
-Passes OK, so we are able to read xml, convert to JSON and again into the same XML.
+// Round-trip: JSON back to XML
+let j_loaded = GldfProduct::from_json(&json_str).unwrap();
+let x_reserialized = j_loaded.to_xml().unwrap();
+assert_eq!(x_serialized, x_reserialized);
+```
 
-For processing for now there are some implemantations already:
+### WASM Web Viewer
 
-    let phot_files = loaded.get_phot_files().unwrap();
-    let mut ldc_contents: Vec<String> = Vec::new();
-    for f in phot_files.iter(){
-        let mut ldc_content = "".to_owned();
-        let file_id = f.id.to_string();
-        ldc_content.push_str(&loaded.get_ldc_by_id(file_id).unwrap().to_owned());
-        ldc_contents.push(ldc_content);
-        println!("{}", f.file_name)
-    }
+```bash
+cd gldf-rs-wasm
+trunk serve
+# Open http://127.0.0.1:8080
+```
 
-    Here it is shown how to read the ldc files from the GLDF Container.
+### Native Apps
+
+```bash
+# macOS
+cd GldfApp
+./scripts/build_macos.sh
+
+# iOS/macOS via Swift Package Manager
+./scripts/build_spm_package.sh
+```
+
+## Working with Photometry Files
+
+```rust
+let phot_files = loaded.get_phot_files().unwrap();
+for f in phot_files.iter() {
+    let file_id = f.id.to_string();
+    let ldc_content = loaded.get_ldc_by_id(file_id).unwrap();
+    println!("{}: {} bytes", f.file_name, ldc_content.len());
+}
+```
+
+## Release Notes
+
+### 0.3.0
+- **Major refactor**: Restructured as monorepo with separate packages
+- **WASM Web App**: Full-featured GLDF viewer with Yew framework
+- **L3D 3D Viewer**: WebGL-based rendering using three-d
+  - Fixed: L3D files with missing MTL materials now render correctly
+  - Auto-generates stub materials for OBJ files referencing missing MTL files
+- **LDT Diagram Viewer**: Interactive photometry visualization
+- **Native Apps**: iOS, macOS, and Android applications
+- **FFI Bindings**: Swift and Kotlin bindings via UniFFI
+- **Python Bindings**: PyO3-based Python package
+- **Swift Package Manager**: XCFramework distribution for Apple platforms
+
+### 0.2.2
+- Added support for meta-information.xml
+
+### 0.2.1
+- Added better documentation for the main page
+- Refactored for WASM support using reqwest::blocking
+
+### 0.2.0
+- Refactored gldf.rs into submodules
+- Added support for BOM encoded UTF8 product.xml
+- Added support for URL file_types
+- Added better documentation
+
+## License
+
+MIT License
