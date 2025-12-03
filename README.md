@@ -18,8 +18,8 @@ This monorepo contains multiple packages:
 
 | Package | Description |
 |---------|-------------|
-| `gldf-rs-lib` | Core Rust library for GLDF parsing and manipulation |
-| `gldf-rs-wasm` | WebAssembly app with interactive GLDF viewer and L3D 3D rendering |
+| `gldf-rs` | Core Rust library for GLDF parsing and manipulation |
+| `gldf_rs_wasm` | WebAssembly app with interactive GLDF viewer and L3D 3D rendering |
 | `gldf-rs-ffi` | FFI bindings for Swift/Kotlin (iOS, macOS, Android) |
 | `gldf-rs-python` | Python bindings via PyO3 |
 | `GldfApp` | Native applications for iOS, macOS, and Android |
@@ -34,12 +34,16 @@ This monorepo contains multiple packages:
 - LDT/IES photometry diagram rendering
 - Native apps with Swift Package Manager support
 
+## Live Demo
+
+Try the WASM-based GLDF viewer at: **https://gldf.icu**
+
 ## Quick Start
 
 ### Rust Library
 
 ```rust
-use gldf_rs_lib::GldfProduct;
+use gldf_rs::GldfProduct;
 
 let loaded = GldfProduct::load_gldf("./tests/data/test.gldf").unwrap();
 
