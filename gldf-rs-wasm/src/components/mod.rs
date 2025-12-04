@@ -8,6 +8,7 @@ mod locale_input;
 mod editor_tabs;
 mod ldt_viewer;
 mod l3d_viewer;
+mod url_file_viewer;
 
 pub use header_editor::HeaderEditor;
 pub use files_editor::FilesEditor;
@@ -18,3 +19,4 @@ pub use locale_input::LocaleInput;
 pub use editor_tabs::EditorTabs;
 pub use ldt_viewer::LdtViewer;
 pub use l3d_viewer::L3dViewer;
+pub use url_file_viewer::UrlFileViewer;

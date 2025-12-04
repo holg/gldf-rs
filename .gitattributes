@@ -1,0 +1,4 @@
+# Override GitHub linguist detection
+   # Mark generated/vendored Swift code as not primary language
+   GeoDB-App/** linguist-vendored
+   *.swift linguist-vendored
