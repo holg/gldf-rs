@@ -18,8 +18,9 @@ use gldf_rs::{FileBufGldf, BufFile};
 mod components;
 mod state;
 mod draw_l3d;
+mod utils;
 
-use components::{EditorTabs, LdtViewer, L3dViewer};
+use components::{EditorTabs, LdtViewer, L3dViewer, UrlFileViewer};
 use state::{GldfProvider, GldfAction, use_gldf};
 
 /// Wrapper for GLDF product operations
@@ -62,6 +63,8 @@ pub enum Msg {
     ExportJson,
     ExportXml,
     SetDragging(bool),
+    LoadDemo,
+    DemoLoaded(Result<Vec<u8>, String>),
 }
 
 /// Mode of the application
@@ -170,6 +173,49 @@ impl Component for App {
             }
             Msg::SetDragging(dragging) => {
                 self.is_dragging = dragging;
+                true
+            }
+            Msg::LoadDemo => {
+                let link = ctx.link().clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = gloo::net::http::Request::get("/gldf_demo_icu.gldf")
+                        .send()
+                        .await
+                        .map_err(|e| format!("Network error: {}", e))
+                        .and_then(|resp| {
+                            if resp.ok() {
+                                Ok(resp)
+                            } else {
+                                Err(format!("HTTP error: {}", resp.status()))
+                            }
+                        });
+
+                    let data = match result {
+                        Ok(resp) => resp.binary().await.map_err(|e| format!("Read error: {}", e)),
+                        Err(e) => Err(e),
+                    };
+
+                    link.send_message(Msg::DemoLoaded(data));
+                });
+                false
+            }
+            Msg::DemoLoaded(result) => {
+                match result {
+                    Ok(data) => {
+                        console::log!("Demo loaded:", data.len(), "bytes");
+                        if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
+                            self.loaded_gldf = Some(gldf);
+                        }
+                        self.files.push(FileDetails {
+                            data,
+                            file_type: "application/gldf".to_string(),
+                            name: "gldf_demo_icu.gldf".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        console::log!("Failed to load demo:", e.as_str());
+                    }
+                }
                 true
             }
         }
@@ -336,6 +382,9 @@ impl App {
 
                 <div class="welcome-buttons">
                     <label for="file-upload" class="btn btn-primary">{ "Open File..." }</label>
+                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo)}>
+                        { "Load Demo" }
+                    </button>
                 </div>
 
                 <input
@@ -1133,14 +1182,19 @@ impl App {
             }
             html! {
                 <div class="url-files">
-                    <p style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px;">{ "External URL References:" }</p>
+                    <p style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px;">{ "External URL Resources:" }</p>
                     { for url_files.iter().map(|f| {
                         html! {
                             <div class="url-file-entry">
-                                <p>{ format!("{} ({})", f.file_name, f.content_type) }</p>
-                                <a href={f.file_name.clone()} target="_blank">
-                                    { "Open URL" }
-                                </a>
+                                <div class="url-file-header">
+                                    <span class="file-id">{ &f.id }</span>
+                                    <span class="content-type">{ &f.content_type }</span>
+                                </div>
+                                <UrlFileViewer
+                                    url={f.file_name.clone()}
+                                    content_type={f.content_type.clone()}
+                                    file_id={f.id.clone()}
+                                />
                             </div>
                         }
                     })}
