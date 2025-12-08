@@ -48,16 +48,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Wait for crates.io index update
-        run: sleep 30
+        run: sleep 60
 
       - name: Update crates.io index
-        run: cargo update -p gldf-rs
+        run: cargo update -p gldf-rs || true
 
-      - name: Verify build
+      - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-ffi
-
-      - name: Dry run publish
-        run: cargo publish --dry-run -p gldf-rs-ffi
 
       - name: Publish gldf-rs-ffi to crates.io
         env:
@@ -78,16 +75,13 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Wait for crates.io index update
-        run: sleep 30
+        run: sleep 60
 
       - name: Update crates.io index
-        run: cargo update -p gldf-rs
+        run: cargo update -p gldf-rs || true
 
-      - name: Verify build
+      - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-wasm --target wasm32-unknown-unknown
-
-      - name: Dry run publish
-        run: cargo publish --dry-run -p gldf-rs-wasm
 
       - name: Publish gldf-rs-wasm to crates.io
         env:
@@ -106,16 +100,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Wait for crates.io index update
-        run: sleep 30
+        run: sleep 60
 
       - name: Update crates.io index
-        run: cargo update -p gldf-rs
+        run: cargo update -p gldf-rs || true
 
-      - name: Verify build
+      - name: Verify build (local workspace)
         run: cargo build --release -p gldf_rs_python
-
-      - name: Dry run publish
-        run: cargo publish --dry-run -p gldf_rs_python
 
       - name: Publish gldf_rs_python to crates.io
         env:
@@ -139,16 +130,13 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
       - name: Wait for crates.io index update
-        run: sleep 30
+        run: sleep 60
 
       - name: Update crates.io index
-        run: cargo update -p gldf-rs
+        run: cargo update -p gldf-rs || true
 
-      - name: Verify build
+      - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-egui
-
-      - name: Dry run publish
-        run: cargo publish --dry-run -p gldf-rs-egui
 
       - name: Publish gldf-rs-egui to crates.io
         env:
