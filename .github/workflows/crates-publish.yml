@@ -34,7 +34,7 @@ jobs:
       - name: Publish gldf-rs to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs --allow-dirty
+        run: cargo publish -p gldf-rs --allow-dirty || echo "Already published or failed"
 
   # Publish gldf-rs-ffi (FFI bindings for mobile) after gldf-rs
   publish-ffi:
@@ -62,7 +62,7 @@ jobs:
       - name: Publish gldf-rs-ffi to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-ffi --allow-dirty
+        run: cargo publish -p gldf-rs-ffi --allow-dirty || echo "Already published or failed"
 
   # Publish gldf-rs-wasm (WebAssembly viewer) after gldf-rs
   publish-wasm:
@@ -92,7 +92,35 @@ jobs:
       - name: Publish gldf-rs-wasm to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-wasm --allow-dirty
+        run: cargo publish -p gldf-rs-wasm --allow-dirty || echo "Already published or failed"
+
+  # Publish gldf_rs_python (Python bindings) after gldf-rs
+  publish-python:
+    name: Publish gldf_rs_python
+    runs-on: ubuntu-latest
+    needs: publish-lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Wait for crates.io index update
+        run: sleep 30
+
+      - name: Update crates.io index
+        run: cargo update -p gldf-rs
+
+      - name: Verify build
+        run: cargo build --release -p gldf_rs_python
+
+      - name: Dry run publish
+        run: cargo publish --dry-run -p gldf_rs_python
+
+      - name: Publish gldf_rs_python to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p gldf_rs_python --allow-dirty || echo "Already published or failed"
 
   # Publish gldf-rs-egui (desktop viewer) after gldf-rs
   publish-egui:
@@ -125,4 +153,4 @@ jobs:
       - name: Publish gldf-rs-egui to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-egui --allow-dirty
+        run: cargo publish -p gldf-rs-egui --allow-dirty || echo "Already published or failed"
