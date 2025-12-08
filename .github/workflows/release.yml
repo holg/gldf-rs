@@ -1,0 +1,266 @@
+# Build and release binaries for all platforms
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build gldf-rs-egui binaries (native desktop app)
+  build-egui:
+    name: Build gldf-rs-egui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: gldf-viewer-egui
+            asset_name: gldf-viewer-egui-linux-x86_64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact_name: gldf-viewer-egui
+            asset_name: gldf-viewer-egui-macos-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact_name: gldf-viewer-egui
+            asset_name: gldf-viewer-egui-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: gldf-viewer-egui.exe
+            asset_name: gldf-viewer-egui-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+
+      - name: Build gldf-viewer-egui
+        run: cargo build --release -p gldf-rs-egui --bin gldf-viewer-egui --target ${{ matrix.target }}
+
+      - name: Build gldf-l3d-viewer
+        run: cargo build --release -p gldf-rs-egui --bin gldf-l3d-viewer --target ${{ matrix.target }}
+
+      - name: Prepare artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts/gldf-rs-egui
+          cp target/${{ matrix.target }}/release/gldf-viewer-egui artifacts/gldf-rs-egui/${{ matrix.asset_name }}
+          cp target/${{ matrix.target }}/release/gldf-l3d-viewer artifacts/gldf-rs-egui/gldf-l3d-viewer-${{ matrix.target }}
+          chmod +x artifacts/gldf-rs-egui/*
+
+      - name: Prepare artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p artifacts/gldf-rs-egui
+          cp target/${{ matrix.target }}/release/gldf-viewer-egui.exe artifacts/gldf-rs-egui/${{ matrix.asset_name }}
+          cp target/${{ matrix.target }}/release/gldf-l3d-viewer.exe artifacts/gldf-rs-egui/gldf-l3d-viewer-windows-x86_64.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gldf-rs-egui-${{ matrix.target }}
+          path: artifacts/gldf-rs-egui/
+
+  # Build gldf-rs-wasm (WebAssembly)
+  build-wasm:
+    name: Build gldf-rs-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install trunk
+        run: cargo install trunk
+
+      - name: Build WASM
+        working-directory: crates/gldf-rs-wasm
+        run: trunk build --release
+
+      - name: Package WASM dist
+        run: |
+          mkdir -p artifacts/gldf-rs-wasm
+          cp -r crates/gldf-rs-wasm/dist/* artifacts/gldf-rs-wasm/
+          cd artifacts && zip -r gldf-rs-wasm-dist.zip gldf-rs-wasm/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gldf-rs-wasm
+          path: artifacts/gldf-rs-wasm-dist.zip
+
+  # Build gldf-rs-ffi (FFI libraries for mobile and desktop)
+  build-ffi:
+    name: Build gldf-rs-ffi (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Desktop platforms
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            lib_name: libgldf_ffi.so
+            platform: linux
+          - os: macos-14
+            target: aarch64-apple-darwin
+            lib_name: libgldf_ffi.dylib
+            platform: macos
+          # iOS platforms
+          - os: macos-14
+            target: aarch64-apple-ios
+            lib_name: libgldf_ffi.a
+            platform: ios
+          - os: macos-14
+            target: x86_64-apple-ios
+            lib_name: libgldf_ffi.a
+            platform: ios-simulator
+          # Android platforms (all common architectures)
+          - os: ubuntu-latest
+            target: aarch64-linux-android
+            lib_name: libgldf_ffi.so
+            platform: android
+            android_abi: arm64-v8a
+          - os: ubuntu-latest
+            target: armv7-linux-androideabi
+            lib_name: libgldf_ffi.so
+            platform: android
+            android_abi: armeabi-v7a
+          - os: ubuntu-latest
+            target: x86_64-linux-android
+            lib_name: libgldf_ffi.so
+            platform: android
+            android_abi: x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Android NDK
+        if: matrix.platform == 'android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+
+      - name: Set Android linker
+        if: matrix.platform == 'android'
+        run: |
+          echo "Setting up linker for ${{ matrix.target }}"
+          NDK_TOOLCHAIN="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          case "${{ matrix.target }}" in
+            aarch64-linux-android)
+              echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_TOOLCHAIN}/aarch64-linux-android24-clang" >> $GITHUB_ENV
+              ;;
+            armv7-linux-androideabi)
+              echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=${NDK_TOOLCHAIN}/armv7a-linux-androideabi24-clang" >> $GITHUB_ENV
+              ;;
+            x86_64-linux-android)
+              echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=${NDK_TOOLCHAIN}/x86_64-linux-android24-clang" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Build FFI library
+        run: cargo build --release -p gldf-rs-ffi --target ${{ matrix.target }}
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/gldf-rs-ffi/${{ matrix.platform }}/${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/${{ matrix.lib_name }} artifacts/gldf-rs-ffi/${{ matrix.platform }}/${{ matrix.target }}/ || true
+          cp target/${{ matrix.target }}/release/libgldf_ffi.a artifacts/gldf-rs-ffi/${{ matrix.platform }}/${{ matrix.target }}/ || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gldf-rs-ffi-${{ matrix.platform }}-${{ matrix.target }}
+          path: artifacts/gldf-rs-ffi/
+
+  # Create GitHub Release
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-egui, build-wasm, build-ffi]
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -laR artifacts/
+
+      - name: Organize release assets
+        run: |
+          mkdir -p release-assets
+
+          # gldf-rs-egui binaries
+          for dir in artifacts/gldf-rs-egui-*/; do
+            cp "$dir"/* release-assets/ 2>/dev/null || true
+          done
+
+          # gldf-rs-wasm
+          cp artifacts/gldf-rs-wasm/*.zip release-assets/ 2>/dev/null || true
+
+          # gldf-rs-ffi - create per-platform archives
+          # Structure: artifacts/gldf-rs-ffi-{platform}-{target}/gldf-rs-ffi/{platform}/{target}/
+          for artifact_dir in artifacts/gldf-rs-ffi-*/; do
+            for platform_dir in "$artifact_dir"gldf-rs-ffi/*/; do
+              platform=$(basename "$platform_dir")
+              for target_dir in "$platform_dir"*/; do
+                target=$(basename "$target_dir")
+                echo "Packaging gldf-rs-ffi for ${platform}/${target}"
+                cd "$target_dir" && zip -r "../../../../../../release-assets/gldf-rs-ffi-${platform}-${target}.zip" . && cd - || true
+              done
+            done
+          done
+
+          # Create combined Android archive with all ABIs for convenience
+          mkdir -p android-combined
+          for artifact_dir in artifacts/gldf-rs-ffi-android-*/; do
+            for target_dir in "$artifact_dir"gldf-rs-ffi/android/*/; do
+              target=$(basename "$target_dir")
+              mkdir -p "android-combined/${target}"
+              cp "$target_dir"/* "android-combined/${target}/" 2>/dev/null || true
+            done
+          done
+          if [ -d "android-combined" ] && [ "$(ls -A android-combined)" ]; then
+            cd android-combined && zip -r "../release-assets/gldf-rs-ffi-android-all.zip" . && cd -
+          fi
+          rm -rf android-combined
+
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

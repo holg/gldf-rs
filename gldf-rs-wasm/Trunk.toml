@@ -1,6 +1,0 @@
-[trunk]
-dist_dir = "dist"
-
-[[trunk.copy]]
-source = "src/static/"
-destination = "dist"

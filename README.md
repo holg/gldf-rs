@@ -1,4 +1,6 @@
 [![Rust](https://github.com/holg/gldf-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/holg/gldf-rs/actions/workflows/rust.yml)
+[![PyPI](https://img.shields.io/pypi/v/gldf-rs-python.svg)](https://pypi.org/project/gldf-rs-python/)
+[![crates.io](https://img.shields.io/crates/v/gldf-rs.svg)](https://crates.io/crates/gldf-rs)
 
 # gldf-rs
 
@@ -12,17 +14,31 @@ gldf-rs provides comprehensive tools for working with GLDF files - the modern co
 
 Learn more at: https://gldf.io
 
+## Project Structure
+
+```
+gldf-rs/
+├── crates/
+│   ├── gldf-rs-lib/      # Core Rust library
+│   ├── gldf-rs-egui/     # Desktop GUI (egui)
+│   ├── gldf-rs-wasm/     # WebAssembly viewer
+│   ├── gldf-rs-python/   # Python bindings (PyO3)
+│   └── gldf-rs-ffi/      # FFI bindings (Swift/Kotlin)
+├── GldfApp/              # Native iOS/macOS/Android apps
+├── tests/                # Shared test data
+└── scripts/              # Build scripts
+```
+
 ## Packages
 
-This monorepo contains multiple packages:
-
-| Package | Description |
-|---------|-------------|
-| `gldf-rs` | Core Rust library for GLDF parsing and manipulation |
-| `gldf-rs-wasm` | WebAssembly app with interactive GLDF viewer and L3D 3D rendering |
-| `gldf-rs-ffi` | FFI bindings for Swift/Kotlin (iOS, macOS, Android) |
-| `gldf-rs-python` | Python bindings via PyO3 |
-| `GldfApp` | Native applications for iOS, macOS, and Android |
+| Package | Description | Published |
+|---------|-------------|-----------|
+| `gldf-rs` | Core Rust library for GLDF parsing and manipulation | [crates.io](https://crates.io/crates/gldf-rs) |
+| `gldf-rs-egui` | Desktop GUI application with 3D L3D viewer | - |
+| `gldf-rs-wasm` | WebAssembly app with interactive GLDF viewer | [gldf.icu](https://gldf.icu) |
+| `gldf-rs-python` | Python bindings via PyO3 | [PyPI](https://pypi.org/project/gldf-rs-python/) |
+| `gldf-rs-ffi` | FFI bindings for Swift/Kotlin (iOS, macOS, Android) | - |
+| `GldfApp` | Native applications for iOS, macOS, and Android | - |
 
 ## Features
 
@@ -64,9 +80,15 @@ assert_eq!(x_serialized, x_reserialized);
 ### WASM Web Viewer
 
 ```bash
-cd gldf-rs-wasm
+cd crates/gldf-rs-wasm
 trunk serve
 # Open http://127.0.0.1:8080
+```
+
+### Desktop GUI (egui)
+
+```bash
+cargo run -p gldf-rs-egui --release
 ```
 
 ### Native Apps
@@ -92,6 +114,16 @@ for f in phot_files.iter() {
 ```
 
 ## Release Notes
+
+### 0.3.1
+- **Workspace reorganization**: All crates moved to `crates/` directory
+- **New desktop GUI**: `gldf-rs-egui` - cross-platform desktop viewer using egui
+  - Interactive 3D L3D model viewer (spawns subprocess for macOS compatibility)
+  - Automatic URL asset downloading
+  - PDF viewing via system viewer
+  - Dark mode support
+- **Improved CI/CD**: Strict clippy and rustdoc checks
+- **Code quality**: Fixed all clippy warnings across workspace
 
 ### 0.3.0
 - **Major refactor**: Restructured as monorepo with separate packages
@@ -120,4 +152,4 @@ for f in phot_files.iter() {
 
 ## License
 
-MIT License
+GPL-3.0-or-later

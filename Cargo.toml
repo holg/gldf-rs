@@ -1,14 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
-    "gldf-rs-lib",
-    "gldf-rs-wasm",
-    "gldf-rs-python",
-    "gldf-rs-ffi",
+    #    "crates/gldf-rs-slint",
+    "crates/gldf-rs-egui",
+    "crates/gldf-rs-ffi",
+    "crates/gldf-rs-lib",
+    "crates/gldf-rs-python",
+    "crates/gldf-rs-wasm",
 ]
 
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "GPL-3.0-or-later"
@@ -17,39 +19,77 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { path = "gldf-rs-lib" }
+gldf-rs = { version = "0.3.2", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 quick-xml = { version = "0.37", features = ["serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+serde-xml-rs = "0.6"
+serde_json = "1.0"
 
 # Error handling
 anyhow = "1.0"
+thiserror = "1.0"
 
 # Async runtime
-tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
 async-std = "1.12"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "test-util", "macros"] }
 
 # HTTP client
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 reqwest-wasm = { version = "0.11", features = ["blocking"] }
 
-# Compression
-zip = { version = "0.6", features = ["deflate", "time"], default-features = false }
+# Compression - use zip 2.x for better compatibility
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Utilities
-regex = "1.10"
 base64 = "0.22"
+lazy_static = "1.5"
+regex = "1.10"
+
+# UI framework (egui)
+eframe = { version = "0.33", default-features = false, features = [
+  "accesskit",
+  "default_fonts",
+  "glow",
+  "persistence",
+] }
+egui_extras = { version = "0.33", features = ["all_loaders", "image", "svg"] }
+
+# Image processing
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+resvg = "0.45"
+
+# 3D rendering
+three-d = { version = "0.18", default-features = true }
+three-d-asset = { version = "0.9", features = ["obj"] }
+
+# Photometric data
+eulumdat = "0.2"
+l3d_rs = "0.2"
+
+# File dialogs (native)
+rfd = "0.15"
 
 # WASM
+gloo = "0.11"
+js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
-js-sys = "0.3"
 web-sys = "0.3"
-gloo = "0.11"
-yew = { version = "0.21", features = ["csr"] }
+yew = { version = "0.22", features = ["csr"] }
 
 # Python
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py37"] }
+pyo3-build-config = "0.22"
+
+# FFI (UniFFI)
+uniffi = { version = "0.28", features = ["cli"] }
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
+
+# Build utilities
+version_check = "0.9"

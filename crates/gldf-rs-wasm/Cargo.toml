@@ -1,0 +1,58 @@
+[package]
+name = "gldf-rs-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage = "https://gldf.icu"
+readme = "README.md"
+documentation = "https://github.com/holg/gldf-rs"
+description = "WebAssembly GLDF viewer - parse and display GLDF lighting data files in the browser"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[[bin]]
+name = "gldf_rs_wasm"
+path = "src/main.rs"
+
+[dependencies]
+# Core library
+gldf-rs.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Utilities
+base64.workspace = true
+eulumdat.workspace = true
+gloo.workspace = true
+
+# WASM
+js-sys.workspace = true
+l3d_rs.workspace = true
+reqwest-wasm.workspace = true
+serde.workspace = true
+three-d.workspace = true
+three-d-asset.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+yew.workspace = true
+zip.workspace = true
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "File",
+    "DragEvent",
+    "DataTransfer",
+    "HtmlSelectElement",
+    "HtmlCanvasElement",
+    "Window",
+    "Document",
+    "HtmlCollection",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true

@@ -1,0 +1,70 @@
+[package]
+name = "gldf-rs-egui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Cross-platform GLDF viewer using egui - works on Windows, macOS, Linux"
+
+[lib]
+name = "gldf_egui"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "gldf-viewer-egui"
+path = "src/main.rs"
+
+[[bin]]
+name = "gldf-l3d-viewer"
+path = "src/l3d_viewer_main.rs"
+
+[features]
+default = ["persistence"]
+
+# Enable persistence for storing app state
+persistence = ["eframe/persistence"]
+
+[dependencies]
+# Core GLDF library
+gldf-rs = { workspace = true, features = ["http"] }
+
+# UI framework
+eframe.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+
+# Photometric data parsing and rendering
+eulumdat.workspace = true
+
+# L3D 3D model parsing
+l3d_rs.workspace = true
+
+# SVG rendering
+resvg.workspace = true
+
+# Caching
+lazy_static.workspace = true
+
+# Error handling
+anyhow.workspace = true
+env_logger.workspace = true
+
+# Logging
+log.workspace = true
+
+# Serialization (for persistence)
+serde.workspace = true
+
+# 3D rendering for L3D (using three-d with native window)
+three-d.workspace = true
+three-d-asset.workspace = true
+
+# File dialogs
+rfd.workspace = true
+
+# HTTP client for URL file fetching
+reqwest = { workspace = true, features = ["blocking"] }
+tokio.workspace = true

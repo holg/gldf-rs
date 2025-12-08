@@ -1,0 +1,30 @@
+[package]
+name = "gldf_rs_python"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/gldf-rs/"
+description = "Python bindings for GLDF (General Lighting Data Format) parser - parse and manipulate GLDF files in Python"
+
+[lib]
+name = "gldf_rs_python"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# must be enabled when building with `cargo build`, maturin enables this automatically
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+# Core library
+gldf-rs.workspace = true
+
+# Python bindings
+pyo3.workspace = true
+
+[build-dependencies]
+pyo3-build-config.workspace = true
+version_check.workspace = true

@@ -1,16 +1,44 @@
 # Rust build artifacts
-/target
+/target/
+**/target/
 Cargo.lock
-/*/target/
+
+# Built binaries (release artifacts)
+gldf-viewer-egui
+gldf-viewer-egui.exe
+gldf-l3d-viewer
+gldf-l3d-viewer.exe
+gldf_rs_wasm
+uniffi-bindgen
+
+# Rust libraries
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
 
 # IDE settings
 /.zed
 /.idea
 
 # Python build artifacts
+crates/gldf-rs-python/dist/
+crates/gldf-rs-python/*.whl
+crates/gldf-rs-python/*.tar.gz
+crates/gldf-rs-python/gldf-py/
+crates/gldf-rs-python/gldf_rs_python-*/
 gldf-rs-python/gldf-py
 gldf-rs-python/dist
 gldf-rs-python/gldf_rs_python-*
+*.whl
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+site-packages/
 
 # macOS
 .DS_Store
@@ -36,6 +64,11 @@ xcuserdata/
 GldfApp/GldfViewer.app
 GldfApp/GldfViewer.zip
 
+# GldfApp build outputs and FFI binaries
+GldfApp/spm/GldfFfi.xcframework/
+GldfApp/mac_ios/build/
+GldfApp/android/app/src/main/jniLibs/
+
 # Xcode build outputs
 **/build/
 **/DerivedData/
@@ -60,9 +93,69 @@ tests/data/*.pem
 tests/data/*.signature
 
 # WASM build output
+crates/gldf-rs-wasm/dist/
 gldf-rs-wasm/dist/
+*.wasm
 
 # Temporary files
 *.tmp
 *.swp
 *~
+
+# ============================================
+# Security: Environment and Credentials
+# ============================================
+
+## Environment variables and secrets
+.env
+.env.local
+.env.*.local
+
+## Local Xcode configuration (contains Team ID and Bundle Identifier)
+Configuration/Development.xcconfig
+GldfApp/mac_ios/Configuration/Development.xcconfig
+
+## Provisioning profiles (sensitive)
+*.mobileprovision
+*.provisionprofile
+
+## Certificates (sensitive)
+*.p12
+*.cer
+*.certSigningRequest
+
+## API keys and credentials
+GoogleService-Info.plist
+google-services.json
+firebase-debug.log
+.firebase/
+
+# ============================================
+# Additional Xcode Security
+# ============================================
+
+## Xcode compatibility files
+*.xcscmblueprint
+*.xccheckout
+
+## App packaging
+*.hmap
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
