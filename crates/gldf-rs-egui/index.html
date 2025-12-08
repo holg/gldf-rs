@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLDF Viewer</title>
+    <meta name="description" content="GLDF (Global Lighting Data Format) Viewer - View and analyze lighting product data">
+
+    <link data-trunk rel="copy-file" href="favicon.ico"/>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #loading_text {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        #loading_text h1 {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        #loading_text p {
+            font-size: 16px;
+            color: #888;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            margin: 20px auto;
+            border: 4px solid #333;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading indicator -->
+    <div id="loading_text">
+        <h1>💡</h1>
+        <p>Loading GLDF Viewer...</p>
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Canvas for egui -->
+    <canvas id="gldf_viewer_canvas"></canvas>
+
+    <link data-trunk rel="rust" data-wasm-opt="2"/>
+</body>
+</html>

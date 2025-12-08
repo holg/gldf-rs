@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================================================"
-echo "Building GLDF macOS Application"
+echo "Building GLDF iOS Application"
 echo "======================================================================"
 
 # Configuration
@@ -12,6 +12,9 @@ FFI_CRATE="$ROOT_DIR/gldf-rs-ffi"
 SPM_DIR="$ROOT_DIR/GldfApp/spm"
 APP_DIR="$ROOT_DIR/GldfApp/mac_ios"
 TARGET_DIR="$ROOT_DIR/target"
+
+# Default to simulator, use "device" argument for real device
+BUILD_FOR="${1:-simulator}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -42,15 +45,26 @@ fi
 
 echo -e "${GREEN}  ✓ XCFramework ready${NC}"
 
-# Step 2: Build macOS App
-step "Building macOS application..."
+# Step 2: Build iOS App
 cd "$APP_DIR"
+
+if [ "$BUILD_FOR" = "device" ]; then
+    step "Building iOS application for device..."
+    SDK="iphoneos"
+    DESTINATION="generic/platform=iOS"
+else
+    step "Building iOS application for simulator..."
+    SDK="iphonesimulator"
+    DESTINATION="generic/platform=iOS Simulator"
+fi
 
 # Build the app
 xcodebuild \
     -project GldfViewer.xcodeproj \
-    -scheme GldfViewer \
+    -scheme "GLDF Viewer" \
     -configuration Release \
+    -sdk "$SDK" \
+    -destination "$DESTINATION" \
     -derivedDataPath build \
     build \
     CODE_SIGN_IDENTITY="" \
@@ -59,13 +73,18 @@ xcodebuild \
     2>&1 | grep -E "^(Build|Compiling|Linking|error:|warning:)" || true
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}  ✓ macOS app built successfully${NC}"
+    echo -e "${GREEN}  ✓ iOS app built successfully${NC}"
 else
     echo -e "${YELLOW}  Build may have warnings - check output above${NC}"
 fi
 
 # Find the built app
-BUILT_APP="$APP_DIR/build/Build/Products/Release/GldfViewer.app"
+if [ "$BUILD_FOR" = "device" ]; then
+    BUILT_APP="$APP_DIR/build/Build/Products/Release-iphoneos/GLDF Viewer.app"
+else
+    BUILT_APP="$APP_DIR/build/Build/Products/Release-iphonesimulator/GLDF Viewer.app"
+fi
+
 if [ -d "$BUILT_APP" ]; then
     echo ""
     echo "======================================================================"
@@ -75,9 +94,20 @@ if [ -d "$BUILT_APP" ]; then
     echo "📦 Application:"
     echo "   $BUILT_APP"
     echo ""
-    echo "🚀 Run the app:"
-    echo "   open \"$BUILT_APP\""
-    echo ""
+
+    if [ "$BUILD_FOR" = "simulator" ]; then
+        echo "🚀 Install to simulator:"
+        echo "   xcrun simctl install booted \"$BUILT_APP\""
+        echo ""
+        echo "   Or boot a simulator first:"
+        echo "   xcrun simctl boot \"iPhone 15 Pro\""
+        echo ""
+    else
+        echo "🚀 Install to device via Xcode or:"
+        echo "   ios-deploy --bundle \"$BUILT_APP\""
+        echo ""
+    fi
+
     echo "📋 Or open in Xcode:"
     echo "   open \"$APP_DIR/GldfViewer.xcodeproj\""
     echo ""
@@ -87,3 +117,9 @@ else
     echo "Open the project in Xcode to build manually:"
     echo "   open \"$APP_DIR/GldfViewer.xcodeproj\""
 fi
+
+echo ""
+echo "Usage:"
+echo "  $0           # Build for simulator (default)"
+echo "  $0 simulator # Build for simulator"
+echo "  $0 device    # Build for real device"

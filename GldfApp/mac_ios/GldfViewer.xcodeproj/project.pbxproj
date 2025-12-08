@@ -1,0 +1,677 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		21162C872EDDE94200F5BDED /* GldfKit in Frameworks */ = {isa = PBXBuildFile; productRef = 21162C862EDDE94200F5BDED /* GldfKit */; };
+		A10000010000000000000001 /* GldfViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001 /* GldfViewerApp.swift */; };
+		A10000010000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000002 /* AppState.swift */; };
+		A10000010000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000003 /* ContentView.swift */; };
+		A10000010000000000000004 /* HeaderEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000004 /* HeaderEditView.swift */; };
+		A10000010000000000000005 /* FilesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000005 /* FilesListView.swift */; };
+		A10000010000000000000006 /* LightSourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000006 /* LightSourcesView.swift */; };
+		A10000010000000000000007 /* VariantsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000007 /* VariantsView.swift */; };
+		A10000010000000000000008 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000008 /* StatisticsView.swift */; };
+		A10000010000000000000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000009 /* SettingsView.swift */; };
+		A10000010000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010 /* Assets.xcassets */; };
+		A10000010000000000000012 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000013 /* OverviewView.swift */; };
+		A10000010000000000000013 /* RawDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000014 /* RawDataView.swift */; };
+		A10000010000000000000014 /* FileViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000015 /* FileViewerView.swift */; };
+		A10000010000000000000016 /* demo.gldf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000016 /* demo.gldf */; };
+		A10000010000000000000017 /* PlatformColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000017 /* PlatformColors.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		21162C982EDE0B9700F5BDED /* GLDF ViewerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "GLDF ViewerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		21162CA22EDE0B9700F5BDED /* GLDF ViewerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "GLDF ViewerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000010000000000000001 /* GldfViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GldfViewerApp.swift; sourceTree = "<group>"; };
+		A20000010000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A20000010000000000000003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000010000000000000004 /* HeaderEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeaderEditView.swift; sourceTree = "<group>"; };
+		A20000010000000000000005 /* FilesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesListView.swift; sourceTree = "<group>"; };
+		A20000010000000000000006 /* LightSourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightSourcesView.swift; sourceTree = "<group>"; };
+		A20000010000000000000007 /* VariantsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariantsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000008 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000010000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000010000000000000012 /* GldfViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GldfViewer.entitlements; sourceTree = "<group>"; };
+		A20000010000000000000013 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		A20000010000000000000014 /* RawDataView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawDataView.swift; sourceTree = "<group>"; };
+		A20000010000000000000015 /* FileViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileViewerView.swift; sourceTree = "<group>"; };
+		A20000010000000000000016 /* demo.gldf */ = {isa = PBXFileReference; lastKnownFileType = file; path = demo.gldf; sourceTree = "<group>"; };
+		A40000010000000000000001 /* GldfViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GldfViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000010000000000000017 /* PlatformColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformColors.swift; sourceTree = "<group>"; };
+		CF0000010000000000000001 /* Development.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		21162C952EDE0B9700F5BDED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		21162C9F2EDE0B9700F5BDED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A50000010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				21162C872EDDE94200F5BDED /* GldfKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A60000010000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				CF0000010000000000000002 /* Configuration */,
+				A60000010000000000000002 /* GldfViewer */,
+				A60000010000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A60000010000000000000002 /* GldfViewer */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000001 /* GldfViewerApp.swift */,
+				A20000010000000000000002 /* AppState.swift */,
+				A60000010000000000000003 /* Views */,
+				A60000010000000000000004 /* Resources */,
+				A20000010000000000000010 /* Assets.xcassets */,
+				A20000010000000000000011 /* Info.plist */,
+				A20000010000000000000012 /* GldfViewer.entitlements */,
+			);
+			path = GldfViewer;
+			sourceTree = "<group>";
+		};
+		A60000010000000000000003 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000003 /* ContentView.swift */,
+				A20000010000000000000013 /* OverviewView.swift */,
+				A20000010000000000000014 /* RawDataView.swift */,
+				A20000010000000000000015 /* FileViewerView.swift */,
+				A20000010000000000000004 /* HeaderEditView.swift */,
+				A20000010000000000000005 /* FilesListView.swift */,
+				A20000010000000000000006 /* LightSourcesView.swift */,
+				A20000010000000000000007 /* VariantsView.swift */,
+				A20000010000000000000008 /* StatisticsView.swift */,
+				A20000010000000000000009 /* SettingsView.swift */,
+				B20000010000000000000017 /* PlatformColors.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A60000010000000000000004 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000016 /* demo.gldf */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A60000010000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A40000010000000000000001 /* GldfViewer.app */,
+				21162C982EDE0B9700F5BDED /* GLDF ViewerTests.xctest */,
+				21162CA22EDE0B9700F5BDED /* GLDF ViewerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF0000010000000000000002 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				CF0000010000000000000001 /* Development.xcconfig */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		21162C972EDE0B9700F5BDED /* GLDF ViewerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 21162CAD2EDE0B9700F5BDED /* Build configuration list for PBXNativeTarget "GLDF ViewerTests" */;
+			buildPhases = (
+				21162C942EDE0B9700F5BDED /* Sources */,
+				21162C952EDE0B9700F5BDED /* Frameworks */,
+				21162C962EDE0B9700F5BDED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "GLDF ViewerTests";
+			packageProductDependencies = (
+			);
+			productName = "GLDF ViewerTests";
+			productReference = 21162C982EDE0B9700F5BDED /* GLDF ViewerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		21162CA12EDE0B9700F5BDED /* GLDF ViewerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 21162CB02EDE0B9700F5BDED /* Build configuration list for PBXNativeTarget "GLDF ViewerUITests" */;
+			buildPhases = (
+				21162C9E2EDE0B9700F5BDED /* Sources */,
+				21162C9F2EDE0B9700F5BDED /* Frameworks */,
+				21162CA02EDE0B9700F5BDED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "GLDF ViewerUITests";
+			packageProductDependencies = (
+			);
+			productName = "GLDF ViewerUITests";
+			productReference = 21162CA22EDE0B9700F5BDED /* GLDF ViewerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		A70000010000000000000001 /* GldfViewer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000010000000000000001 /* Build configuration list for PBXNativeTarget "GldfViewer" */;
+			buildPhases = (
+				A50000010000000000000002 /* Sources */,
+				A50000010000000000000001 /* Frameworks */,
+				A50000010000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GldfViewer;
+			packageProductDependencies = (
+				21162C862EDDE94200F5BDED /* GldfKit */,
+			);
+			productName = GldfViewer;
+			productReference = A40000010000000000000001 /* GldfViewer.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A90000010000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2610;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					21162C972EDE0B9700F5BDED = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 21162C8B2EDE0B9500F5BDED;
+					};
+					21162CA12EDE0B9700F5BDED = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 21162C8B2EDE0B9500F5BDED;
+					};
+					A70000010000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A80000010000000000000002 /* Build configuration list for PBXProject "GldfViewer" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A60000010000000000000001;
+			packageReferences = (
+				21162C852EDDE94200F5BDED /* XCLocalSwiftPackageReference "../spm" */,
+			);
+			productRefGroup = A60000010000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A70000010000000000000001 /* GldfViewer */,
+				21162C972EDE0B9700F5BDED /* GLDF ViewerTests */,
+				21162CA12EDE0B9700F5BDED /* GLDF ViewerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		21162C962EDE0B9700F5BDED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		21162CA02EDE0B9700F5BDED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A50000010000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000010 /* Assets.xcassets in Resources */,
+				A10000010000000000000016 /* demo.gldf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		21162C942EDE0B9700F5BDED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		21162C9E2EDE0B9700F5BDED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A50000010000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000001 /* GldfViewerApp.swift in Sources */,
+				A10000010000000000000002 /* AppState.swift in Sources */,
+				A10000010000000000000003 /* ContentView.swift in Sources */,
+				A10000010000000000000012 /* OverviewView.swift in Sources */,
+				A10000010000000000000013 /* RawDataView.swift in Sources */,
+				A10000010000000000000014 /* FileViewerView.swift in Sources */,
+				A10000010000000000000004 /* HeaderEditView.swift in Sources */,
+				A10000010000000000000005 /* FilesListView.swift in Sources */,
+				A10000010000000000000006 /* LightSourcesView.swift in Sources */,
+				A10000010000000000000007 /* VariantsView.swift in Sources */,
+				A10000010000000000000008 /* StatisticsView.swift in Sources */,
+				A10000010000000000000009 /* SettingsView.swift in Sources */,
+				A10000010000000000000017 /* PlatformColors.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		21162CAE2EDE0B9700F5BDED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GLDF Viewer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GLDF Viewer";
+			};
+			name = Debug;
+		};
+		21162CAF2EDE0B9700F5BDED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GLDF Viewer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GLDF Viewer";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		21162CB12EDE0B9700F5BDED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "GLDF Viewer";
+			};
+			name = Debug;
+		};
+		21162CB22EDE0B9700F5BDED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "GLDF Viewer";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AA0000010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA0000010000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		AA0000010000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF0000010000000000000001 /* Development.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GldfViewer/GldfViewer.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = U4GT5CZ7J7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GldfViewer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "GLDF Viewer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA0000010000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF0000010000000000000001 /* Development.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GldfViewer/GldfViewer.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = U4GT5CZ7J7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GldfViewer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "GLDF Viewer";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = eu.trahe.gldfviewer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		21162CAD2EDE0B9700F5BDED /* Build configuration list for PBXNativeTarget "GLDF ViewerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				21162CAE2EDE0B9700F5BDED /* Debug */,
+				21162CAF2EDE0B9700F5BDED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		21162CB02EDE0B9700F5BDED /* Build configuration list for PBXNativeTarget "GLDF ViewerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				21162CB12EDE0B9700F5BDED /* Debug */,
+				21162CB22EDE0B9700F5BDED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000010000000000000001 /* Build configuration list for PBXNativeTarget "GldfViewer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000010000000000000003 /* Debug */,
+				AA0000010000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000010000000000000002 /* Build configuration list for PBXProject "GldfViewer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000010000000000000001 /* Debug */,
+				AA0000010000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		21162C852EDDE94200F5BDED /* XCLocalSwiftPackageReference "../spm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../spm;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		21162C862EDDE94200F5BDED /* GldfKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GldfKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A90000010000000000000001 /* Project object */;
+}

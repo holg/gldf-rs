@@ -1,0 +1,15 @@
+//
+//  Development.xcconfig.example
+//  Personal Development Configuration Template
+//
+//  Copy this file to Development.xcconfig and set your own values
+//  Development.xcconfig is gitignored and won't be committed
+//
+
+// Your Apple Developer Team ID
+// Find it at: https://developer.apple.com/account
+DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
+
+// Your Bundle Identifier (optional - can also be set in Xcode)
+// Use reverse domain notation: com.yourcompany.appname
+// PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.GldfViewer

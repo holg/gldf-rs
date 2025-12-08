@@ -1,0 +1,42 @@
+[package]
+name = "gldf-rs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/gldf-rs/"
+description = "GLDF (General Lighting Data Format) parser and writer for Rust, specifically for the Rust/WASM target as such designed for JSON format"
+
+[lib]
+name = "gldf_rs"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["http"]
+http = ["dep:reqwest", "dep:tokio", "dep:async-std"]
+
+[dependencies]
+# Serialization
+quick-xml.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Compression
+zip.workspace = true
+
+# Utilities
+regex.workspace = true
+
+# Async runtime (optional for HTTP)
+async-std = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+# HTTP client (optional)
+reqwest = { workspace = true, optional = true }
