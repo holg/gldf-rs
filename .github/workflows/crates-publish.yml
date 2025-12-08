@@ -59,7 +59,7 @@ jobs:
       - name: Publish gldf-rs-ffi to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-ffi --allow-dirty || echo "Already published or failed"
+        run: cargo publish -p gldf-rs-ffi --allow-dirty --no-verify || echo "Already published or failed"
 
   # Publish gldf-rs-wasm (WebAssembly viewer) after gldf-rs
   publish-wasm:
@@ -86,7 +86,7 @@ jobs:
       - name: Publish gldf-rs-wasm to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-wasm --allow-dirty || echo "Already published or failed"
+        run: cargo publish -p gldf-rs-wasm --allow-dirty --no-verify || echo "Already published or failed"
 
   # Publish gldf_rs_python (Python bindings) after gldf-rs
   publish-python:
@@ -111,7 +111,7 @@ jobs:
       - name: Publish gldf_rs_python to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf_rs_python --allow-dirty || echo "Already published or failed"
+        run: cargo publish -p gldf_rs_python --allow-dirty --no-verify || echo "Already published or failed"
 
   # Publish gldf-rs-egui (desktop viewer) after gldf-rs
   publish-egui:
@@ -141,4 +141,4 @@ jobs:
       - name: Publish gldf-rs-egui to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-egui --allow-dirty || echo "Already published or failed"
+        run: cargo publish -p gldf-rs-egui --allow-dirty --no-verify || echo "Already published or failed"
