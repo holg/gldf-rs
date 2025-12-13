@@ -272,17 +272,37 @@ pub struct WorkingPlane {
 /// PoleTop
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PoleTop {
-    /// The pole height in mm
-    #[serde(rename = "poleHeight")]
-    pub pole_height: i32,
+    /// The pole height in mm (XML attribute, optional)
+    #[serde(rename = "@poleHeight", skip_serializing_if = "Option::is_none")]
+    pub pole_height: Option<i32>,
+    /// Legacy: pole height as element (older GLDF versions)
+    #[serde(rename = "poleHeight", skip_serializing_if = "Option::is_none")]
+    pub pole_height_element: Option<i32>,
+}
+
+impl PoleTop {
+    /// Get the pole height in mm (handles both attribute and element formats)
+    pub fn get_pole_height(&self) -> Option<i32> {
+        self.pole_height.or(self.pole_height_element)
+    }
 }
 
 /// PoleIntegrated
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PoleIntegrated {
-    /// The pole height in mm
-    #[serde(rename = "poleHeight")]
-    pub pole_height: i32,
+    /// The pole height in mm (XML attribute, optional)
+    #[serde(rename = "@poleHeight", skip_serializing_if = "Option::is_none")]
+    pub pole_height: Option<i32>,
+    /// Legacy: pole height as element (older GLDF versions)
+    #[serde(rename = "poleHeight", skip_serializing_if = "Option::is_none")]
+    pub pole_height_element: Option<i32>,
+}
+
+impl PoleIntegrated {
+    /// Get the pole height in mm (handles both attribute and element formats)
+    pub fn get_pole_height(&self) -> Option<i32> {
+        self.pole_height.or(self.pole_height_element)
+    }
 }
 
 /// Ground

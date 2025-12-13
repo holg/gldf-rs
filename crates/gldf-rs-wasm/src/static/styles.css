@@ -314,6 +314,22 @@ html, body {
     background: var(--bg-card-hover);
 }
 
+.btn-primary {
+    background: var(--accent-blue);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.hint-text {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-style: italic;
+    margin-top: 16px;
+}
+
 .btn-success {
     background: var(--accent-green);
     color: white;
@@ -1090,6 +1106,53 @@ label {
     opacity: 0.9;
 }
 
+/* LDT Viewer */
+.ldt-viewer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.ldt-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+}
+
+.diagram-type-selector,
+.theme-selector {
+    display: flex;
+    gap: 4px;
+}
+
+.ldt-diagram {
+    overflow: hidden;
+}
+
+.ldt-info {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.ldt-info-item {
+    padding: 4px 8px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+}
+
+.bg-gray-900 {
+    background-color: #111827;
+}
+
+.bg-gray-100 {
+    background-color: #f3f4f6;
+}
+
 /* Files Table */
 .files-table {
     width: 100%;
@@ -1459,4 +1522,221 @@ input#file-upload {
     display: flex;
     flex-direction: row;
     height: 100vh;
+}
+
+/* File Detail Viewer Styles */
+.clickable-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.clickable-table tbody tr:hover {
+    background-color: var(--bg-card-hover);
+}
+
+.clickable-table tbody tr.selected {
+    background-color: rgba(10, 132, 255, 0.2);
+    border-left: 3px solid var(--accent-blue);
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-photometry {
+    background-color: rgba(10, 132, 255, 0.2);
+    color: var(--accent-blue);
+}
+
+.badge-geometry {
+    background-color: rgba(48, 209, 88, 0.2);
+    color: var(--accent-green);
+}
+
+.badge-image {
+    background-color: rgba(255, 159, 10, 0.2);
+    color: var(--accent-orange);
+}
+
+.badge-document {
+    background-color: rgba(191, 90, 242, 0.2);
+    color: var(--accent-purple);
+}
+
+.badge-other {
+    background-color: rgba(142, 142, 147, 0.2);
+    color: var(--text-secondary);
+}
+
+.file-detail-placeholder {
+    margin-top: 24px;
+    padding: 40px;
+    text-align: center;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-color);
+}
+
+.file-detail-viewer {
+    margin-top: 24px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.file-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--bg-table-header);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.file-detail-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.file-detail-content {
+    padding: 20px;
+}
+
+.viewer-container {
+    background: #1a1a1a;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.viewer-container.image-viewer {
+    text-align: center;
+    padding: 20px;
+}
+
+.viewer-container.image-viewer img {
+    max-width: 100%;
+    max-height: 500px;
+    border-radius: var(--radius-sm);
+}
+
+.viewer-container.pdf-viewer,
+.viewer-container.url-viewer {
+    padding: 20px;
+    text-align: center;
+}
+
+.hex-preview {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 16px;
+    background: #0d0d0d;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    word-break: break-all;
+    color: var(--text-secondary);
+}
+
+.l3d-viewer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.l3d-viewer canvas {
+    background: #0d0d0d;
+    border-radius: var(--radius-sm);
+}
+
+/* Bevy Scene Viewer Styles */
+.bevy-scene-container {
+    background: #0d0d0d;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.bevy-scene-container canvas {
+    display: block;
+}
+
+.bevy-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    cursor: pointer;
+}
+
+.bevy-overlay.error {
+    cursor: default;
+}
+
+.bevy-overlay-content {
+    text-align: center;
+    padding: 40px;
+}
+
+.bevy-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.bevy-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.bevy-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.bevy-error {
+    font-size: 12px;
+    color: var(--accent-red);
+    margin-bottom: 20px;
+    max-width: 400px;
+    word-break: break-word;
+}
+
+.bevy-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: bevy-spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes bevy-spin {
+    to { transform: rotate(360deg); }
+}
+
+.bevy-controls-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.viewer-container.bevy-viewer {
+    min-height: 600px;
 }

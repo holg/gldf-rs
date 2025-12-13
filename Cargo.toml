@@ -2,8 +2,10 @@
 resolver = "2"
 members = [
     #    "crates/gldf-rs-slint",
+    "crates/gldf-bevy",
     "crates/gldf-rs-egui",
     "crates/gldf-rs-ffi",
+    "crates/gldf-rs-leptos",
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
@@ -64,21 +66,43 @@ resvg = "0.45"
 three-d = { version = "0.18", default-features = true }
 three-d-asset = { version = "0.9", features = ["obj"] }
 
+# Bevy 3D engine
+bevy = { version = "0.15", default-features = false, features = [
+    "bevy_asset",
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_winit",
+    "bevy_gizmos",
+    "png",
+    "webgl2",
+    "x11",
+] }
+
+# eulumdat-bevy for lighting plugins
+eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
+
 # Photometric data
-eulumdat = "0.2"
-l3d_rs = "0.2"
+eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
+l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
 
 # File dialogs (native)
 rfd = "0.15"
 
 # WASM
 gloo = "0.11"
+gloo-file = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
 web-sys = "0.3"
 yew = { version = "0.22", features = ["csr"] }
+
+# Leptos (for SSR-capable WASM)
+leptos = { version = "0.7", features = ["csr"] }
+leptos_router = "0.7"
+console_error_panic_hook = "0.1"
 
 # Python
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py37"] }

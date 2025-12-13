@@ -1,0 +1,84 @@
+[package]
+name = "gldf-bevy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bevy-based 3D scene viewer for GLDF files with L3D models and LDT photometric lighting"
+
+[lib]
+name = "gldf_bevy"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "gldf-bevy-viewer"
+path = "src/main.rs"
+
+[features]
+default = []
+webgl2 = []
+
+[dependencies]
+# GLDF parsing
+gldf-rs.workspace = true
+
+# L3D 3D model parsing
+l3d_rs.workspace = true
+
+# Photometric data
+eulumdat.workspace = true
+
+# Reuse lighting plugins from eulumdat-bevy
+eulumdat-bevy.workspace = true
+
+# Error handling
+anyhow.workspace = true
+log.workspace = true
+
+# Serialization
+serde.workspace = true
+
+# Bevy 3D engine (same pattern as eulumdat-bevy)
+bevy = { version = "0.15", default-features = false, features = [
+    "bevy_asset",
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_render",
+    "bevy_state",
+    "bevy_gizmos",
+    "multi_threaded",
+    "tonemapping_luts",
+    "png",
+    "x11",
+    "wayland",
+] }
+
+# Native-only dependencies
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = { workspace = true }
+
+# WASM build: add webgl2 feature to Bevy
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { version = "0.15", default-features = false, features = [
+    "bevy_asset",
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_render",
+    "bevy_state",
+    "bevy_gizmos",
+    "webgl2",
+    "tonemapping_luts",
+    "png",
+] }
+web-sys = { workspace = true, features = ["Window", "Storage", "console"] }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+base64 = { workspace = true }
+serde_json = { workspace = true }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook = { workspace = true }

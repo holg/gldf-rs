@@ -248,3 +248,129 @@ async fn test_gldf_get_pic_files() {
         println!("{}", f.file_name);
     }
 }
+
+/// Test round-trip: Load -> Modify -> Save -> Reload -> Verify
+#[test]
+fn test_editable_gldf_round_trip() {
+    use crate::EditableGldf;
+    use crate::gldf::general_definitions::files::File;
+
+    // Load GLDF into EditableGldf
+    let mut editable = EditableGldf::from_gldf(GLDF_FILE_NAME)
+        .expect("Failed to load GLDF");
+
+    // Verify initial state
+    let original_author = editable.product.header.author.clone();
+    let original_file_count = editable.product.general_definitions.files.file.len();
+    assert!(!editable.is_modified());
+
+    // Make modifications
+    editable.product.header.author = "Test Author - Round Trip".to_string();
+    editable.mark_modified();
+
+    // Add a new file definition
+    let new_file = File {
+        id: "roundtrip_test_file".to_string(),
+        content_type: "other".to_string(),
+        type_attr: "localFileName".to_string(),
+        file_name: "test_roundtrip.txt".to_string(),
+        language: String::new(),
+    };
+    editable.product.add_file(new_file.clone()).expect("Failed to add file");
+
+    // Add embedded content for the file
+    let test_content = b"This is test content for round-trip verification".to_vec();
+    editable.add_embedded_file("roundtrip_test_file", test_content.clone());
+
+    // Verify modifications are tracked
+    assert!(editable.is_modified());
+
+    // Save to buffer
+    let saved_buf = editable.save_to_buf().expect("Failed to save to buffer");
+    println!("Saved GLDF size: {} bytes", saved_buf.len());
+
+    // Reload from buffer
+    let reloaded = EditableGldf::from_buf(saved_buf)
+        .expect("Failed to reload GLDF from buffer");
+
+    // Verify modifications were preserved
+    assert_eq!(reloaded.product.header.author, "Test Author - Round Trip");
+    assert_eq!(
+        reloaded.product.general_definitions.files.file.len(),
+        original_file_count + 1
+    );
+
+    // Verify new file exists
+    let found_file = reloaded.product.get_file("roundtrip_test_file");
+    assert!(found_file.is_some(), "New file not found after reload");
+    assert_eq!(found_file.unwrap().file_name, "test_roundtrip.txt");
+
+    // Verify embedded content was preserved
+    let embedded = reloaded.get_embedded_file("roundtrip_test_file");
+    assert!(embedded.is_some(), "Embedded file content not found");
+    assert_eq!(embedded.unwrap(), test_content.as_slice());
+
+    // Verify original data is still intact
+    assert_ne!(reloaded.product.header.author, original_author);
+
+    println!("Round-trip test passed!");
+}
+
+/// Test creating a new GLDF from scratch and saving it
+#[test]
+fn test_create_new_gldf() {
+    use crate::EditableGldf;
+    use crate::gldf::general_definitions::files::File;
+    use crate::gldf::product_definitions::Variant;
+
+    // Create new EditableGldf
+    let mut editable = EditableGldf::new();
+
+    // Set header info
+    editable.product.header.author = "New Product Author".to_string();
+    editable.product.header.manufacturer = "Test Manufacturer".to_string();
+    editable.product.header.format_version.major = 1;
+    editable.product.header.format_version.minor = 0;
+
+    // Add a file definition
+    let file = File {
+        id: "photometry_1".to_string(),
+        content_type: "ldc/eulumdat".to_string(),
+        type_attr: "localFileName".to_string(),
+        file_name: "test.ldt".to_string(),
+        language: String::new(),
+    };
+    editable.product.add_file(file).expect("Failed to add file");
+
+    // Add fake photometry content
+    editable.add_embedded_file("photometry_1", b"FAKE LDT CONTENT".to_vec());
+
+    // Add a variant
+    let variant = Variant {
+        id: "variant_1".to_string(),
+        ..Default::default()
+    };
+    editable.product.add_variant(variant).expect("Failed to add variant");
+
+    // Validate the product
+    let validation = editable.product.validate_structure();
+    println!("Validation errors: {}", validation.errors.len());
+    for err in &validation.errors {
+        println!("  {:?}: {} - {}", err.level, err.path, err.message);
+    }
+
+    // Save to buffer
+    let saved_buf = editable.save_to_buf().expect("Failed to save new GLDF");
+    println!("New GLDF size: {} bytes", saved_buf.len());
+
+    // Verify it can be reloaded
+    let reloaded = EditableGldf::from_buf(saved_buf)
+        .expect("Failed to reload new GLDF");
+
+    assert_eq!(reloaded.product.header.author, "New Product Author");
+    assert_eq!(reloaded.product.header.manufacturer, "Test Manufacturer");
+    assert!(reloaded.product.get_file("photometry_1").is_some());
+    assert!(reloaded.product.get_variant("variant_1").is_some());
+
+    println!("Create new GLDF test passed!");
+}
