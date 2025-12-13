@@ -28,13 +28,18 @@ jobs:
       - name: Run tests
         run: cargo test -p gldf-rs
 
-      - name: Dry run publish
-        run: cargo publish --dry-run -p gldf-rs
-
       - name: Publish gldf-rs to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs --allow-dirty || echo "Already published or failed"
+        run: |
+          cargo publish -p gldf-rs --allow-dirty 2>&1 | tee publish.log || {
+            if grep -q "already uploaded" publish.log; then
+              echo "Already published, continuing..."
+            else
+              cat publish.log
+              exit 1
+            fi
+          }
 
   # Publish gldf-rs-ffi (FFI bindings for mobile) after gldf-rs
   publish-ffi:
@@ -50,16 +55,21 @@ jobs:
       - name: Wait for crates.io index update
         run: sleep 60
 
-      - name: Update crates.io index
-        run: cargo update -p gldf-rs || true
-
       - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-ffi
 
       - name: Publish gldf-rs-ffi to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-ffi --allow-dirty --no-verify || echo "Already published or failed"
+        run: |
+          cargo publish -p gldf-rs-ffi --allow-dirty --no-verify 2>&1 | tee publish.log || {
+            if grep -q "already uploaded" publish.log; then
+              echo "Already published, continuing..."
+            else
+              cat publish.log
+              exit 1
+            fi
+          }
 
   # Publish gldf-rs-wasm (WebAssembly viewer) after gldf-rs
   publish-wasm:
@@ -77,16 +87,21 @@ jobs:
       - name: Wait for crates.io index update
         run: sleep 60
 
-      - name: Update crates.io index
-        run: cargo update -p gldf-rs || true
-
       - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-wasm --target wasm32-unknown-unknown
 
       - name: Publish gldf-rs-wasm to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-wasm --allow-dirty --no-verify || echo "Already published or failed"
+        run: |
+          cargo publish -p gldf-rs-wasm --allow-dirty --no-verify 2>&1 | tee publish.log || {
+            if grep -q "already uploaded" publish.log; then
+              echo "Already published, continuing..."
+            else
+              cat publish.log
+              exit 1
+            fi
+          }
 
   # Publish gldf_rs_python (Python bindings) after gldf-rs
   publish-python:
@@ -102,16 +117,21 @@ jobs:
       - name: Wait for crates.io index update
         run: sleep 60
 
-      - name: Update crates.io index
-        run: cargo update -p gldf-rs || true
-
       - name: Verify build (local workspace)
         run: cargo build --release -p gldf_rs_python
 
       - name: Publish gldf_rs_python to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf_rs_python --allow-dirty --no-verify || echo "Already published or failed"
+        run: |
+          cargo publish -p gldf_rs_python --allow-dirty --no-verify 2>&1 | tee publish.log || {
+            if grep -q "already uploaded" publish.log; then
+              echo "Already published, continuing..."
+            else
+              cat publish.log
+              exit 1
+            fi
+          }
 
   # Publish gldf-rs-egui (desktop viewer) after gldf-rs
   publish-egui:
@@ -132,13 +152,18 @@ jobs:
       - name: Wait for crates.io index update
         run: sleep 60
 
-      - name: Update crates.io index
-        run: cargo update -p gldf-rs || true
-
       - name: Verify build (local workspace)
         run: cargo build --release -p gldf-rs-egui
 
       - name: Publish gldf-rs-egui to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p gldf-rs-egui --allow-dirty --no-verify || echo "Already published or failed"
+        run: |
+          cargo publish -p gldf-rs-egui --allow-dirty --no-verify 2>&1 | tee publish.log || {
+            if grep -q "already uploaded" publish.log; then
+              echo "Already published, continuing..."
+            else
+              cat publish.log
+              exit 1
+            fi
+          }

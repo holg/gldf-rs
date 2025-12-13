@@ -6,8 +6,10 @@
     <title>GLDF Editor</title>
 
     <link data-trunk rel="css" href="src/static/styles.css">
-    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="z" />
+    <link data-trunk rel="copy-file" href="src/static/bevy-loader.js" />
+    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="0" />
 </head>
 <body>
+    <script src="bevy-loader.js"></script>
 </body>
 </html>

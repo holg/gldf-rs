@@ -1,6 +1,8 @@
 //! # gldf_rs
 //! GLDF (Global Lighting Data Format) Library
 //!
+//! **GitHub:** <https://github.com/holg/gldf-rs>
+//!
 //! The GLDF crate provides a set of structures and tools for working with the Global Lighting Data Format (GLDF),
 //! a standardized format for describing lighting products, their characteristics, and technical details.
 //!
@@ -50,6 +52,25 @@
 /// the gldf module (src/gldf/mod.rs)
 pub mod gldf;
 pub use gldf::*;
+
+/// Editable GLDF wrapper for editing and saving GLDF files
+pub mod editable;
+pub use editable::{EditableGldf, EditableGldfStats};
+
+/// Validation engine for GLDF files
+pub mod validation;
+pub use validation::{ValidationError, ValidationLevel, ValidationResult};
+
+/// CRUD operations for GldfProduct
+pub mod operations;
+
+/// L3D to LDT mapping utilities
+pub mod mapping;
+pub use mapping::{
+    get_l3d_ldt_mappings, get_l3d_files_with_ldt, get_first_l3d_with_ldt,
+    get_variant_emitter_data,
+    L3dLdtMapping, L3dWithLdt, EmitterRenderData, VariantEmitterData,
+};
 
 #[cfg(test)]
 mod tests;

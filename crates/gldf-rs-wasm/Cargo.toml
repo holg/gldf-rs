@@ -34,6 +34,7 @@ js-sys.workspace = true
 l3d_rs.workspace = true
 reqwest-wasm.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 three-d.workspace = true
 three-d-asset.workspace = true
 wasm-bindgen.workspace = true
@@ -44,14 +45,18 @@ zip.workspace = true
 [dependencies.web-sys]
 workspace = true
 features = [
+    "Blob",
+    "BlobPropertyBag",
     "File",
     "DragEvent",
     "DataTransfer",
+    "HtmlAnchorElement",
     "HtmlSelectElement",
     "HtmlCanvasElement",
     "Window",
     "Document",
     "HtmlCollection",
+    "Url",
 ]
 
 [dev-dependencies]

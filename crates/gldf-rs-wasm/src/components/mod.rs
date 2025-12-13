@@ -1,5 +1,6 @@
 //! GLDF Editor Components
 
+mod bevy_scene;
 mod editor_tabs;
 mod files_editor;
 mod header_editor;
@@ -10,6 +11,7 @@ mod locale_input;
 mod url_file_viewer;
 mod variant_editor;
 
+pub use bevy_scene::{BevySceneViewer, EmitterConfig};
 pub use editor_tabs::EditorTabs;
 pub use files_editor::FilesEditor;
 pub use header_editor::HeaderEditor;
