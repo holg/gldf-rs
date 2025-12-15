@@ -4,6 +4,8 @@ use gloo::console::log;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
+#[allow(unused_imports)]
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 use crate::draw_l3d::{start_render_loop, DrawL3d};
@@ -242,7 +244,7 @@ pub fn l3d_viewer(props: &L3dViewerProps) -> Html {
                 onmouseleave={on_mouse_leave}
                 onwheel={on_wheel}
             />
-            <p class="text-sm text-gray-400 mt-2">
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">
                 {"Drag to rotate • Scroll to zoom"}
             </p>
         </div>

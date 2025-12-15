@@ -314,22 +314,6 @@ html, body {
     background: var(--bg-card-hover);
 }
 
-.btn-primary {
-    background: var(--accent-blue);
-    color: white;
-}
-
-.btn-primary:hover {
-    background: #2563eb;
-}
-
-.hint-text {
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-style: italic;
-    margin-top: 16px;
-}
-
 .btn-success {
     background: var(--accent-green);
     color: white;
@@ -809,6 +793,12 @@ label {
 }
 
 /* LDT Viewer Container */
+.ldt-viewer-container {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: 16px;
+}
+
 .ldt-viewer {
     background: var(--bg-card);
     border-radius: var(--radius-md);
@@ -820,17 +810,23 @@ label {
     gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-sidebar);
 }
 
 .ldt-diagram {
     padding: 16px;
     display: flex;
     justify-content: center;
+    align-items: center;
+    background: #1a1a2e;
+    border-radius: var(--radius-sm);
+    min-height: 300px;
 }
 
 .ldt-diagram svg {
     max-width: 100%;
     height: auto;
+    display: block;
 }
 
 /* L3D Viewer Container */
@@ -1076,17 +1072,19 @@ label {
     font-size: 13px;
     font-weight: 500;
     transition: all 0.15s ease;
-    background: var(--accent-blue);
-    color: white;
+    background: var(--bg-card);
+    color: var(--text-secondary);
     font-family: var(--font-family);
 }
 
 .toggle-btn:hover {
-    background: var(--accent-blue-hover);
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
 }
 
 .toggle-btn.active {
     background: var(--accent-blue);
+    color: white;
 }
 
 .export-btn {
@@ -1104,53 +1102,6 @@ label {
 
 .export-btn:hover {
     opacity: 0.9;
-}
-
-/* LDT Viewer */
-.ldt-viewer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-}
-
-.ldt-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
-    align-items: center;
-}
-
-.diagram-type-selector,
-.theme-selector {
-    display: flex;
-    gap: 4px;
-}
-
-.ldt-diagram {
-    overflow: hidden;
-}
-
-.ldt-info {
-    display: flex;
-    gap: 16px;
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-.ldt-info-item {
-    padding: 4px 8px;
-    background: var(--bg-card);
-    border-radius: var(--radius-sm);
-}
-
-.bg-gray-900 {
-    background-color: #111827;
-}
-
-.bg-gray-100 {
-    background-color: #f3f4f6;
 }
 
 /* Files Table */
@@ -1183,6 +1134,70 @@ label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Clickable files table */
+.files-table-clickable tr.clickable:hover td {
+    background: var(--bg-card-hover);
+}
+
+.files-table-clickable tr.selected td {
+    background: rgba(10, 132, 255, 0.15);
+}
+
+.files-table-clickable .file-id {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent-cyan);
+}
+
+.files-table-clickable .file-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.files-table-clickable .file-type {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Content Type Badges */
+.content-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.content-type-ldc {
+    background: rgba(255, 159, 10, 0.2);
+    color: var(--accent-orange);
+}
+
+.content-type-geo {
+    background: rgba(48, 209, 88, 0.2);
+    color: var(--accent-green);
+}
+
+.content-type-image {
+    background: rgba(10, 132, 255, 0.2);
+    color: var(--accent-blue);
+}
+
+.content-type-sensor {
+    background: rgba(191, 90, 242, 0.2);
+    color: var(--accent-purple);
+}
+
+.content-type-doc {
+    background: rgba(255, 214, 10, 0.2);
+    color: var(--accent-yellow);
+}
+
+.content-type-other {
+    background: rgba(142, 142, 147, 0.2);
+    color: var(--text-secondary);
 }
 
 .files-table .actions {
@@ -1300,6 +1315,35 @@ label {
 .card-content .detail .label {
     color: var(--text-tertiary);
     margin-right: 6px;
+}
+
+/* Properties Grid for Light Sources */
+.properties-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.property {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.property-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.property-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
 }
 
 .card-actions-row {
@@ -1524,134 +1568,7 @@ input#file-upload {
     height: 100vh;
 }
 
-/* File Detail Viewer Styles */
-.clickable-table tbody tr {
-    transition: background-color 0.15s ease;
-}
-
-.clickable-table tbody tr:hover {
-    background-color: var(--bg-card-hover);
-}
-
-.clickable-table tbody tr.selected {
-    background-color: rgba(10, 132, 255, 0.2);
-    border-left: 3px solid var(--accent-blue);
-}
-
-.badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.badge-photometry {
-    background-color: rgba(10, 132, 255, 0.2);
-    color: var(--accent-blue);
-}
-
-.badge-geometry {
-    background-color: rgba(48, 209, 88, 0.2);
-    color: var(--accent-green);
-}
-
-.badge-image {
-    background-color: rgba(255, 159, 10, 0.2);
-    color: var(--accent-orange);
-}
-
-.badge-document {
-    background-color: rgba(191, 90, 242, 0.2);
-    color: var(--accent-purple);
-}
-
-.badge-other {
-    background-color: rgba(142, 142, 147, 0.2);
-    color: var(--text-secondary);
-}
-
-.file-detail-placeholder {
-    margin-top: 24px;
-    padding: 40px;
-    text-align: center;
-    background: var(--bg-card);
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--border-color);
-}
-
-.file-detail-viewer {
-    margin-top: 24px;
-    background: var(--bg-card);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-}
-
-.file-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    background: var(--bg-table-header);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.file-detail-header h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.file-detail-content {
-    padding: 20px;
-}
-
-.viewer-container {
-    background: #1a1a1a;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-}
-
-.viewer-container.image-viewer {
-    text-align: center;
-    padding: 20px;
-}
-
-.viewer-container.image-viewer img {
-    max-width: 100%;
-    max-height: 500px;
-    border-radius: var(--radius-sm);
-}
-
-.viewer-container.pdf-viewer,
-.viewer-container.url-viewer {
-    padding: 20px;
-    text-align: center;
-}
-
-.hex-preview {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    padding: 16px;
-    background: #0d0d0d;
-    border-radius: var(--radius-sm);
-    overflow-x: auto;
-    word-break: break-all;
-    color: var(--text-secondary);
-}
-
-.l3d-viewer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.l3d-viewer canvas {
-    background: #0d0d0d;
-    border-radius: var(--radius-sm);
-}
-
-/* Bevy Scene Viewer Styles */
+/* Bevy 3D Scene Viewer */
 .bevy-scene-container {
     background: #0d0d0d;
     border-radius: var(--radius-sm);

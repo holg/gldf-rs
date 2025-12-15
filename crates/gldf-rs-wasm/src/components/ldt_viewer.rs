@@ -1,66 +1,18 @@
-//! LDT/Eulumdat diagram viewer component with multiple visualization types
+//! LDT/Eulumdat diagram viewer component
 
 use eulumdat::{
-    diagram::{ButterflyDiagram, CartesianDiagram, HeatmapDiagram, PolarDiagram, SvgTheme},
-    BugDiagram, Eulumdat, IesParser,
+    diagram::{CartesianDiagram, PolarDiagram, SvgTheme},
+    Eulumdat, IesParser,
 };
 use gloo::console::log;
-use web_sys::Element;
+#[allow(unused_imports)]
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
-/// Available diagram visualization types
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum DiagramType {
+#[derive(Clone, PartialEq)]
+pub enum ViewType {
     Polar,
     Cartesian,
-    Butterfly,
-    Heatmap,
-    Bug,
-}
-
-impl DiagramType {
-    fn label(&self) -> &'static str {
-        match self {
-            DiagramType::Polar => "Polar",
-            DiagramType::Cartesian => "Cartesian",
-            DiagramType::Butterfly => "Butterfly",
-            DiagramType::Heatmap => "Heatmap",
-            DiagramType::Bug => "BUG Rating",
-        }
-    }
-
-    fn all() -> &'static [DiagramType] {
-        &[
-            DiagramType::Polar,
-            DiagramType::Cartesian,
-            DiagramType::Butterfly,
-            DiagramType::Heatmap,
-            DiagramType::Bug,
-        ]
-    }
-}
-
-/// Available themes
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum ThemeType {
-    Dark,
-    Light,
-}
-
-impl ThemeType {
-    fn label(&self) -> &'static str {
-        match self {
-            ThemeType::Dark => "Dark",
-            ThemeType::Light => "Light",
-        }
-    }
-
-    fn to_svg_theme(&self) -> SvgTheme {
-        match self {
-            ThemeType::Dark => SvgTheme::dark(),
-            ThemeType::Light => SvgTheme::light(),
-        }
-    }
 }
 
 #[derive(Properties, PartialEq)]
@@ -70,190 +22,157 @@ pub struct LdtViewerProps {
     pub width: f64,
     #[prop_or(400.0)]
     pub height: f64,
-    /// Show diagram type selector
-    #[prop_or(true)]
-    pub show_controls: bool,
-    /// Initial diagram type
-    #[prop_or(DiagramType::Polar)]
-    pub initial_type: DiagramType,
+    /// Optional override for luminous flux (from emitter's rated_luminous_flux)
+    #[prop_or_default]
+    pub flux_override: Option<i32>,
 }
 
 #[function_component(LdtViewer)]
 pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
-    let diagram_type = use_state(|| props.initial_type);
-    let theme = use_state(|| ThemeType::Dark);
-    let svg_ref = use_node_ref();
+    let view_type = use_state(|| ViewType::Polar);
+    let svg_container = use_node_ref();
 
-    // Parse the LDT/IES data once
-    let parsed_ldt = use_memo(props.ldt_data.clone(), |data| {
-        parse_photometric_data(data)
-    });
+    // Log incoming data
+    log!(format!(
+        "LdtViewer: received {} bytes, first 100 chars: {:?}",
+        props.ldt_data.len(),
+        String::from_utf8_lossy(&props.ldt_data[..props.ldt_data.len().min(100)])
+    ));
 
-    // Generate SVG based on current diagram type and theme
-    let svg_content = match &*parsed_ldt {
-        Ok(ldt) => generate_diagram_svg(
-            ldt,
-            props.width,
-            props.height,
-            *diagram_type,
-            theme.to_svg_theme(),
-        ),
-        Err(error_msg) => error_svg(props.width, props.height, error_msg),
+    // Apply flux override if provided
+    let ldt_data = if let Some(flux) = props.flux_override {
+        apply_flux_override(&props.ldt_data, flux)
+    } else {
+        props.ldt_data.clone()
     };
 
-    // Use effect to set innerHTML when svg_content changes
+    let svg_content = {
+        let view_type = (*view_type).clone();
+        generate_ldt_svg(&ldt_data, props.width, props.height, view_type)
+    };
+
+    // Use effect to set innerHTML for SVG rendering
     {
-        let svg_ref = svg_ref.clone();
+        let svg_container = svg_container.clone();
         let svg_content = svg_content.clone();
-        use_effect_with(svg_content, move |svg| {
-            if let Some(element) = svg_ref.cast::<Element>() {
-                element.set_inner_html(svg);
+        use_effect_with((svg_content,), move |(svg_content,)| {
+            if let Some(element) = svg_container.cast::<web_sys::HtmlElement>() {
+                element.set_inner_html(svg_content);
             }
             || ()
         });
     }
 
-    // Get background color based on theme
-    let bg_class = match *theme {
-        ThemeType::Dark => "bg-gray-900",
-        ThemeType::Light => "bg-gray-100",
+    let on_polar_click = {
+        let view_type = view_type.clone();
+        Callback::from(move |_| {
+            view_type.set(ViewType::Polar);
+        })
+    };
+
+    let on_cart_click = {
+        let view_type = view_type.clone();
+        Callback::from(move |_| {
+            view_type.set(ViewType::Cartesian);
+        })
+    };
+
+    let polar_class = if *view_type == ViewType::Polar {
+        "toggle-btn active"
+    } else {
+        "toggle-btn"
+    };
+
+    let cart_class = if *view_type == ViewType::Cartesian {
+        "toggle-btn active"
+    } else {
+        "toggle-btn"
     };
 
     html! {
         <div class="ldt-viewer">
-            if props.show_controls {
-                <div class="ldt-controls">
-                    // Diagram type buttons
-                    <div class="diagram-type-selector">
-                        { for DiagramType::all().iter().map(|dt| {
-                            let dt = *dt;
-                            let diagram_type = diagram_type.clone();
-                            let is_active = *diagram_type == dt;
-                            let class = if is_active {
-                                "btn btn-sm btn-primary"
-                            } else {
-                                "btn btn-sm btn-secondary"
-                            };
-                            html! {
-                                <button
-                                    class={class}
-                                    onclick={Callback::from(move |_| diagram_type.set(dt))}
-                                >
-                                    { dt.label() }
-                                </button>
-                            }
-                        })}
-                    </div>
-
-                    // Theme toggle
-                    <div class="theme-selector">
-                        <button
-                            class={if *theme == ThemeType::Dark { "btn btn-sm btn-primary" } else { "btn btn-sm btn-secondary" }}
-                            onclick={let theme = theme.clone(); Callback::from(move |_| theme.set(ThemeType::Dark))}
-                        >
-                            { "Dark" }
-                        </button>
-                        <button
-                            class={if *theme == ThemeType::Light { "btn btn-sm btn-primary" } else { "btn btn-sm btn-secondary" }}
-                            onclick={let theme = theme.clone(); Callback::from(move |_| theme.set(ThemeType::Light))}
-                        >
-                            { "Light" }
-                        </button>
-                    </div>
-                </div>
-            }
-
+            <div class="ldt-viewer-controls">
+                <button onclick={on_polar_click} class={polar_class}>
+                    {"Polar"}
+                </button>
+                <button onclick={on_cart_click} class={cart_class}>
+                    {"Cartesian"}
+                </button>
+            </div>
             <div
-                ref={svg_ref.clone()}
-                class={classes!("ldt-diagram", "rounded", bg_class)}
+                ref={svg_container}
+                class="ldt-diagram"
                 style={format!("width: {}px; height: {}px;", props.width, props.height)}
             />
-
-            // Show parsed info
-            if let Ok(ldt) = &*parsed_ldt {
-                <div class="ldt-info">
-                    <span class="ldt-info-item">
-                        { format!("C-planes: {}", ldt.c_angles.len()) }
-                    </span>
-                    <span class="ldt-info-item">
-                        { format!("Gamma: {}", ldt.g_angles.len()) }
-                    </span>
-                    <span class="ldt-info-item">
-                        { format!("Symmetry: {:?}", ldt.symmetry) }
-                    </span>
-                </div>
-            }
         </div>
     }
 }
 
-/// Parse LDT or IES data
-fn parse_photometric_data(buffer: &[u8]) -> Result<Eulumdat, String> {
-    let content = std::str::from_utf8(buffer)
-        .map_err(|e| format!("Invalid UTF-8 encoding: {:?}", e))?;
+fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType) -> String {
+    // Try to parse as string first
+    let content = match std::str::from_utf8(buffer) {
+        Ok(s) => s,
+        Err(e) => {
+            log!(format!("Error decoding file as UTF-8: {:?}", e));
+            return error_svg(width, height, "Invalid file encoding");
+        }
+    };
 
-    // Detect file type and parse accordingly
-    if content.trim_start().starts_with("IESNA") {
-        IesParser::parse(content).map_err(|e| format!("IES parse error: {:?}", e))
+    // Try to detect file type and parse accordingly
+    let ldt = if content.trim_start().starts_with("IESNA") {
+        // IES file
+        match IesParser::parse(content) {
+            Ok(ldt) => ldt,
+            Err(e) => {
+                log!(format!("Error parsing IES file: {:?}", e));
+                return error_svg(width, height, "Error parsing IES file");
+            }
+        }
     } else {
-        Eulumdat::parse(content).map_err(|e| format!("LDT parse error: {:?}", e))
-    }
-}
+        // LDT file
+        match Eulumdat::parse(content) {
+            Ok(ldt) => ldt,
+            Err(e) => {
+                log!(format!("Error parsing LDT file: {:?}", e));
+                return error_svg(width, height, "Error parsing LDT file");
+            }
+        }
+    };
 
-/// Generate SVG for the specified diagram type
-fn generate_diagram_svg(
-    ldt: &Eulumdat,
-    width: f64,
-    height: f64,
-    diagram_type: DiagramType,
-    theme: SvgTheme,
-) -> String {
-    match diagram_type {
-        DiagramType::Polar => {
-            let diagram = PolarDiagram::from_eulumdat(ldt);
+    // Use dark theme for the dark background
+    let theme = SvgTheme::dark();
+
+    match view_type {
+        ViewType::Polar => {
+            let diagram = PolarDiagram::from_eulumdat(&ldt);
             diagram.to_svg(width, height, &theme)
         }
-        DiagramType::Cartesian => {
-            let diagram = CartesianDiagram::from_eulumdat(ldt, width, height, 8);
-            diagram.to_svg(width, height, &theme)
-        }
-        DiagramType::Butterfly => {
-            let diagram = ButterflyDiagram::from_eulumdat(ldt, width, height, 60.0);
-            diagram.to_svg(width, height, &theme)
-        }
-        DiagramType::Heatmap => {
-            let diagram = HeatmapDiagram::from_eulumdat(ldt, width, height);
-            diagram.to_svg(width, height, &theme)
-        }
-        DiagramType::Bug => {
-            let diagram = BugDiagram::from_eulumdat(ldt);
+        ViewType::Cartesian => {
+            let diagram = CartesianDiagram::from_eulumdat(&ldt, width, height, 8);
             diagram.to_svg(width, height, &theme)
         }
     }
 }
 
-/// Generate error SVG
 fn error_svg(width: f64, height: f64, message: &str) -> String {
-    log!(format!("LDT Viewer Error: {}", message));
     let bg_color = "#1a1a2e";
     let text_color = "#ff6b6b";
     format!(
         r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">
             <rect width="100%" height="100%" fill="{}"/>
-            <text x="50%" y="45%" text-anchor="middle" fill="{}" font-size="14" font-family="system-ui">
-                Error
-            </text>
-            <text x="50%" y="55%" text-anchor="middle" fill="{}" font-size="12" font-family="system-ui">
+            <text x="50%" y="50%" text-anchor="middle" fill="{}" font-size="14">
                 {}
             </text>
         </svg>"#,
-        width, height, bg_color, text_color, text_color, message
+        width, height, bg_color, text_color, message
     )
 }
 
-// Legacy compatibility - keep the old ViewType enum for existing code
-#[derive(Clone, PartialEq)]
-pub enum ViewType {
-    Polar,
-    Cartesian,
+/// Apply luminous flux override to LDT/IES data
+/// TODO: Implement actual flux scaling in eulumdat-rs crate
+fn apply_flux_override(data: &[u8], _flux: i32) -> Vec<u8> {
+    // For now, just return the original data
+    // Future implementation should scale the intensity values
+    // based on the ratio of the override flux to the file's original flux
+    data.to_vec()
 }

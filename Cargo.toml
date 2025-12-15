@@ -5,7 +5,6 @@ members = [
     "crates/gldf-bevy",
     "crates/gldf-rs-egui",
     "crates/gldf-rs-ffi",
-    "crates/gldf-rs-leptos",
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
@@ -85,6 +84,9 @@ eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 # Photometric data
 eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
 l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
+
+# ULD file support
+uld-rs = { path = "../uld-rs", default-features = false }
 
 # File dialogs (native)
 rfd = "0.15"

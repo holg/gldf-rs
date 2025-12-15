@@ -34,29 +34,28 @@ js-sys.workspace = true
 l3d_rs.workspace = true
 reqwest-wasm.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 three-d.workspace = true
 three-d-asset.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 yew.workspace = true
 zip.workspace = true
+serde_json.workspace = true
+
+# ULD file support (convert ULD to GLDF)
+uld-rs = { workspace = true, features = ["gldf"] }
 
 [dependencies.web-sys]
 workspace = true
 features = [
-    "Blob",
-    "BlobPropertyBag",
     "File",
     "DragEvent",
     "DataTransfer",
-    "HtmlAnchorElement",
     "HtmlSelectElement",
     "HtmlCanvasElement",
     "Window",
     "Document",
     "HtmlCollection",
-    "Url",
 ]
 
 [dev-dependencies]
