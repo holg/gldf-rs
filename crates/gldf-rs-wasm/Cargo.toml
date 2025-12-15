@@ -18,8 +18,8 @@ name = "gldf_rs_wasm"
 path = "src/main.rs"
 
 [dependencies]
-# Core library
-gldf-rs.workspace = true
+# Core library - enable eulumdat feature for LDT/IES to GLDF conversion
+gldf-rs = { workspace = true, features = ["eulumdat"] }
 
 # Error handling
 anyhow.workspace = true
