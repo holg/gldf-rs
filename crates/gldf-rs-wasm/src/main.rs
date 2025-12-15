@@ -1,7 +1,5 @@
 #![recursion_limit = "256"]
 //! GLDF WASM Editor Application
-//!
-//! **GitHub:** <https://github.com/holg/gldf-rs>
 
 extern crate base64;
 extern crate gldf_rs;
@@ -14,6 +12,7 @@ use gloo::console;
 use gloo::file::callbacks::FileReader;
 use gloo::file::File;
 use std::collections::HashMap;
+use wasm_bindgen::JsCast;
 use web_sys::{Blob, FileList, HtmlInputElement};
 use yew::prelude::*;
 
@@ -22,9 +21,8 @@ mod draw_l3d;
 mod state;
 mod utils;
 
-use components::{BevySceneViewer, EditorTabs, L3dViewer, LdtViewer, UrlFileViewer};
+use components::{BevySceneViewer, EditorTabs, EmitterConfig, L3dViewer, LdtViewer, UrlFileViewer};
 use state::{use_gldf, GldfAction, GldfProvider};
-use utils::{download_gldf, download_json, download_xml};
 
 /// Wrapper for GLDF product operations
 #[allow(dead_code)]
@@ -54,6 +52,7 @@ pub enum NavItem {
     Statistics,
     Files,
     LightSources,
+    Emitters,
     Variants,
 }
 
@@ -69,17 +68,8 @@ pub enum Msg {
     SetDragging(bool),
     LoadDemo,
     DemoLoaded(Result<Vec<u8>, String>),
-    // Header edit messages
-    SetAuthor(String),
-    SetManufacturer(String),
-    SetCreationTimeCode(String),
-    SetCreatedWithApplication(String),
-    SetDefaultLanguage(Option<String>),
-    SetFormatVersion { major: i32, minor: i32, pre_release: i32 },
-    // File selection for detail viewer
-    SelectFile(Option<String>),
-    // 3D Scene variant selection
     Select3dVariant(Option<String>),
+    SelectFile(Option<String>),
 }
 
 /// Mode of the application
@@ -95,14 +85,10 @@ pub struct App {
     files: Vec<FileDetails>,
     mode: AppMode,
     loaded_gldf: Option<FileBufGldf>,
-    /// The edited product (separate from loaded_gldf so edits are preserved)
-    edited_product: Option<GldfProduct>,
     nav_item: NavItem,
     is_dragging: bool,
-    /// Currently selected file ID for detail viewer
-    selected_file: Option<String>,
-    /// Currently selected variant ID for 3D Scene viewer
     selected_3d_variant: Option<String>,
+    selected_file: Option<String>,
 }
 
 impl Component for App {
@@ -115,11 +101,10 @@ impl Component for App {
             files: Vec::default(),
             mode: AppMode::Viewer,
             loaded_gldf: None,
-            edited_product: None,
             nav_item: NavItem::Overview,
             is_dragging: false,
-            selected_file: None,
             selected_3d_variant: None,
+            selected_file: None,
         }
     }
 
@@ -128,12 +113,36 @@ impl Component for App {
             Msg::Loaded(file_name, file_type, data) => {
                 console::log!("Got Files:", file_type.as_str());
 
+                let file_name_lower = file_name.to_lowercase();
+
                 // Try to parse GLDF
-                if file_name.ends_with(".gldf") {
+                if file_name_lower.ends_with(".gldf") {
                     if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
-                        // Set both loaded_gldf (for embedded files) and edited_product (for edits)
-                        self.edited_product = Some(gldf.gldf.clone());
                         self.loaded_gldf = Some(gldf);
+                    }
+                }
+                // Handle ULD files - convert to GLDF
+                else if file_name_lower.ends_with(".uld") {
+                    console::log!("Converting ULD to GLDF...");
+                    match uld_rs::uld_to_gldf(&data) {
+                        Ok(gldf_bytes) => {
+                            console::log!("ULD converted to GLDF:", gldf_bytes.len(), "bytes");
+                            // Parse GLDF and load it
+                            if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(gldf_bytes.clone()) {
+                                self.loaded_gldf = Some(gldf);
+                            }
+                            // Store GLDF for viewing
+                            self.files.push(FileDetails {
+                                data: gldf_bytes,
+                                file_type: "application/gldf".to_string(),
+                                name: file_name.replace(".uld", ".gldf").replace(".ULD", ".gldf"),
+                            });
+                            self.readers.remove(&file_name);
+                            return true;
+                        }
+                        Err(e) => {
+                            console::log!("Failed to convert ULD:", format!("{}", e).as_str());
+                        }
                     }
                 }
 
@@ -146,22 +155,35 @@ impl Component for App {
                 true
             }
             Msg::Files(files) => {
+                console::log!("Msg::Files received:", files.len(), "file(s)");
                 for file in files.into_iter() {
                     let file_name = file.name();
                     let file_type = file.raw_mime_type();
-                    console::log!("A File:", file_name.as_str(), file_type.as_str());
+                    let file_size = file.size() as u64;
+                    console::log!(
+                        "Processing file:",
+                        file_name.as_str(),
+                        "type:",
+                        file_type.as_str(),
+                        "size:",
+                        file_size
+                    );
 
                     let task = {
                         let link = ctx.link().clone();
                         let file_name = file_name.clone();
-                        console::log!("A File:", file_name.as_str(), file_type.as_str());
+                        let file_type = file_type.clone();
 
                         gloo::file::callbacks::read_as_bytes(&file, move |res| {
-                            link.send_message(Msg::Loaded(
-                                file_name,
-                                file_type,
-                                res.expect("failed to read file"),
-                            ))
+                            match res {
+                                Ok(data) => {
+                                    console::log!("File read success:", file_name.as_str(), "bytes:", data.len());
+                                    link.send_message(Msg::Loaded(file_name, file_type, data))
+                                }
+                                Err(e) => {
+                                    console::log!("Failed to read file:", file_name.as_str(), format!("{:?}", e).as_str());
+                                }
+                            }
                         })
                     };
                     self.readers.insert(file_name, task);
@@ -180,54 +202,83 @@ impl Component for App {
                 true
             }
             Msg::ExportJson => {
-                if let Some(ref product) = self.edited_product {
-                    if let Ok(json) = product.to_pretty_json() {
-                        let filename = Self::get_export_filename(product, "json");
-                        if let Err(e) = download_json(&filename, &json) {
-                            console::error!("Failed to download JSON:", e.as_str());
-                        }
+                if let Some(ref gldf) = self.loaded_gldf {
+                    if let Ok(json) = gldf.gldf.to_pretty_json() {
+                        console::log!("Exported JSON:", json.as_str());
+                        // TODO: Trigger download
                     }
                 }
                 false
             }
             Msg::ExportXml => {
-                if let Some(ref product) = self.edited_product {
-                    if let Ok(xml) = product.to_xml() {
-                        let filename = Self::get_export_filename(product, "xml");
-                        if let Err(e) = download_xml(&filename, &xml) {
-                            console::error!("Failed to download XML:", e.as_str());
-                        }
+                if let Some(ref gldf) = self.loaded_gldf {
+                    if let Ok(xml) = gldf.gldf.to_xml() {
+                        console::log!("Exported XML:", xml.as_str());
+                        // TODO: Trigger download
                     }
                 }
                 false
             }
             Msg::ExportGldf => {
-                if let (Some(ref product), Some(ref loaded)) = (&self.edited_product, &self.loaded_gldf) {
-                    // Use EditableGldf with edited product + embedded files from loaded_gldf
-                    let mut editable = gldf_rs::EditableGldf::from_product(product.clone());
+                if let Some(ref gldf) = self.loaded_gldf {
+                    // Create GLDF zip file
+                    use std::io::{Cursor, Write};
+                    use zip::write::SimpleFileOptions;
+                    use zip::ZipWriter;
 
-                    // Copy embedded files from loaded gldf
-                    for buf_file in &loaded.files {
-                        if let (Some(ref name), Some(ref content)) = (&buf_file.name, &buf_file.content) {
-                            // Try to find file ID by path
-                            for file_def in &product.general_definitions.files.file {
-                                if name.ends_with(&file_def.file_name) {
-                                    editable.add_embedded_file(&file_def.id, content.clone());
-                                    break;
-                                }
+                    let cursor = Cursor::new(Vec::new());
+                    let mut zip = ZipWriter::new(cursor);
+                    let options = SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Deflated);
+
+                    // Write product.xml
+                    if let Ok(xml) = gldf.gldf.to_xml() {
+                        if zip.start_file("product.xml", options).is_ok() {
+                            let _ = zip.write_all(xml.as_bytes());
+                        }
+                    }
+
+                    // Write embedded files
+                    for buf_file in &gldf.files {
+                        if let (Some(name), Some(content)) = (&buf_file.name, &buf_file.content) {
+                            // Determine the zip path based on content type
+                            let zip_path = name.clone();
+                            if zip.start_file(&zip_path, options).is_ok() {
+                                let _ = zip.write_all(content);
                             }
                         }
                     }
 
-                    match editable.save_to_buf() {
-                        Ok(data) => {
-                            let filename = Self::get_export_filename(product, "gldf");
-                            if let Err(e) = download_gldf(&filename, &data) {
-                                console::error!("Failed to download GLDF:", e.as_str());
+                    if let Ok(cursor) = zip.finish() {
+                        let gldf_bytes = cursor.into_inner();
+                        console::log!("Exporting GLDF:", gldf_bytes.len(), "bytes");
+
+                        // Create blob and trigger download
+                        let uint8arr = js_sys::Uint8Array::new(&unsafe {
+                            js_sys::Uint8Array::view(&gldf_bytes)
+                        }.into());
+                        let array = js_sys::Array::new();
+                        array.push(&uint8arr.buffer());
+                        if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence_and_options(
+                            &array,
+                            web_sys::BlobPropertyBag::new().type_("application/zip"),
+                        ) {
+                            if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                                // Create download link and click it
+                                let window = web_sys::window().unwrap();
+                                let document = window.document().unwrap();
+                                if let Ok(a) = document.create_element("a") {
+                                    let _ = a.set_attribute("href", &url);
+                                    let _ = a.set_attribute("download", "exported.gldf");
+                                    let _ = a.set_attribute("style", "display: none");
+                                    let _ = document.body().unwrap().append_child(&a);
+                                    if let Some(html_a) = a.dyn_ref::<web_sys::HtmlElement>() {
+                                        html_a.click();
+                                    }
+                                    let _ = document.body().unwrap().remove_child(&a);
+                                    let _ = web_sys::Url::revoke_object_url(&url);
+                                }
                             }
-                        }
-                        Err(e) => {
-                            console::error!("Failed to save GLDF:", format!("{:?}", e).as_str());
                         }
                     }
                 }
@@ -269,13 +320,12 @@ impl Component for App {
                     Ok(data) => {
                         console::log!("Demo loaded:", data.len(), "bytes");
                         if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
-                            self.edited_product = Some(gldf.gldf.clone());
                             self.loaded_gldf = Some(gldf);
                         }
                         self.files.push(FileDetails {
                             data,
                             file_type: "application/gldf".to_string(),
-                            name: "SLV - Tria 2.gldf".to_string(),
+                            name: "slv_tria_2.gldf".to_string(),
                         });
                     }
                     Err(e) => {
@@ -284,51 +334,12 @@ impl Component for App {
                 }
                 true
             }
-            // Header edit messages
-            Msg::SetAuthor(author) => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.author = author;
-                }
-                true
-            }
-            Msg::SetManufacturer(manufacturer) => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.manufacturer = manufacturer;
-                }
-                true
-            }
-            Msg::SetCreationTimeCode(time_code) => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.creation_time_code = time_code;
-                }
-                true
-            }
-            Msg::SetCreatedWithApplication(app) => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.created_with_application = app;
-                }
-                true
-            }
-            Msg::SetDefaultLanguage(lang) => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.default_language = lang;
-                }
-                true
-            }
-            Msg::SetFormatVersion { major, minor, pre_release } => {
-                if let Some(ref mut product) = self.edited_product {
-                    product.header.format_version.major = major;
-                    product.header.format_version.minor = minor;
-                    product.header.format_version.pre_release = pre_release;
-                }
+            Msg::Select3dVariant(variant_id) => {
+                self.selected_3d_variant = variant_id;
                 true
             }
             Msg::SelectFile(file_id) => {
                 self.selected_file = file_id;
-                true
-            }
-            Msg::Select3dVariant(variant_id) => {
-                self.selected_3d_variant = variant_id;
                 true
             }
         }
@@ -352,20 +363,6 @@ impl Component for App {
                 </div>
             </div>
         }
-    }
-}
-
-impl App {
-    /// Generate a filename for export based on manufacturer/author
-    fn get_export_filename(gldf: &GldfProduct, extension: &str) -> String {
-        let base_name = if !gldf.header.manufacturer.is_empty() {
-            gldf.header.manufacturer.replace(' ', "_")
-        } else if !gldf.header.author.is_empty() {
-            gldf.header.author.replace(' ', "_")
-        } else {
-            "gldf_export".to_string()
-        };
-        format!("{}.{}", base_name, extension)
     }
 }
 
@@ -417,6 +414,18 @@ impl App {
                     .unwrap_or(0)
             })
             .unwrap_or(0);
+        let emitters_count = self
+            .loaded_gldf
+            .as_ref()
+            .map(|g| {
+                g.gldf
+                    .general_definitions
+                    .emitters
+                    .as_ref()
+                    .map(|e| e.emitter.len())
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
 
         html! {
             <div class="sidebar">
@@ -449,6 +458,7 @@ impl App {
                     <ul class="sidebar-nav">
                         { self.nav_item(ctx, NavItem::Files, "📁", "Files", Some(files_count), has_file) }
                         { self.nav_item(ctx, NavItem::LightSources, "💡", "Light Sources", Some(light_sources_count), has_file) }
+                        { self.nav_item(ctx, NavItem::Emitters, "🔆", "Emitters", Some(emitters_count), has_file) }
                         { self.nav_item(ctx, NavItem::Variants, "📦", "Variants", Some(variants_count), has_file) }
                     </ul>
                 </div>
@@ -456,7 +466,7 @@ impl App {
                 // Links section at bottom
                 <div style="margin-top: auto; padding: 16px;">
                     <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px;">{ "Resources" }</div>
-                    <a href="https://github.com/holg/gldf-rs" target="_blank" style="display: block; font-size: 12px; margin-bottom: 4px;">{ "GitHub: gldf-rs" }</a>
+                    <a href="https://github.com/holg/gldf-rs" target="_blank" style="display: block; font-size: 12px; margin-bottom: 4px;">{ "gldf-rs (GitHub)" }</a>
                     <a href="https://gldf.io" target="_blank" style="display: block; font-size: 12px; margin-bottom: 4px;">{ "GLDF.io" }</a>
                     <a href="https://eulumdat.icu/" target="_blank" style="display: block; font-size: 12px; margin-bottom: 8px;">{ "QLumEdit" }</a>
                     <p class="privacy-note">{ "All processing is local" }</p>
@@ -536,7 +546,7 @@ impl App {
                 <input
                     id="file-upload"
                     type="file"
-                    accept=".gldf,.ldt,.ies"
+                    accept=".gldf,.ldt,.ies,.uld"
                     multiple={false}
                     onchange={ctx.link().callback(move |e: Event| {
                         let input: HtmlInputElement = e.target_unchecked_into();
@@ -562,6 +572,7 @@ impl App {
             NavItem::Statistics => "Statistics",
             NavItem::Files => "Files",
             NavItem::LightSources => "Light Sources",
+            NavItem::Emitters => "Emitters",
             NavItem::Variants => "Variants",
         };
 
@@ -576,8 +587,8 @@ impl App {
                             <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::ToggleEditor)}>
                                 { if self.mode == AppMode::Viewer { "Edit Mode" } else { "View Mode" } }
                             </button>
-                            <button class="btn btn-primary" onclick={ctx.link().callback(|_| Msg::ExportGldf)}>
-                                { "Save GLDF" }
+                            <button class="btn btn-success" onclick={ctx.link().callback(|_| Msg::ExportGldf)}>
+                                { "Export GLDF" }
                             </button>
                             <button class="btn btn-success" onclick={ctx.link().callback(|_| Msg::ExportJson)}>
                                 { "Export JSON" }
@@ -596,10 +607,11 @@ impl App {
                             NavItem::Overview => self.view_overview(),
                             NavItem::RawData => self.view_raw_data(),
                             NavItem::FileViewer => self.view_file_viewer(ctx),
-                            NavItem::Header => self.view_header_editor(ctx),
+                            NavItem::Header => self.view_header_editor(),
                             NavItem::Statistics => self.view_statistics(),
                             NavItem::Files => self.view_files_list(ctx),
                             NavItem::LightSources => self.view_light_sources(),
+                            NavItem::Emitters => self.view_emitters(),
                             NavItem::Variants => self.view_variants(ctx),
                         }
                     }
@@ -1008,157 +1020,46 @@ impl App {
         }
     }
 
-    fn view_header_editor(&self, ctx: &Context<Self>) -> Html {
-        if let Some(ref product) = self.edited_product {
-            let header = &product.header;
-            let is_editing = self.mode == AppMode::Editor;
-
-            html! {
-                <div class="card">
-                    <div class="card-body">
-                        <h2>{ "Header Information" }</h2>
-
-                        <div class="form-group">
-                            <label for="author">{ "Author" }</label>
-                            <input
-                                type="text"
-                                id="author"
-                                value={header.author.clone()}
-                                readonly={!is_editing}
-                                onchange={ctx.link().callback(|e: Event| {
-                                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                    Msg::SetAuthor(input.value())
-                                })}
-                                placeholder="Enter author name"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="manufacturer">{ "Manufacturer" }</label>
-                            <input
-                                type="text"
-                                id="manufacturer"
-                                value={header.manufacturer.clone()}
-                                readonly={!is_editing}
-                                onchange={ctx.link().callback(|e: Event| {
-                                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                    Msg::SetManufacturer(input.value())
-                                })}
-                                placeholder="Enter manufacturer name"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="creation-time">{ "Creation Time Code" }</label>
-                            <input
-                                type="datetime-local"
-                                id="creation-time"
-                                value={header.creation_time_code.clone()}
-                                readonly={!is_editing}
-                                onchange={ctx.link().callback(|e: Event| {
-                                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                    Msg::SetCreationTimeCode(input.value())
-                                })}
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="created-with">{ "Created With Application" }</label>
-                            <input
-                                type="text"
-                                id="created-with"
-                                value={header.created_with_application.clone()}
-                                readonly={!is_editing}
-                                onchange={ctx.link().callback(|e: Event| {
-                                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                    Msg::SetCreatedWithApplication(input.value())
-                                })}
-                                placeholder="Enter application name"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="default-language">{ "Default Language" }</label>
-                            <input
-                                type="text"
-                                id="default-language"
-                                value={header.default_language.clone().unwrap_or_default()}
-                                readonly={!is_editing}
-                                onchange={ctx.link().callback(|e: Event| {
-                                    let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                    let value = input.value();
-                                    Msg::SetDefaultLanguage(if value.is_empty() { None } else { Some(value) })
-                                })}
-                                placeholder="e.g., en, de, fr"
-                                maxlength="5"
-                            />
-                        </div>
-
-                        <fieldset class="version-fieldset">
-                            <legend>{ "Format Version" }</legend>
-                            <div class="version-inputs">
-                                <div class="form-group inline">
-                                    <label for="version-major">{ "Major" }</label>
-                                    <input
-                                        type="number"
-                                        id="version-major"
-                                        value={header.format_version.major.to_string()}
-                                        readonly={!is_editing}
-                                        onchange={ctx.link().callback({
-                                            let fv = header.format_version.clone();
-                                            move |e: Event| {
-                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                                let major: i32 = input.value().parse().unwrap_or(1);
-                                                Msg::SetFormatVersion { major, minor: fv.minor, pre_release: fv.pre_release }
-                                            }
-                                        })}
-                                        min="1"
-                                    />
+    fn view_header_editor(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            if self.mode == AppMode::Editor {
+                html! {
+                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                        <EditorTabs />
+                    </GldfProviderWithData>
+                }
+            } else {
+                let header = &gldf.gldf.header;
+                html! {
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>{ "Manufacturer" }</label>
+                                    <input type="text" readonly=true value={header.manufacturer.clone()} />
                                 </div>
-                                <div class="form-group inline">
-                                    <label for="version-minor">{ "Minor" }</label>
-                                    <input
-                                        type="number"
-                                        id="version-minor"
-                                        value={header.format_version.minor.to_string()}
-                                        readonly={!is_editing}
-                                        onchange={ctx.link().callback({
-                                            let fv = header.format_version.clone();
-                                            move |e: Event| {
-                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                                let minor: i32 = input.value().parse().unwrap_or(0);
-                                                Msg::SetFormatVersion { major: fv.major, minor, pre_release: fv.pre_release }
-                                            }
-                                        })}
-                                        min="0"
-                                    />
-                                </div>
-                                <div class="form-group inline">
-                                    <label for="version-pre-release">{ "Pre-release" }</label>
-                                    <input
-                                        type="number"
-                                        id="version-pre-release"
-                                        value={header.format_version.pre_release.to_string()}
-                                        readonly={!is_editing}
-                                        onchange={ctx.link().callback({
-                                            let fv = header.format_version.clone();
-                                            move |e: Event| {
-                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                                let pre_release: i32 = input.value().parse().unwrap_or(0);
-                                                Msg::SetFormatVersion { major: fv.major, minor: fv.minor, pre_release }
-                                            }
-                                        })}
-                                        min="0"
-                                    />
+                                <div class="form-group">
+                                    <label>{ "Author" }</label>
+                                    <input type="text" readonly=true value={header.author.clone()} />
                                 </div>
                             </div>
-                        </fieldset>
-
-                        if !is_editing {
-                            <p class="hint-text">{ "Switch to Edit Mode to make changes" }</p>
-                        }
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>{ "Format Version" }</label>
+                                    <input type="text" readonly=true value={format!("{:?}", header.format_version)} />
+                                </div>
+                                <div class="form-group">
+                                    <label>{ "Created With" }</label>
+                                    <input type="text" readonly=true value={header.created_with_application.clone()} />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>{ "Creation Time" }</label>
+                                <input type="text" readonly=true value={header.creation_time_code.clone()} />
+                            </div>
+                        </div>
                     </div>
-                </div>
+                }
             }
         } else {
             html! {
@@ -1255,15 +1156,80 @@ impl App {
         }
     }
 
+    fn view_file_content(file_name: &str, content: Vec<u8>) -> Html {
+        let fname_lower = file_name.to_lowercase();
+        if fname_lower.ends_with(".l3d") {
+            html! {
+                <div class="l3d-viewer-container">
+                    <L3dViewer l3d_data={content} width={700} height={500} />
+                </div>
+            }
+        } else if fname_lower.ends_with(".ldt") || fname_lower.ends_with(".ies") {
+            html! {
+                <div class="ldt-viewer-container">
+                    <LdtViewer ldt_data={content} width={500.0} height={500.0} />
+                </div>
+            }
+        } else if fname_lower.ends_with(".jpg") || fname_lower.ends_with(".jpeg") || fname_lower.ends_with(".png") {
+            let mime = if fname_lower.ends_with(".png") { "png" } else { "jpeg" };
+            html! {
+                <img
+                    src={format!("data:image/{};base64,{}", mime, BASE64_STANDARD.encode(&content))}
+                    style="max-width: 100%; max-height: 400px; border-radius: 4px;"
+                />
+            }
+        } else {
+            html! {
+                <div class="text-preview" style="font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; max-height: 400px; overflow: auto;">
+                    { String::from_utf8_lossy(&content[..content.len().min(10000)]).to_string() }
+                </div>
+            }
+        }
+    }
+
     fn view_files_list(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             let files: &Vec<_> = &gldf.gldf.general_definitions.files.file;
-            let selected = self.selected_file.clone();
+
+            // Get selected file content for viewer
+            let selected_content = self.selected_file.as_ref().and_then(|file_id| {
+                // Find the file definition
+                let file_def = files.iter().find(|f| &f.id == file_id)?;
+                // Find the actual file content
+                let content = gldf.files.iter().find(|bf| {
+                    bf.name.as_ref().map(|n| {
+                        let stored = n.rsplit('/').next().unwrap_or(n);
+                        stored.eq_ignore_ascii_case(&file_def.file_name)
+                    }).unwrap_or(false)
+                })?;
+                Some((file_def.clone(), content.content.clone()?))
+            });
+
+            let close_viewer = ctx.link().callback(|_| Msg::SelectFile(None));
+
+            // Pre-compute viewer HTML if file selected
+            let viewer_html = selected_content.as_ref().map(|(file_def, content)| {
+                let content_viewer = Self::view_file_content(&file_def.file_name, content.clone());
+                let file_name = file_def.file_name.clone();
+                let content_len = content.len();
+                (file_name, content_len, content_viewer)
+            });
+
+            // Helper to get content type class
+            let content_type_class = |ct: &str| -> &'static str {
+                if ct.starts_with("ldc/") { "content-type-ldc" }
+                else if ct.starts_with("geo/") { "content-type-geo" }
+                else if ct.starts_with("image/") { "content-type-image" }
+                else if ct.starts_with("sensor/") { "content-type-sensor" }
+                else if ct.starts_with("document/") { "content-type-doc" }
+                else { "content-type-other" }
+            };
 
             html! {
-                <>
+                <div class="files-container">
+                    // Files table
                     <div class="card">
-                        <table class="data-table clickable-table">
+                        <table class="data-table files-table-clickable">
                             <thead>
                                 <tr>
                                     <th>{ "ID" }</th>
@@ -1275,30 +1241,71 @@ impl App {
                             <tbody>
                                 { for files.iter().map(|f| {
                                     let file_id = f.id.clone();
-                                    let is_selected = selected.as_ref() == Some(&f.id);
-                                    let row_class = if is_selected { "selected" } else { "" };
-                                    let onclick = ctx.link().callback(move |_| Msg::SelectFile(Some(file_id.clone())));
-                                    let badge_class = self.content_type_badge_class(&f.content_type);
+                                    let is_selected = self.selected_file.as_ref() == Some(&f.id);
+                                    let on_click = ctx.link().callback(move |_| Msg::SelectFile(Some(file_id.clone())));
+
+                                    // Check if file content exists
+                                    let has_content = gldf.files.iter().any(|bf| {
+                                        bf.name.as_ref().map(|n| {
+                                            let stored = n.rsplit('/').next().unwrap_or(n);
+                                            stored.eq_ignore_ascii_case(&f.file_name)
+                                        }).unwrap_or(false)
+                                    });
+
+                                    let row_class = classes!(
+                                        is_selected.then_some("selected"),
+                                        has_content.then_some("clickable")
+                                    );
+
                                     html! {
-                                        <tr class={row_class} style="cursor: pointer;" {onclick}>
-                                            <td style="font-family: var(--font-mono);">{ &f.id }</td>
-                                            <td>{ &f.file_name }</td>
+                                        <tr
+                                            class={row_class}
+                                            onclick={if has_content { Some(on_click) } else { None }}
+                                            style={if has_content { "cursor: pointer;" } else { "" }}
+                                        >
+                                            <td class="file-id">{ &f.id }</td>
+                                            <td class="file-name">{ &f.file_name }</td>
                                             <td>
-                                                <span class={badge_class}>
+                                                <span class={classes!("content-type-badge", content_type_class(&f.content_type))}>
                                                     { &f.content_type }
                                                 </span>
                                             </td>
-                                            <td>{ &f.type_attr }</td>
+                                            <td class="file-type">{ &f.type_attr }</td>
                                         </tr>
                                     }
                                 })}
                             </tbody>
                         </table>
+                        if self.selected_file.is_none() {
+                            <p style="text-align: center; color: var(--text-tertiary); margin-top: 16px; font-size: 13px;">
+                                { "Click on a file above to preview" }
+                            </p>
+                        }
                     </div>
 
-                    // File Detail Viewer
-                    { self.view_file_detail() }
-                </>
+                    // File viewer at bottom (when file selected)
+                    if let Some((file_name, content_len, content_viewer)) = viewer_html {
+                        <div class="file-viewer-panel" style="margin-top: 20px; background: var(--bg-card); border-radius: 8px; overflow: hidden;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-color); background: var(--bg-sidebar);">
+                                <div style="font-weight: 500;">
+                                    { &file_name }
+                                    <span style="color: var(--text-tertiary); margin-left: 8px; font-size: 12px;">
+                                        { format!("({} bytes)", content_len) }
+                                    </span>
+                                </div>
+                                <button
+                                    onclick={close_viewer}
+                                    style="background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-secondary);"
+                                >
+                                    { "✕" }
+                                </button>
+                            </div>
+                            <div style="padding: 16px;">
+                                { content_viewer }
+                            </div>
+                        </div>
+                    }
+                </div>
             }
         } else {
             html! {
@@ -1311,179 +1318,316 @@ impl App {
         }
     }
 
-    /// Get CSS class for content type badge
-    fn content_type_badge_class(&self, content_type: &str) -> &'static str {
-        if content_type.contains("ldc") || content_type.contains("eulumdat") || content_type.contains("ies") {
-            "badge badge-photometry"
-        } else if content_type.contains("geo") || content_type.contains("l3d") {
-            "badge badge-geometry"
-        } else if content_type.contains("image") {
-            "badge badge-image"
-        } else if content_type.contains("pdf") || content_type.contains("document") {
-            "badge badge-document"
-        } else {
-            "badge badge-other"
-        }
-    }
+    fn view_light_sources(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            let ls = gldf.gldf.general_definitions.light_sources.as_ref();
+            let fixed: Vec<_> = ls
+                .map(|l| l.fixed_light_source.iter().collect())
+                .unwrap_or_default();
+            let changeable: Vec<_> = ls
+                .map(|l| l.changeable_light_source.iter().collect())
+                .unwrap_or_default();
 
-    /// Render the file detail viewer based on selected file type
-    fn view_file_detail(&self) -> Html {
-        let Some(ref file_id) = self.selected_file else {
-            return html! {
-                <div class="file-detail-placeholder">
-                    <p class="text-muted">{ "Click on a file above to preview" }</p>
-                </div>
-            };
-        };
-
-        let Some(ref gldf) = self.loaded_gldf else {
-            return html! {};
-        };
-
-        // Find the file definition
-        let file_def = gldf.gldf.general_definitions.files.file.iter()
-            .find(|f| &f.id == file_id);
-
-        let Some(file_def) = file_def else {
-            return html! {
-                <div class="file-detail-error">
-                    <p>{ format!("File '{}' not found", file_id) }</p>
-                </div>
-            };
-        };
-
-        // Find the actual file content - match by filename (ignoring path)
-        let file_content = gldf.files.iter()
-            .find(|f| {
-                if let Some(ref name) = f.name {
-                    // Match by filename (extract just the filename part)
-                    let stored_name = name.rsplit('/').next().unwrap_or(name);
-                    let def_name = file_def.file_name.rsplit('/').next().unwrap_or(&file_def.file_name);
-                    stored_name.eq_ignore_ascii_case(def_name)
-                } else {
-                    false
-                }
-            });
-
-        let content_type = file_def.content_type.to_lowercase();
-
-        html! {
-            <div class="file-detail-viewer">
-                <div class="file-detail-header">
-                    <h3>{ &file_def.file_name }</h3>
-                    <span class={self.content_type_badge_class(&file_def.content_type)}>
-                        { &file_def.content_type }
-                    </span>
-                </div>
-                <div class="file-detail-content">
-                    {
-                        if let Some(buf_file) = file_content {
-                            if let Some(ref data) = buf_file.content {
-                                // Render based on content type
-                                if content_type.contains("l3d") || content_type.contains("geo") {
-                                    // 3D Model viewer with three-d (simple L3D viewer)
-                                    html! {
-                                        <div class="viewer-container l3d-viewer">
-                                            <L3dViewer
-                                                l3d_data={data.clone()}
-                                                width={800}
-                                                height={600}
-                                            />
-                                        </div>
-                                    }
-                                } else if content_type.contains("ldc") || content_type.contains("eulumdat") {
-                                    // LDT/Photometry viewer
-                                    html! {
-                                        <div class="viewer-container">
-                                            <LdtViewer ldt_data={data.clone()} />
-                                        </div>
-                                    }
-                                } else if content_type.contains("image") {
-                                    // Image viewer
-                                    let base64_data = BASE64_STANDARD.encode(data);
-                                    let mime = if content_type.contains("png") { "image/png" }
-                                        else if content_type.contains("svg") { "image/svg+xml" }
-                                        else { "image/jpeg" };
-                                    html! {
-                                        <div class="viewer-container image-viewer">
-                                            <img src={format!("data:{};base64,{}", mime, base64_data)} alt={file_def.file_name.clone()} />
-                                        </div>
-                                    }
-                                } else if content_type.contains("pdf") {
-                                    // PDF - show download link
-                                    let base64_data = BASE64_STANDARD.encode(data);
-                                    html! {
-                                        <div class="viewer-container pdf-viewer">
-                                            <p>{ format!("PDF file: {} ({:.1} KB)", file_def.file_name, data.len() as f64 / 1024.0) }</p>
-                                            <a href={format!("data:application/pdf;base64,{}", base64_data)} download={file_def.file_name.clone()} class="btn btn-primary">
-                                                { "Download PDF" }
-                                            </a>
-                                        </div>
-                                    }
-                                } else {
-                                    // Unknown type - show hex preview
-                                    let preview = data.iter().take(256)
-                                        .map(|b| format!("{:02x}", b))
-                                        .collect::<Vec<_>>()
-                                        .join(" ");
-                                    html! {
-                                        <div class="viewer-container">
-                                            <p class="text-muted">{ format!("Binary file: {} bytes", data.len()) }</p>
-                                            <pre class="hex-preview">{ preview }{ if data.len() > 256 { "..." } else { "" } }</pre>
-                                        </div>
-                                    }
-                                }
-                            } else {
-                                html! { <p class="text-muted">{ "File content not available (URL reference)" }</p> }
-                            }
-                        } else {
-                            // File is a URL reference
-                            if file_def.type_attr == "url" {
+            html! {
+                <>
+                    if !fixed.is_empty() {
+                        <h3 style="margin-bottom: 16px; color: var(--text-secondary);">{ "Fixed Light Sources" }</h3>
+                        <div class="light-source-cards">
+                            { for fixed.iter().map(|ls| {
+                                let name = ls.name.locale.first().map(|l| l.value.as_str()).unwrap_or("");
+                                let desc = ls.description.as_ref()
+                                    .and_then(|d| d.locale.first())
+                                    .map(|l| l.value.as_str())
+                                    .filter(|s| !s.is_empty());
                                 html! {
-                                    <div class="viewer-container url-viewer">
-                                        <p>{ "External URL:" }</p>
-                                        <a href={file_def.file_name.clone()} target="_blank" rel="noopener">
-                                            { &file_def.file_name }
-                                        </a>
+                                    <div class="light-source-card">
+                                        <div class="card-header-row">
+                                            <span class="card-id">{ &ls.id }</span>
+                                            <span class="card-type">{ "Fixed" }</span>
+                                        </div>
+                                        <div class="card-content">
+                                            <h4>{ name }</h4>
+                                            if let Some(description) = desc {
+                                                <div class="description">{ description }</div>
+                                            }
+                                            <div class="properties-grid">
+                                                if let Some(ref mfr) = ls.manufacturer {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Manufacturer" }</span>
+                                                        <span class="property-value">{ mfr }</span>
+                                                    </div>
+                                                }
+                                                if let Some(ref gtin) = ls.gtin {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "GTIN" }</span>
+                                                        <span class="property-value">{ gtin }</span>
+                                                    </div>
+                                                }
+                                                if let Some(power) = ls.rated_input_power {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Rated Power" }</span>
+                                                        <span class="property-value">{ format!("{} W", power) }</span>
+                                                    </div>
+                                                }
+                                                if let Some(ref voltage) = ls.rated_input_voltage {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Rated Voltage" }</span>
+                                                        <span class="property-value">{
+                                                            if let Some(fixed) = voltage.fixed_voltage {
+                                                                format!("{} V ({:?})", fixed, voltage.type_attr)
+                                                            } else if let Some(ref range) = voltage.voltage_range {
+                                                                format!("{}-{} V ({:?})", range.min, range.max, voltage.type_attr)
+                                                            } else {
+                                                                format!("{:?}", voltage.type_attr)
+                                                            }
+                                                        }</span>
+                                                    </div>
+                                                }
+                                                if let Some(ref color) = ls.color_information {
+                                                    if let Some(cct) = color.correlated_color_temperature {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "Color Temp" }</span>
+                                                            <span class="property-value">{ format!("{} K", cct) }</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(cri) = color.color_rendering_index {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "CRI" }</span>
+                                                            <span class="property-value">{ format!("{}", cri) }</span>
+                                                        </div>
+                                                    }
+                                                }
+                                                if let Some(zhaga) = ls.zhaga_standard {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Zhaga" }</span>
+                                                        <span class="property-value">{ if zhaga { "Yes" } else { "No" } }</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
                                     </div>
                                 }
-                            } else {
-                                html! { <p class="text-muted">{ "File content not embedded in GLDF" }</p> }
-                            }
-                        }
+                            })}
+                        </div>
                     }
+                    if !changeable.is_empty() {
+                        <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ "Changeable Light Sources" }</h3>
+                        <div class="light-source-cards">
+                            { for changeable.iter().map(|ls| {
+                                let desc = ls.description.as_ref()
+                                    .map(|d| d.value.as_str())
+                                    .filter(|s| !s.is_empty());
+                                html! {
+                                    <div class="light-source-card">
+                                        <div class="card-header-row">
+                                            <span class="card-id">{ &ls.id }</span>
+                                            <span class="card-type changeable">{ "Changeable" }</span>
+                                        </div>
+                                        <div class="card-content">
+                                            <h4>{ &ls.name.value }</h4>
+                                            if let Some(description) = desc {
+                                                <div class="description">{ description }</div>
+                                            }
+                                            <div class="properties-grid">
+                                                if let Some(ref mfr) = ls.manufacturer {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Manufacturer" }</span>
+                                                        <span class="property-value">{ mfr }</span>
+                                                    </div>
+                                                }
+                                                if let Some(ref photo_ref) = ls.photometry_reference {
+                                                    <div class="property">
+                                                        <span class="property-label">{ "Photometry" }</span>
+                                                        <span class="property-value">{ &photo_ref.photometry_id }</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            })}
+                        </div>
+                    }
+                    if fixed.is_empty() && changeable.is_empty() {
+                        <div class="empty-state">
+                            <div class="icon">{ "💡" }</div>
+                            <h3>{ "No Light Sources" }</h3>
+                            <p>{ "This GLDF file has no light source definitions" }</p>
+                        </div>
+                    }
+                </>
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "💡" }</div>
+                    <h3>{ "No Light Sources" }</h3>
+                    <p>{ "Load a GLDF file to view light sources" }</p>
                 </div>
-            </div>
+            }
         }
     }
 
-    /// Find the associated LDT file for an L3D file using GLDF mappings
-    fn find_associated_ldt(&self, l3d_file_id: &str) -> Option<Vec<u8>> {
-        let gldf = self.loaded_gldf.as_ref()?;
+    fn view_emitters(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            let emitters = gldf.gldf.general_definitions.emitters.as_ref()
+                .map(|e| &e.emitter)
+                .map(|e| e.iter().collect::<Vec<_>>())
+                .unwrap_or_default();
 
-        // Use the mapping helper from gldf-rs-lib
-        let mappings = gldf_rs::get_l3d_ldt_mappings(&gldf.gldf);
-
-        // Find mapping for this L3D file
-        let mapping = mappings.iter().find(|m| m.l3d_file_id == l3d_file_id)?;
-
-        // Get the LDT file name
-        let ldt_file_name = mapping.ldt_file_name.as_ref()?;
-
-        // Find the LDT file content
-        let ldt_file = gldf.files.iter().find(|f| {
-            if let Some(ref name) = f.name {
-                let stored_name = name.rsplit('/').next().unwrap_or(name);
-                stored_name.eq_ignore_ascii_case(ldt_file_name)
-            } else {
-                false
+            if emitters.is_empty() {
+                return html! {
+                    <div class="empty-state">
+                        <div class="icon">{ "🔆" }</div>
+                        <h3>{ "No Emitters" }</h3>
+                        <p>{ "This GLDF file has no emitter definitions" }</p>
+                    </div>
+                };
             }
-        })?;
 
-        ldt_file.content.clone()
+            // Helper to get photometry file content
+            let get_photometry = |photo_id: &str| -> Option<Vec<u8>> {
+                // Find photometry definition
+                let photometries = gldf.gldf.general_definitions.photometries.as_ref()?;
+                let photo = photometries.photometry.iter().find(|p| p.id == photo_id)?;
+
+                // Get file reference (it's an Option, not Vec)
+                let file_ref = photo.photometry_file_reference.as_ref()?;
+                let file_id = &file_ref.file_id;
+
+                // Find file definition
+                let file_def = gldf.gldf.general_definitions.files.file.iter()
+                    .find(|f| &f.id == file_id)?;
+
+                // Find content
+                gldf.files.iter()
+                    .find(|bf| {
+                        bf.name.as_ref().map(|n| {
+                            let stored = n.rsplit('/').next().unwrap_or(n);
+                            stored.eq_ignore_ascii_case(&file_def.file_name)
+                        }).unwrap_or(false)
+                    })
+                    .and_then(|bf| bf.content.clone())
+            };
+
+            html! {
+                <div class="emitters-container">
+                    { for emitters.iter().map(|emitter| {
+                        html! {
+                            <div class="emitter-card" style="background: var(--bg-secondary); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                                <div class="emitter-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                                    <span style="font-size: 20px;">{ "🔆" }</span>
+                                    <span style="font-family: var(--font-mono); font-weight: 600; font-size: 14px;">{ &emitter.id }</span>
+                                </div>
+
+                                // Fixed Light Emitters
+                                if !emitter.fixed_light_emitter.is_empty() {
+                                    <div class="fixed-emitters" style="margin-bottom: 16px;">
+                                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Fixed Light Emitters" }</h4>
+                                        { for emitter.fixed_light_emitter.iter().map(|fle| {
+                                            let photo_id = &fle.photometry_reference.photometry_id;
+                                            let ldt_data = get_photometry(photo_id);
+
+                                            html! {
+                                                <div style="background: var(--bg-primary); padding: 12px; border-radius: 6px; margin-bottom: 8px;">
+                                                    <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px;">
+                                                        // Emergency behavior
+                                                        if let Some(ref eb) = fle.emergency_behaviour {
+                                                            <div>
+                                                                <span style="color: var(--text-tertiary);">{ "Emergency: " }</span>
+                                                                <span style={format!("background: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;",
+                                                                    if eb == "EmergencyOnly" { "var(--accent-orange)" } else { "var(--accent-green)" }
+                                                                )}>{ eb }</span>
+                                                            </div>
+                                                        }
+                                                        // Light source reference
+                                                        if let Some(ref ls_id) = fle.light_source_reference.fixed_light_source_id {
+                                                            <div>
+                                                                <span style="color: var(--text-tertiary);">{ "Light Source: " }</span>
+                                                                <span style="color: var(--accent-blue);">{ ls_id }</span>
+                                                            </div>
+                                                        }
+                                                        // Photometry reference
+                                                        <div>
+                                                            <span style="color: var(--text-tertiary);">{ "Photometry: " }</span>
+                                                            <span style="color: var(--accent-purple);">{ &fle.photometry_reference.photometry_id }</span>
+                                                        </div>
+                                                    </div>
+
+                                                    // Show LDT/IES viewer if photometry data available
+                                                    if let Some(data) = ldt_data {
+                                                        <div style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                                                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">{ "Photometric Distribution" }</div>
+                                                            <LdtViewer ldt_data={data} width={400.0} height={300.0} />
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        })}
+                                    </div>
+                                }
+
+                                // Changeable Light Emitters
+                                if !emitter.changeable_light_emitter.is_empty() {
+                                    <div class="changeable-emitters">
+                                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Changeable Light Emitters" }</h4>
+                                        { for emitter.changeable_light_emitter.iter().map(|cle| {
+                                            let photo_id = &cle.photometry_reference.photometry_id;
+                                            html! {
+                                                <div style="background: var(--bg-primary); padding: 12px; border-radius: 6px; margin-bottom: 8px;">
+                                                    <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px;">
+                                                        // Emergency behavior
+                                                        if let Some(ref eb) = cle.emergency_behaviour {
+                                                            <div>
+                                                                <span style="color: var(--text-tertiary);">{ "Emergency: " }</span>
+                                                                <span style={format!("background: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;",
+                                                                    if eb == "EmergencyOnly" { "var(--accent-orange)" } else { "var(--accent-green)" }
+                                                                )}>{ eb }</span>
+                                                            </div>
+                                                        }
+                                                        // Photometry reference
+                                                        <div>
+                                                            <span style="color: var(--text-tertiary);">{ "Photometry: " }</span>
+                                                            <span style="color: var(--accent-purple);">{ photo_id }</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        })}
+                                    </div>
+                                }
+
+                                // Sensors
+                                if !emitter.sensor.is_empty() {
+                                    <div class="sensors" style="margin-top: 12px;">
+                                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Sensors" }</h4>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                            { for emitter.sensor.iter().map(|s| {
+                                                html! {
+                                                    <span style="background: var(--bg-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px;">
+                                                        { &s.id }
+                                                    </span>
+                                                }
+                                            })}
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    })}
+                </div>
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🔆" }</div>
+                    <h3>{ "No Emitters" }</h3>
+                    <p>{ "Load a GLDF file to view emitters" }</p>
+                </div>
+            }
+        }
     }
 
-    /// Get L3D and LDT data for a specific variant
     fn get_variant_l3d_ldt(&self, variant_id: &str) -> (Option<Vec<u8>>, Option<Vec<u8>>) {
         let gldf = match &self.loaded_gldf {
             Some(g) => g,
@@ -1530,88 +1674,6 @@ impl App {
         (l3d_content, ldt_content)
     }
 
-    fn view_light_sources(&self) -> Html {
-        if let Some(ref gldf) = self.loaded_gldf {
-            let ls = gldf.gldf.general_definitions.light_sources.as_ref();
-            let fixed: Vec<_> = ls
-                .map(|l| l.fixed_light_source.iter().collect())
-                .unwrap_or_default();
-            let changeable: Vec<_> = ls
-                .map(|l| l.changeable_light_source.iter().collect())
-                .unwrap_or_default();
-
-            html! {
-                <>
-                    if !fixed.is_empty() {
-                        <h3 style="margin-bottom: 16px; color: var(--text-secondary);">{ "Fixed Light Sources" }</h3>
-                        <div class="light-source-cards">
-                            { for fixed.iter().map(|ls| {
-                                let name = ls.name.locale.first().map(|l| l.value.as_str()).unwrap_or("");
-                                let desc = ls.description.as_ref()
-                                    .and_then(|d| d.locale.first())
-                                    .map(|l| l.value.as_str())
-                                    .filter(|s| !s.is_empty());
-                                html! {
-                                    <div class="light-source-card">
-                                        <div class="card-header-row">
-                                            <span class="card-id">{ &ls.id }</span>
-                                            <span class="card-type">{ "Fixed" }</span>
-                                        </div>
-                                        <div class="card-content">
-                                            <h4>{ name }</h4>
-                                            if let Some(description) = desc {
-                                                <div class="description">{ description }</div>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            })}
-                        </div>
-                    }
-                    if !changeable.is_empty() {
-                        <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ "Changeable Light Sources" }</h3>
-                        <div class="light-source-cards">
-                            { for changeable.iter().map(|ls| {
-                                let desc = ls.description.as_ref()
-                                    .map(|d| d.value.as_str())
-                                    .filter(|s| !s.is_empty());
-                                html! {
-                                    <div class="light-source-card">
-                                        <div class="card-header-row">
-                                            <span class="card-id">{ &ls.id }</span>
-                                            <span class="card-type changeable">{ "Changeable" }</span>
-                                        </div>
-                                        <div class="card-content">
-                                            <h4>{ &ls.name.value }</h4>
-                                            if let Some(description) = desc {
-                                                <div class="description">{ description }</div>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            })}
-                        </div>
-                    }
-                    if fixed.is_empty() && changeable.is_empty() {
-                        <div class="empty-state">
-                            <div class="icon">{ "💡" }</div>
-                            <h3>{ "No Light Sources" }</h3>
-                            <p>{ "This GLDF file has no light source definitions" }</p>
-                        </div>
-                    }
-                </>
-            }
-        } else {
-            html! {
-                <div class="empty-state">
-                    <div class="icon">{ "💡" }</div>
-                    <h3>{ "No Light Sources" }</h3>
-                    <p>{ "Load a GLDF file to view light sources" }</p>
-                </div>
-            }
-        }
-    }
-
     fn view_variants(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             let variants: Vec<_> = gldf
@@ -1637,8 +1699,8 @@ impl App {
                 let (l3d_data, ldt_data) = self.get_variant_l3d_ldt(variant_id);
                 l3d_data.map(|l3d| {
                     let emitter_data = gldf_rs::get_variant_emitter_data(&gldf.gldf, variant_id);
-                    let emitter_config: Vec<components::EmitterConfig> = emitter_data.emitters.iter().map(|em| {
-                        components::EmitterConfig {
+                    let emitter_config: Vec<EmitterConfig> = emitter_data.emitters.iter().map(|em| {
+                        EmitterConfig {
                             leo_name: em.leo_name.clone(),
                             luminous_flux: em.luminous_flux,
                             color_temperature: em.color_temperature,
@@ -1723,6 +1785,23 @@ impl App {
                                         }
                                     </div>
                                     <div class="card-content">
+                                        // 3D Scene button - FIRST element
+                                        if has_l3d {
+                                            <div style="margin-bottom: 12px;">
+                                                <button
+                                                    onclick={on_view_3d}
+                                                    class="btn-3d-scene"
+                                                    style={format!(
+                                                        "background: {}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;",
+                                                        if is_selected { "var(--accent-green)" } else { "var(--accent-blue)" }
+                                                    )}
+                                                >
+                                                    <span>{ "🏠" }</span>
+                                                    { if is_selected { "Viewing 3D Scene" } else { "View 3D Scene" } }
+                                                </button>
+                                            </div>
+                                        }
+
                                         <h4>{ name }</h4>
                                         if let Some(description) = desc {
                                             <div class="description">{ description }</div>
@@ -1772,23 +1851,6 @@ impl App {
                                                         }
                                                     })}
                                                 </div>
-                                            </div>
-                                        }
-
-                                        // 3D Scene button
-                                        if has_l3d {
-                                            <div style="margin-top: 12px;">
-                                                <button
-                                                    onclick={on_view_3d}
-                                                    class="btn-3d-scene"
-                                                    style={format!(
-                                                        "background: {}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;",
-                                                        if is_selected { "var(--accent-green)" } else { "var(--accent-blue)" }
-                                                    )}
-                                                >
-                                                    <span>{ "🏠" }</span>
-                                                    { if is_selected { "Viewing 3D Scene" } else { "View 3D Scene" } }
-                                                </button>
                                             </div>
                                         }
                                     </div>

@@ -342,12 +342,11 @@ impl DrawL3d {
     pub fn render(&mut self) {
         self.frame_count += 1;
 
-        // Log every 60 frames (roughly once per second)
-        if self.frame_count == 1 || self.frame_count.is_multiple_of(60) {
+        // Only log first frame
+        if self.frame_count == 1 {
             log!(format!(
-                "[Renderer-{}] render() frame {}, models: {}",
+                "[Renderer-{}] started, models: {}",
                 self.id,
-                self.frame_count,
                 self.models.len()
             ));
         }

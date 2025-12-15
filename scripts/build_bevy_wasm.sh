@@ -15,7 +15,7 @@ cargo build --release --target wasm32-unknown-unknown -p gldf-bevy --lib
 echo "Generating JS bindings..."
 WASM_FILE="$PROJECT_DIR/target/wasm32-unknown-unknown/release/gldf_bevy.wasm"
 
-# Create output directory (for gldf-rs-wasm)
+# Create output directory
 BEVY_OUT_DIR="$PROJECT_DIR/crates/gldf-rs-wasm/dist/bevy"
 mkdir -p "$BEVY_OUT_DIR"
 
@@ -45,7 +45,7 @@ mv "$BEVY_OUT_DIR/gldf_bevy_bg.wasm" "$BEVY_OUT_DIR/gldf-bevy-viewer-${HASH}_bg.
 # Fix the import path in the JS file
 sed -i '' "s/gldf_bevy_bg.wasm/gldf-bevy-viewer-${HASH}_bg.wasm/g" "$BEVY_OUT_DIR/gldf-bevy-viewer-${HASH}.js"
 
-# Create a manifest file for the loader to read
+# Create manifest file
 echo "{\"hash\":\"${HASH}\",\"js\":\"gldf-bevy-viewer-${HASH}.js\",\"wasm\":\"gldf-bevy-viewer-${HASH}_bg.wasm\"}" > "$BEVY_OUT_DIR/manifest.json"
 
 echo "Bevy WASM built successfully!"
