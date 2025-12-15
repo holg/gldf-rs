@@ -6,6 +6,7 @@ extern crate gldf_rs;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use gldf_rs::convert::ldt_to_gldf;
 use gldf_rs::gldf::GldfProduct;
 use gldf_rs::{BufFile, FileBufGldf};
 use gloo::console;
@@ -142,6 +143,28 @@ impl Component for App {
                         }
                         Err(e) => {
                             console::log!("Failed to convert ULD:", format!("{}", e).as_str());
+                        }
+                    }
+                }
+                // Handle LDT/IES files - convert to minimal GLDF
+                else if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
+                    console::log!("Converting LDT/IES to GLDF...");
+                    match ldt_to_gldf(&data, &file_name) {
+                        Ok(gldf) => {
+                            console::log!("LDT/IES converted to GLDF structure");
+                            self.loaded_gldf = Some(gldf);
+                            // Also store the original file for viewing
+                            self.files.push(FileDetails {
+                                data,
+                                file_type: file_type.clone(),
+                                name: file_name.clone(),
+                            });
+                            self.readers.remove(&file_name);
+                            return true;
+                        }
+                        Err(e) => {
+                            console::log!("LDT/IES conversion info:", e.as_str());
+                            // Still show the file even if conversion fails
                         }
                     }
                 }

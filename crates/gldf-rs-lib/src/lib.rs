@@ -72,6 +72,12 @@ pub use mapping::{
     L3dLdtMapping, L3dWithLdt, EmitterRenderData, VariantEmitterData,
 };
 
+/// Conversion utilities for creating GLDF from other formats (LDT/IES)
+#[cfg(feature = "eulumdat")]
+pub mod convert;
+#[cfg(feature = "eulumdat")]
+pub use convert::{ldt_to_gldf, ldt_metadata_to_gldf, LdtMetadata};
+
 #[cfg(test)]
 mod tests;
 
