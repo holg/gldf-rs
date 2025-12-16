@@ -1,12 +1,17 @@
 //! Editor tabs component for navigation between GLDF sections
 
-use super::{FilesEditor, HeaderEditor, LightSourceEditor, VariantEditor};
+use super::{
+    ApplicationsEditor, ElectricalEditor, FilesEditor, HeaderEditor, LightSourceEditor,
+    VariantEditor,
+};
 use yew::prelude::*;
 
 /// Available editor sections
 #[derive(Clone, PartialEq)]
 pub enum EditorSection {
     Header,
+    Electrical,
+    Applications,
     Files,
     LightSources,
     Variants,
@@ -16,6 +21,8 @@ impl EditorSection {
     fn label(&self) -> &'static str {
         match self {
             EditorSection::Header => "Header",
+            EditorSection::Electrical => "Electrical",
+            EditorSection::Applications => "Applications",
             EditorSection::Files => "Files",
             EditorSection::LightSources => "Light Sources",
             EditorSection::Variants => "Variants",
@@ -30,6 +37,8 @@ pub fn editor_tabs() -> Html {
 
     let sections = [
         EditorSection::Header,
+        EditorSection::Electrical,
+        EditorSection::Applications,
         EditorSection::Files,
         EditorSection::LightSources,
         EditorSection::Variants,
@@ -60,6 +69,8 @@ pub fn editor_tabs() -> Html {
                 {
                     match &*active_section {
                         EditorSection::Header => html! { <HeaderEditor /> },
+                        EditorSection::Electrical => html! { <ElectricalEditor /> },
+                        EditorSection::Applications => html! { <ApplicationsEditor /> },
                         EditorSection::Files => html! { <FilesEditor /> },
                         EditorSection::LightSources => html! { <LightSourceEditor /> },
                         EditorSection::Variants => html! { <VariantEditor /> },

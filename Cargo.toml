@@ -85,8 +85,8 @@ eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
 l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
 
-# ULD file support
-uld-rs = { path = "../uld-rs", default-features = false }
+# Unified lighting file conversion (ULD, ROLF -> GLDF)
+light-convert = { path = "../light-other-rs/crates/light-convert" }
 
 # File dialogs (native)
 rfd = "0.15"

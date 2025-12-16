@@ -1,36 +1,81 @@
-//! LDT/Eulumdat diagram viewer component
+//! LDT/Eulumdat diagram viewer component with multiple diagram types
 
 use eulumdat::{
-    diagram::{CartesianDiagram, PolarDiagram, SvgTheme},
-    Eulumdat, IesParser,
+    diagram::{ButterflyDiagram, CartesianDiagram, HeatmapDiagram, PolarDiagram, SvgTheme},
+    BugDiagram, Eulumdat, IesParser, PhotometricSummary,
 };
 use gloo::console::log;
 #[allow(unused_imports)]
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
-#[derive(Clone, PartialEq)]
+/// Available diagram view types
+#[derive(Clone, PartialEq, Copy)]
 pub enum ViewType {
     Polar,
     Cartesian,
+    Heatmap,
+    Butterfly,
+    Bug,
+    Lcs,
+}
+
+impl ViewType {
+    fn label(&self) -> &'static str {
+        match self {
+            ViewType::Polar => "Polar",
+            ViewType::Cartesian => "Cartesian",
+            ViewType::Heatmap => "Heatmap",
+            ViewType::Butterfly => "3D",
+            ViewType::Bug => "BUG",
+            ViewType::Lcs => "LCS",
+        }
+    }
+
+    fn icon(&self) -> &'static str {
+        match self {
+            ViewType::Polar => "◉",
+            ViewType::Cartesian => "📊",
+            ViewType::Heatmap => "🔥",
+            ViewType::Butterfly => "🦋",
+            ViewType::Bug => "🔦",
+            ViewType::Lcs => "📐",
+        }
+    }
+
+    fn all() -> &'static [ViewType] {
+        &[
+            ViewType::Polar,
+            ViewType::Cartesian,
+            ViewType::Heatmap,
+            ViewType::Butterfly,
+            ViewType::Bug,
+            ViewType::Lcs,
+        ]
+    }
 }
 
 #[derive(Properties, PartialEq)]
 pub struct LdtViewerProps {
     pub ldt_data: Vec<u8>,
-    #[prop_or(400.0)]
+    #[prop_or(500.0)]
     pub width: f64,
     #[prop_or(400.0)]
     pub height: f64,
     /// Optional override for luminous flux (from emitter's rated_luminous_flux)
     #[prop_or_default]
     pub flux_override: Option<i32>,
+    /// Show compact tabs (icons only)
+    #[prop_or(false)]
+    pub compact: bool,
 }
 
 #[function_component(LdtViewer)]
 pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
     let view_type = use_state(|| ViewType::Polar);
+    let is_zoomed = use_state(|| false);
     let svg_container = use_node_ref();
+    let zoomed_container = use_node_ref();
 
     // Log incoming data
     log!(format!(
@@ -46,12 +91,22 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
         props.ldt_data.clone()
     };
 
+    // Generate small SVG for inline view
     let svg_content = {
-        let view_type = (*view_type).clone();
+        let view_type = *view_type;
         generate_ldt_svg(&ldt_data, props.width, props.height, view_type)
     };
 
-    // Use effect to set innerHTML for SVG rendering
+    // Generate larger SVG for zoomed modal
+    let zoomed_svg_content = {
+        let view_type = *view_type;
+        // Use larger dimensions for zoomed view
+        let zoomed_width = 800.0;
+        let zoomed_height = 650.0;
+        generate_ldt_svg(&ldt_data, zoomed_width, zoomed_height, view_type)
+    };
+
+    // Use effect to set innerHTML for inline SVG rendering
     {
         let svg_container = svg_container.clone();
         let svg_content = svg_content.clone();
@@ -63,47 +118,116 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
         });
     }
 
-    let on_polar_click = {
-        let view_type = view_type.clone();
-        Callback::from(move |_| {
-            view_type.set(ViewType::Polar);
+    // Use effect to set innerHTML for zoomed SVG rendering
+    {
+        let zoomed_container = zoomed_container.clone();
+        let zoomed_svg_content = zoomed_svg_content.clone();
+        let is_zoomed_val = *is_zoomed;
+        use_effect_with((zoomed_svg_content, is_zoomed_val), move |(zoomed_svg_content, is_zoomed_val)| {
+            if *is_zoomed_val {
+                if let Some(element) = zoomed_container.cast::<web_sys::HtmlElement>() {
+                    element.set_inner_html(zoomed_svg_content);
+                }
+            }
+            || ()
+        });
+    }
+
+    let compact = props.compact;
+
+    // Click handler to open zoom
+    let on_diagram_click = {
+        let is_zoomed = is_zoomed.clone();
+        Callback::from(move |_: MouseEvent| {
+            is_zoomed.set(true);
         })
     };
 
-    let on_cart_click = {
-        let view_type = view_type.clone();
-        Callback::from(move |_| {
-            view_type.set(ViewType::Cartesian);
+    // Click handler to close zoom (on overlay)
+    let on_overlay_click = {
+        let is_zoomed = is_zoomed.clone();
+        Callback::from(move |_: MouseEvent| {
+            is_zoomed.set(false);
         })
     };
 
-    let polar_class = if *view_type == ViewType::Polar {
-        "toggle-btn active"
-    } else {
-        "toggle-btn"
-    };
+    // Prevent click propagation on modal content
+    let on_modal_click = Callback::from(|e: MouseEvent| {
+        e.stop_propagation();
+    });
 
-    let cart_class = if *view_type == ViewType::Cartesian {
-        "toggle-btn active"
-    } else {
-        "toggle-btn"
+    // Close button handler
+    let on_close_click = {
+        let is_zoomed = is_zoomed.clone();
+        Callback::from(move |_: MouseEvent| {
+            is_zoomed.set(false);
+        })
     };
 
     html! {
         <div class="ldt-viewer">
-            <div class="ldt-viewer-controls">
-                <button onclick={on_polar_click} class={polar_class}>
-                    {"Polar"}
-                </button>
-                <button onclick={on_cart_click} class={cart_class}>
-                    {"Cartesian"}
-                </button>
+            <div class="ldt-viewer-tabs">
+                { for ViewType::all().iter().map(|vt| {
+                    let is_active = *view_type == *vt;
+                    let vt_clone = *vt;
+                    let view_type = view_type.clone();
+                    let onclick = Callback::from(move |_| {
+                        view_type.set(vt_clone);
+                    });
+                    let class = if is_active { "ldt-tab active" } else { "ldt-tab" };
+
+                    html! {
+                        <button {onclick} {class} title={vt.label()}>
+                            <span class="tab-icon">{ vt.icon() }</span>
+                            if !compact {
+                                <span class="tab-label">{ vt.label() }</span>
+                            }
+                        </button>
+                    }
+                })}
             </div>
             <div
                 ref={svg_container}
-                class="ldt-diagram"
-                style={format!("width: {}px; height: {}px;", props.width, props.height)}
+                class="ldt-diagram clickable"
+                style={format!("max-width: {}px; max-height: {}px; cursor: zoom-in;", props.width, props.height)}
+                onclick={on_diagram_click}
+                title="Click to enlarge"
             />
+
+            // Zoomed modal overlay
+            if *is_zoomed {
+                <div class="ldt-zoom-overlay" onclick={on_overlay_click}>
+                    <div class="ldt-zoom-modal" onclick={on_modal_click}>
+                        <div class="ldt-zoom-header">
+                            <div class="ldt-zoom-tabs">
+                                { for ViewType::all().iter().map(|vt| {
+                                    let is_active = *view_type == *vt;
+                                    let vt_clone = *vt;
+                                    let view_type = view_type.clone();
+                                    let onclick = Callback::from(move |_| {
+                                        view_type.set(vt_clone);
+                                    });
+                                    let class = if is_active { "ldt-tab active" } else { "ldt-tab" };
+
+                                    html! {
+                                        <button {onclick} {class} title={vt.label()}>
+                                            <span class="tab-icon">{ vt.icon() }</span>
+                                            <span class="tab-label">{ vt.label() }</span>
+                                        </button>
+                                    }
+                                })}
+                            </div>
+                            <button class="ldt-zoom-close" onclick={on_close_click} title="Close (Esc)">
+                                { "✕" }
+                            </button>
+                        </div>
+                        <div
+                            ref={zoomed_container}
+                            class="ldt-zoom-content"
+                        />
+                    </div>
+                </div>
+            }
         </div>
     }
 }
@@ -142,14 +266,33 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType)
     // Use dark theme for the dark background
     let theme = SvgTheme::dark();
 
+    // Calculate photometric summary for enhanced views
+    let summary = PhotometricSummary::from_eulumdat(&ldt);
+
     match view_type {
         ViewType::Polar => {
             let diagram = PolarDiagram::from_eulumdat(&ldt);
-            diagram.to_svg(width, height, &theme)
+            diagram.to_svg_with_summary(width, height, &theme, &summary)
         }
         ViewType::Cartesian => {
             let diagram = CartesianDiagram::from_eulumdat(&ldt, width, height, 8);
+            diagram.to_svg_with_summary(width, height, &theme, &summary)
+        }
+        ViewType::Heatmap => {
+            let diagram = HeatmapDiagram::from_eulumdat(&ldt, width, height);
+            diagram.to_svg_with_summary(width, height, &theme, &summary)
+        }
+        ViewType::Butterfly => {
+            let diagram = ButterflyDiagram::from_eulumdat(&ldt, width, height, 60.0);
             diagram.to_svg(width, height, &theme)
+        }
+        ViewType::Bug => {
+            let bug = BugDiagram::from_eulumdat(&ldt);
+            bug.to_svg_with_details(width.max(550.0), height, &theme)
+        }
+        ViewType::Lcs => {
+            let bug = BugDiagram::from_eulumdat(&ldt);
+            bug.to_lcs_svg(width.max(510.0), height, &theme)
         }
     }
 }

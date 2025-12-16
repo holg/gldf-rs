@@ -314,6 +314,17 @@ html, body {
     background: var(--bg-card-hover);
 }
 
+.btn-outline {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-outline:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
 .btn-success {
     background: var(--accent-green);
     color: white;
@@ -749,6 +760,485 @@ label {
     gap: 16px;
 }
 
+.form-help {
+    display: block;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-primary);
+    margin-bottom: 0;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-blue);
+}
+
+/* Tags Container */
+.tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-input);
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.application-tag {
+    background: var(--accent-blue);
+    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+    color: white;
+}
+
+.tag-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tag-remove:hover {
+    opacity: 1;
+}
+
+/* Input with Button */
+.input-with-button {
+    display: flex;
+    gap: 8px;
+}
+
+.input-with-button input {
+    flex: 1;
+}
+
+.btn-add {
+    padding: 8px 16px;
+    background: var(--accent-blue);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-add:hover:not(:disabled) {
+    background: var(--accent-blue-hover);
+}
+
+.btn-add:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Section Description */
+.section-description {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+/* Empty Message */
+.empty-message {
+    color: var(--text-tertiary);
+    font-style: italic;
+    font-size: 13px;
+    padding: 8px 0;
+}
+
+/* Applications List */
+.applications-list {
+    margin-bottom: 20px;
+}
+
+.applications-list h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+/* Add Custom Form */
+.add-custom-form {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* Electrical Editor */
+.electrical-editor select,
+.applications-editor select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.electrical-editor select:focus,
+.applications-editor select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+/* Photometry Editor */
+.photometry-editor {
+    max-width: 900px;
+}
+
+.photometry-select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.photometry-info {
+    display: flex;
+    gap: 16px;
+    padding: 8px 12px;
+    background: var(--bg-sidebar);
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.photometry-id {
+    color: var(--accent-blue);
+    font-weight: 500;
+}
+
+.photometry-file {
+    color: var(--text-secondary);
+}
+
+.photometry-fieldset {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 16px;
+    background: var(--bg-card);
+}
+
+.photometry-fieldset legend {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0 8px;
+}
+
+.photometry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+/* Photometry Field */
+.photometry-field {
+    position: relative;
+}
+
+.photometry-field .field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.photometry-field label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+}
+
+.photometry-field .field-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.photometry-field .photometry-input {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 0;
+}
+
+.photometry-field .photometry-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.photometry-field .field-unit {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.photometry-field .field-help {
+    display: block;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+/* Value Source Badges */
+.value-source-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* GLDF source - blue */
+.value-source-gldf .value-source-badge,
+.legend-badge.value-source-gldf {
+    background: var(--accent-blue);
+    color: white;
+}
+
+/* Calculated source - orange/yellow */
+.value-source-calculated .value-source-badge,
+.legend-badge.value-source-calculated {
+    background: var(--accent-orange);
+    color: #000;
+}
+
+/* Empty source - subtle */
+.value-source-empty .value-source-badge {
+    display: none;
+}
+
+.value-source-empty .photometry-input {
+    border-style: dashed;
+    color: var(--text-tertiary);
+}
+
+/* Field highlighting based on source */
+.value-source-gldf .photometry-input {
+    border-left: 3px solid var(--accent-blue);
+}
+
+.value-source-calculated .photometry-input {
+    border-left: 3px solid var(--accent-orange);
+}
+
+/* Value source legend */
+.value-source-legend {
+    display: flex;
+    gap: 24px;
+    padding: 8px 12px;
+    background: var(--bg-sidebar);
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* =========================== */
+/* Dual-value Photometry Field */
+/* =========================== */
+
+.photometry-grid-dual {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+.photometry-field-dual {
+    position: relative;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+}
+
+.photometry-field-dual .field-header {
+    margin-bottom: 8px;
+}
+
+.photometry-field-dual .field-header label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.field-values-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.field-value-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+}
+
+.field-value-box.value-source-gldf {
+    border-left: 3px solid var(--accent-blue);
+}
+
+.field-value-box.value-source-calculated {
+    border-left: 3px solid var(--accent-orange);
+    background: rgba(255, 159, 10, 0.05);
+}
+
+.field-value-box.value-source-empty {
+    border-style: dashed;
+    opacity: 0.7;
+}
+
+.field-value-box .value-source-badge {
+    align-self: flex-start;
+}
+
+.field-value-box .field-input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.field-value-box .photometry-input {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--bg-content);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 0;
+}
+
+.field-value-box .photometry-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+}
+
+.field-value-box .photometry-input::placeholder {
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.field-display-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: transparent;
+    border-radius: 4px;
+    min-height: 32px;
+}
+
+.calculated-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent-orange);
+    font-family: var(--font-mono);
+}
+
+.field-value-box .field-unit {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.photometry-field-dual .field-help {
+    display: block;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 6px;
+}
+
+/* Responsive: stack on narrow screens */
+@media (max-width: 600px) {
+    .field-values-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Photometry card for read-only view */
+.photometry-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.photometry-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 8px;
+}
+
+.photometry-card .file-ref {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
 /* JSON/Code Display */
 .code-block {
     background: var(--bg-input);
@@ -821,12 +1311,185 @@ label {
     background: #1a1a2e;
     border-radius: var(--radius-sm);
     min-height: 300px;
+    overflow: hidden;
 }
 
 .ldt-diagram svg {
     max-width: 100%;
+    max-height: 100%;
+    width: auto;
     height: auto;
     display: block;
+    object-fit: contain;
+}
+
+/* LDT Viewer Tabs */
+.ldt-viewer-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-sidebar);
+    flex-wrap: wrap;
+}
+
+.ldt-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.ldt-tab:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
+}
+
+.ldt-tab.active {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+}
+
+.ldt-tab .tab-icon {
+    font-size: 14px;
+}
+
+.ldt-tab .tab-label {
+    white-space: nowrap;
+}
+
+/* Compact mode - icons only */
+.ldt-viewer.compact .ldt-tab {
+    padding: 8px 10px;
+}
+
+.ldt-viewer.compact .ldt-tab .tab-label {
+    display: none;
+}
+
+/* LDT Diagram clickable hint */
+.ldt-diagram.clickable {
+    position: relative;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ldt-diagram.clickable:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(10, 132, 255, 0.3);
+}
+
+.ldt-diagram.clickable::after {
+    content: "🔍";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 16px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.ldt-diagram.clickable:hover::after {
+    opacity: 1;
+}
+
+/* LDT Zoom Modal Overlay */
+.ldt-zoom-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.ldt-zoom-modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.2s ease;
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.ldt-zoom-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ldt-zoom-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.ldt-zoom-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    margin-left: 16px;
+}
+
+.ldt-zoom-close:hover {
+    background: var(--accent-red);
+    color: white;
+}
+
+.ldt-zoom-content {
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    min-width: 600px;
+    min-height: 500px;
+}
+
+.ldt-zoom-content svg {
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /* L3D Viewer Container */
@@ -1264,6 +1927,164 @@ label {
     overflow: hidden;
 }
 
+/* Expandable Variant Cards */
+.variant-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.variant-card .card-header:hover {
+    background: rgba(0,0,0,0.3);
+}
+
+.variant-card .card-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.variant-card .expand-icon {
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
+.variant-card.expanded {
+    grid-column: 1 / -1;
+}
+
+.variant-card .card-body {
+    padding: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.variant-card .variant-info {
+    margin-bottom: 16px;
+}
+
+.variant-card .variant-info .detail {
+    display: flex;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.variant-card .variant-info .detail.wide {
+    flex-direction: column;
+    gap: 4px;
+}
+
+.variant-card .variant-info .detail .label {
+    color: var(--text-tertiary);
+    margin-right: 8px;
+    min-width: 120px;
+}
+
+.variant-card .variant-info .detail .value.code {
+    font-family: var(--font-mono);
+    color: var(--accent-cyan);
+}
+
+/* Mountings Details */
+.mountings-details {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.mountings-details h5 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mountings-details.empty {
+    opacity: 0.6;
+}
+
+.mountings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.mounting-detail {
+    background: var(--bg-sidebar);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    border-left: 3px solid var(--accent-blue);
+}
+
+.mounting-type {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    display: block;
+    margin-bottom: 6px;
+}
+
+.mounting-subtypes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.mounting-subtypes li {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 2px 0;
+}
+
+.mounting-subtypes li::before {
+    content: "•";
+    color: var(--text-tertiary);
+    margin-right: 6px;
+}
+
+/* Geometry & Emitter sections in variants */
+.geometry-info,
+.emitter-refs {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.geometry-info h5,
+.emitter-refs h5 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.emitter-refs ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.emitter-refs li {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent-orange);
+    background: rgba(255, 159, 10, 0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
 .card-header-row {
     display: flex;
     justify-content: space-between;
@@ -1656,4 +2477,213 @@ input#file-upload {
 
 .viewer-container.bevy-viewer {
     min-height: 600px;
+}
+
+/* =========================== */
+/* App Action Buttons (Clear/Help) */
+/* =========================== */
+
+.app-actions {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+}
+
+.app-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    backdrop-filter: blur(10px);
+}
+
+.app-action-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.app-action-btn.clear:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.app-action-btn.help:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.app-action-btn .icon {
+    font-size: 14px;
+}
+
+.app-action-btn .label {
+    font-size: 12px;
+}
+
+/* =========================== */
+/* Help Overlay */
+/* =========================== */
+
+.help-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+
+.help-modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.2s ease;
+}
+
+.help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.help-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.help-close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.help-close:hover {
+    background: var(--accent-red);
+    color: white;
+}
+
+.help-content {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.help-section {
+    margin-bottom: 24px;
+}
+
+.help-section:last-child {
+    margin-bottom: 0;
+}
+
+.help-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.help-list {
+    display: grid;
+    gap: 8px;
+}
+
+.help-list dt {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.help-list dd {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-left: 0;
+    padding-left: 12px;
+    border-left: 2px solid var(--border-subtle);
+    margin-bottom: 8px;
+}
+
+.help-formats,
+.help-tips {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.help-formats li,
+.help-tips li {
+    padding: 8px 12px;
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.help-formats li strong {
+    color: var(--accent-orange);
+    font-family: var(--font-mono);
+}
+
+.help-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+}
+
+.help-version {
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+
+.help-link {
+    font-size: 12px;
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.help-link:hover {
+    text-decoration: underline;
 }
