@@ -83,8 +83,7 @@ eulumdat-bevy = "0.3.0"
 
 # Photometric data
 eulumdat = "0.3.0"
-l3d_rs = "0.2.1"
-
+l3d_rs = "0.2.3"
 # Unified lighting file conversion (ULD, ROLF -> GLDF) - not published yet
 # light-convert = { path = "../light-other-rs/crates/light-convert" }
 
