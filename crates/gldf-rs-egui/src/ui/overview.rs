@@ -22,10 +22,8 @@ pub fn render_overview(ui: &mut egui::Ui, app: &mut GldfViewerApp) {
                         ui.heading(manufacturer);
                         ui.label(
                             egui::RichText::new(format!(
-                                "GLDF Format {}.{}.{}",
-                                header.format_version.major,
-                                header.format_version.minor,
-                                header.format_version.pre_release
+                                "GLDF Format {}",
+                                header.format_version.to_version_string()
                             ))
                             .weak(),
                         );

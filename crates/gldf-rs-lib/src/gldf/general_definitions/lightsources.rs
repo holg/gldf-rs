@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use super::electrical::{ControlGearReference, EnergyLabels, PowerRange, Voltage};
 use super::geometries::Rotation;
-use super::sensors::Sensor;
 use super::{Locale, LocaleFoo};
 
 /// Represents a factor used to adjust flux values for various parameters.
@@ -526,7 +525,25 @@ pub struct FixedLightEmitter {
     pub emergency_rated_luminous_flux: Option<String>,
 }
 
+/// Represents a reference to a sensor in SensorEmitter.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SensorReference {
+    /// The ID of the referenced sensor.
+    #[serde(rename = "@sensorId")]
+    pub sensor_id: String,
+}
+
+/// Represents a sensor emitter in the GLDF data structure.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SensorEmitter {
+    /// Reference to the sensor definition.
+    #[serde(rename = "SensorReference")]
+    pub sensor_reference: SensorReference,
+}
+
 /// Represents an emitter in the GLDF data structure.
+/// Note: According to GLDF schema, Emitter must have at least one child
+/// (ChangeableLightEmitter, FixedLightEmitter, MultiChannelLightEmitter, or SensorEmitter).
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emitter {
     /// The unique identifier of the emitter.
@@ -534,24 +551,52 @@ pub struct Emitter {
     pub id: String,
 
     /// Collection of changeable light emitters.
-    #[serde(rename = "ChangeableLightEmitter", default)]
+    #[serde(
+        rename = "ChangeableLightEmitter",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub changeable_light_emitter: Vec<ChangeableLightEmitter>,
 
     /// Collection of fixed light emitters.
-    #[serde(rename = "FixedLightEmitter", default)]
+    #[serde(
+        rename = "FixedLightEmitter",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub fixed_light_emitter: Vec<FixedLightEmitter>,
 
-    /// Collection of sensors associated with the emitter.
-    #[serde(rename = "Sensor", default)]
-    pub sensor: Vec<Sensor>,
+    /// Collection of sensor emitters.
+    #[serde(
+        rename = "SensorEmitter",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub sensor_emitter: Vec<SensorEmitter>,
+}
+
+impl Emitter {
+    /// Returns true if the emitter has no children
+    pub fn is_empty(&self) -> bool {
+        self.changeable_light_emitter.is_empty()
+            && self.fixed_light_emitter.is_empty()
+            && self.sensor_emitter.is_empty()
+    }
 }
 
 /// Represents a collection of emitters in the GLDF data structure.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emitters {
     /// Collection of emitters.
-    #[serde(rename = "Emitter", default)]
+    #[serde(rename = "Emitter", default, skip_serializing_if = "Vec::is_empty")]
     pub emitter: Vec<Emitter>,
+}
+
+impl Emitters {
+    /// Returns true if there are no emitters or all emitters are empty
+    pub fn is_empty(&self) -> bool {
+        self.emitter.is_empty() || self.emitter.iter().all(|e| e.is_empty())
+    }
 }
 
 /// Represents a rectangular emitter in the GLDF data structure.

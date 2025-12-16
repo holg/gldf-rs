@@ -7,7 +7,7 @@ use gldf_rs::gldf::{
     product_definitions::{
         Applications, DescriptiveAttributes, Electrical, Marketing, ProductMetaData,
     },
-    GldfProduct,
+    FormatVersion, GldfProduct,
 };
 use std::rc::Rc;
 use yew::prelude::*;
@@ -28,12 +28,8 @@ pub enum GldfAction {
     SetCreatedWithApplication(String),
     /// Update the default language
     SetDefaultLanguage(Option<String>),
-    /// Update format version
-    SetFormatVersion {
-        major: i32,
-        minor: i32,
-        pre_release: i32,
-    },
+    /// Update format version (e.g., "1.0.0-rc.3")
+    SetFormatVersion(String),
     /// Add a file to the files collection
     AddFile {
         id: String,
@@ -162,14 +158,8 @@ impl Reducible for GldfState {
             GldfAction::SetDefaultLanguage(lang) => {
                 new_state.product.header.default_language = lang;
             }
-            GldfAction::SetFormatVersion {
-                major,
-                minor,
-                pre_release,
-            } => {
-                new_state.product.header.format_version.major = major;
-                new_state.product.header.format_version.minor = minor;
-                new_state.product.header.format_version.pre_release = pre_release;
+            GldfAction::SetFormatVersion(version) => {
+                new_state.product.header.format_version = FormatVersion::from_string(&version);
             }
             GldfAction::AddFile {
                 id,

@@ -1,13 +1,17 @@
 {
   "product": {
     "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
-    "@xsi:noNamespaceSchemaLocation": "https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd",
+    "@xsi:noNamespaceSchemaLocation": "https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd",
     "Header": {
-      "Author": "_empty_",
       "Manufacturer": "demo",
-      "CreationTimeCode": "2022-03-14T12:16:00",
+      "FormatVersion": {
+        "@major": 1,
+        "@minor": 0,
+        "@pre-release": 3
+      },
       "CreatedWithApplication": "GLDF Edit",
-      "FormatVersion": "1.0.0-rc.1",
+      "GldfCreationTimeCode": "2022-03-14T12:16:00",
+      "Author": "_empty_",
       "DefaultLanguage": "en-US",
       "LicenseKeys": {
         "LicenseKey": [

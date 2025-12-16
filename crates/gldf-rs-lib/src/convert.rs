@@ -267,7 +267,7 @@ pub fn ldt_metadata_to_gldf(
                 rated_luminous_flux: meta.lumens.map(|l| l as i32),
                 ..Default::default()
             }],
-            sensor: vec![],
+            sensor_emitter: vec![],
         }],
     });
 
@@ -293,7 +293,7 @@ pub fn ldt_metadata_to_gldf(
     let gldf_product = GldfProduct {
         path: String::new(),
         xmlns_xsi: "http://www.w3.org/2001/XMLSchema-instance".to_string(),
-        xsnonamespaceschemalocation: "https://gldf.io/xsd/gldf/1.0.0/gldf.xsd".to_string(),
+        xsnonamespaceschemalocation: "https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd".to_string(),
         header: Header {
             manufacturer: meta
                 .manufacturer
@@ -301,11 +301,7 @@ pub fn ldt_metadata_to_gldf(
                 .unwrap_or_else(|| "Unknown".to_string()),
             creation_time_code: timestamp,
             created_with_application: "gldf-rs".to_string(),
-            format_version: FormatVersion {
-                major: 1,
-                minor: 0,
-                pre_release: 0,
-            },
+            format_version: FormatVersion::default(),
             ..Default::default()
         },
         general_definitions: GeneralDefinitions {

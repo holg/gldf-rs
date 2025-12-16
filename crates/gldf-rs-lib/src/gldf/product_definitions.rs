@@ -115,6 +115,14 @@ pub struct LuminaireMaintenance {
 /// Represents metadata for a luminaire product.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProductMetaData {
+    /// The unique product identifier (required in rc.3, must come before ProductNumber).
+    #[serde(
+        rename = "UniqueProductId",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub unique_product_id: String,
+
     /// The product number, if available.
     #[serde(rename = "ProductNumber", skip_serializing_if = "Option::is_none")]
     pub product_number: Option<LocaleFoo>,
@@ -186,7 +194,11 @@ pub struct CircularCutout {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recessed {
     /// The recessed depth in mm.
-    #[serde(rename = "@recessedDepth", default)]
+    #[serde(
+        rename = "@recessedDepth",
+        default,
+        skip_serializing_if = "is_zero_i32"
+    )]
     pub recessed_depth: i32,
 
     /// The rectangular cutout details for the recessed luminaire.
@@ -204,10 +216,10 @@ pub struct Recessed {
         skip_serializing_if = "Option::is_none"
     )]
     pub circular_cutout: Option<CircularCutout>,
+}
 
-    /// The overall depth of the recessed luminaire in mm.
-    #[serde(rename = "@Depth", default)]
-    pub depth: i32,
+fn is_zero_i32(val: &i32) -> bool {
+    *val == 0
 }
 
 /// Represents a surface-mounted luminaire.

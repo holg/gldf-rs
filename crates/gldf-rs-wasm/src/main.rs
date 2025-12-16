@@ -2629,15 +2629,15 @@ impl App {
                                     </div>
                                 }
 
-                                // Sensors
-                                if !emitter.sensor.is_empty() {
+                                // Sensor Emitters
+                                if !emitter.sensor_emitter.is_empty() {
                                     <div class="sensors" style="margin-top: 12px;">
-                                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Sensors" }</h4>
+                                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Sensor Emitters" }</h4>
                                         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                                            { for emitter.sensor.iter().map(|s| {
+                                            { for emitter.sensor_emitter.iter().map(|s| {
                                                 html! {
                                                     <span style="background: var(--bg-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px;">
-                                                        { &s.id }
+                                                        { &s.sensor_reference.sensor_id }
                                                     </span>
                                                 }
                                             })}

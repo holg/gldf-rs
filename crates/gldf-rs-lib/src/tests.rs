@@ -8,7 +8,7 @@ use serde::de::StdError;
 
 #[cfg(feature = "http")]
 use super::fetch_content_from_url;
-use crate::gldf::GldfProduct;
+use crate::gldf::{FormatVersion, GldfProduct};
 
 const GLDF_FILE_NAME: &str = "../../tests/data/R2MCOBSIK-30.gldf";
 
@@ -330,8 +330,7 @@ fn test_create_new_gldf() {
     // Set header info
     editable.product.header.author = "New Product Author".to_string();
     editable.product.header.manufacturer = "Test Manufacturer".to_string();
-    editable.product.header.format_version.major = 1;
-    editable.product.header.format_version.minor = 0;
+    editable.product.header.format_version = FormatVersion::from_string("1.0.0-rc.3");
 
     // Add a file definition
     let file = File {

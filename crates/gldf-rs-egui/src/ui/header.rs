@@ -61,35 +61,9 @@ pub fn render_header(ui: &mut egui::Ui, app: &GldfViewerApp) {
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
-                    ui.label("Major:");
+                    ui.label("Version:");
                     ui.label(
-                        egui::RichText::new(header.format_version.major.to_string()).monospace(),
-                    );
-                    ui.add_space(20.0);
-
-                    ui.label("Minor:");
-                    ui.label(
-                        egui::RichText::new(header.format_version.minor.to_string()).monospace(),
-                    );
-                    ui.add_space(20.0);
-
-                    ui.label("Pre-release:");
-                    ui.label(
-                        egui::RichText::new(header.format_version.pre_release.to_string())
-                            .monospace(),
-                    );
-                    ui.add_space(20.0);
-
-                    ui.separator();
-
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "v{}.{}.{}",
-                            header.format_version.major,
-                            header.format_version.minor,
-                            header.format_version.pre_release
-                        ))
-                        .heading(),
+                        egui::RichText::new(header.format_version.to_version_string()).monospace(),
                     );
                 });
             });
