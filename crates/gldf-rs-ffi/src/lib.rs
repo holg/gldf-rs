@@ -116,6 +116,17 @@ pub struct GldfFileContent {
     pub data: Vec<u8>,
 }
 
+/// Electrical attributes from GLDF
+#[derive(uniffi::Record, Debug, Clone, Default)]
+pub struct GldfElectrical {
+    pub safety_class: Option<String>,
+    pub ip_code: Option<String>,
+    pub power_factor: Option<f64>,
+    pub constant_light_output: Option<bool>,
+    pub light_distribution: Option<String>,
+    pub switching_capacity: Option<String>,
+}
+
 /// GLDF Engine for parsing and manipulating GLDF files
 #[derive(uniffi::Object)]
 pub struct GldfEngine {
@@ -699,6 +710,117 @@ impl GldfEngine {
             file.type_attr = file_type;
             *self.is_modified.write().unwrap() = true;
         }
+    }
+
+    // =========================================================================
+    // Electrical Attributes Editing
+    // =========================================================================
+
+    /// Set electrical safety class (I, II, III or None)
+    pub fn set_electrical_safety_class(&self, value: Option<String>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).electrical_safety_class = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Set IP code (ingress protection)
+    pub fn set_ip_code(&self, value: Option<String>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).ingress_protection_ip_code = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Set power factor (0.0 - 1.0)
+    pub fn set_power_factor(&self, value: Option<f64>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).power_factor = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Set constant light output (CLO)
+    pub fn set_constant_light_output(&self, value: Option<bool>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).constant_light_output = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Set light distribution type
+    pub fn set_light_distribution(&self, value: Option<String>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).light_distribution = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Set switching capacity
+    pub fn set_switching_capacity(&self, value: Option<String>) {
+        let mut product = self.product.write().unwrap();
+        ensure_electrical(&mut product).switching_capacity = value;
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Get electrical attributes
+    pub fn get_electrical(&self) -> GldfElectrical {
+        let product = self.product.read().unwrap();
+        let electrical = product
+            .product_definitions
+            .product_meta_data
+            .as_ref()
+            .and_then(|m| m.descriptive_attributes.as_ref())
+            .and_then(|d| d.electrical.as_ref());
+
+        GldfElectrical {
+            safety_class: electrical.and_then(|e| e.electrical_safety_class.clone()),
+            ip_code: electrical.and_then(|e| e.ingress_protection_ip_code.clone()),
+            power_factor: electrical.and_then(|e| e.power_factor),
+            constant_light_output: electrical.and_then(|e| e.constant_light_output),
+            light_distribution: electrical.and_then(|e| e.light_distribution.clone()),
+            switching_capacity: electrical.and_then(|e| e.switching_capacity.clone()),
+        }
+    }
+
+    // =========================================================================
+    // Applications Editing
+    // =========================================================================
+
+    /// Get current applications list
+    pub fn get_applications(&self) -> Vec<String> {
+        let product = self.product.read().unwrap();
+        product
+            .product_definitions
+            .product_meta_data
+            .as_ref()
+            .and_then(|m| m.descriptive_attributes.as_ref())
+            .and_then(|d| d.marketing.as_ref())
+            .and_then(|m| m.applications.as_ref())
+            .map(|a| a.application.clone())
+            .unwrap_or_default()
+    }
+
+    /// Add an application
+    pub fn add_application(&self, application: String) {
+        let mut product = self.product.write().unwrap();
+        ensure_applications(&mut product)
+            .application
+            .push(application);
+        *self.is_modified.write().unwrap() = true;
+    }
+
+    /// Remove an application by index
+    pub fn remove_application(&self, index: u32) {
+        let mut product = self.product.write().unwrap();
+        let apps = &mut ensure_applications(&mut product).application;
+        let idx = index as usize;
+        if idx < apps.len() {
+            apps.remove(idx);
+            *self.is_modified.write().unwrap() = true;
+        }
+    }
+
+    /// Set all applications
+    pub fn set_applications(&self, applications: Vec<String>) {
+        let mut product = self.product.write().unwrap();
+        ensure_applications(&mut product).application = applications;
+        *self.is_modified.write().unwrap() = true;
     }
 
     // =========================================================================
@@ -1608,6 +1730,62 @@ fn get_unit_scale(unit: &str) -> f64 {
         "in" => 0.0254,
         _ => 1.0, // "m" or default
     }
+}
+
+// -----------------------------------------------------------------------------
+// Editing Helper Functions
+// -----------------------------------------------------------------------------
+
+use gldf_rs::gldf::product_definitions::{
+    Applications, DescriptiveAttributes, Electrical, Marketing, ProductMetaData,
+};
+
+/// Helper to ensure ProductMetaData exists
+fn ensure_product_meta_data(product: &mut gldf_rs::GldfProduct) -> &mut ProductMetaData {
+    if product.product_definitions.product_meta_data.is_none() {
+        product.product_definitions.product_meta_data = Some(ProductMetaData::default());
+    }
+    product
+        .product_definitions
+        .product_meta_data
+        .as_mut()
+        .unwrap()
+}
+
+/// Helper to ensure DescriptiveAttributes exists
+fn ensure_descriptive_attributes(product: &mut gldf_rs::GldfProduct) -> &mut DescriptiveAttributes {
+    let meta = ensure_product_meta_data(product);
+    if meta.descriptive_attributes.is_none() {
+        meta.descriptive_attributes = Some(DescriptiveAttributes::default());
+    }
+    meta.descriptive_attributes.as_mut().unwrap()
+}
+
+/// Helper to ensure Electrical exists
+fn ensure_electrical(product: &mut gldf_rs::GldfProduct) -> &mut Electrical {
+    let attrs = ensure_descriptive_attributes(product);
+    if attrs.electrical.is_none() {
+        attrs.electrical = Some(Electrical::default());
+    }
+    attrs.electrical.as_mut().unwrap()
+}
+
+/// Helper to ensure Marketing exists
+fn ensure_marketing(product: &mut gldf_rs::GldfProduct) -> &mut Marketing {
+    let attrs = ensure_descriptive_attributes(product);
+    if attrs.marketing.is_none() {
+        attrs.marketing = Some(Marketing::default());
+    }
+    attrs.marketing.as_mut().unwrap()
+}
+
+/// Helper to ensure Applications exists
+fn ensure_applications(product: &mut gldf_rs::GldfProduct) -> &mut Applications {
+    let marketing = ensure_marketing(product);
+    if marketing.applications.is_none() {
+        marketing.applications = Some(Applications::default());
+    }
+    marketing.applications.as_mut().unwrap()
 }
 
 /// Get asset from L3D file by filename

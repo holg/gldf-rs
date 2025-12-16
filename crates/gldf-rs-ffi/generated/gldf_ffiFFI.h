@@ -277,14 +277,29 @@ void*_Nonnull uniffi_gldf_ffi_fn_constructor_gldfengine_new_empty(RustCallStatus
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_ADD_APPLICATION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_ADD_APPLICATION
+void uniffi_gldf_ffi_fn_method_gldfengine_add_application(void*_Nonnull ptr, RustBuffer application, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_ADD_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_ADD_FILE
 void uniffi_gldf_ffi_fn_method_gldfengine_add_file(void*_Nonnull ptr, RustBuffer id, RustBuffer file_name, RustBuffer content_type, RustBuffer file_type, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_APPLICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_APPLICATIONS
+RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_applications(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_archive_file(void*_Nonnull ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_ELECTRICAL
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_ELECTRICAL
+RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_electrical(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_EMITTER_DATA
@@ -372,14 +387,29 @@ RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_list_archive_files(void*_Nonnull
 void uniffi_gldf_ffi_fn_method_gldfengine_mark_saved(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_REMOVE_APPLICATION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_REMOVE_APPLICATION
+void uniffi_gldf_ffi_fn_method_gldfengine_remove_application(void*_Nonnull ptr, uint32_t index, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_REMOVE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_REMOVE_FILE
 void uniffi_gldf_ffi_fn_method_gldfengine_remove_file(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_APPLICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_APPLICATIONS
+void uniffi_gldf_ffi_fn_method_gldfengine_set_applications(void*_Nonnull ptr, RustBuffer applications, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_AUTHOR
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_AUTHOR
 void uniffi_gldf_ffi_fn_method_gldfengine_set_author(void*_Nonnull ptr, RustBuffer author, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_CONSTANT_LIGHT_OUTPUT
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_CONSTANT_LIGHT_OUTPUT
+void uniffi_gldf_ffi_fn_method_gldfengine_set_constant_light_output(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_CREATED_WITH_APPLICATION
@@ -397,14 +427,39 @@ void uniffi_gldf_ffi_fn_method_gldfengine_set_creation_time_code(void*_Nonnull p
 void uniffi_gldf_ffi_fn_method_gldfengine_set_default_language(void*_Nonnull ptr, RustBuffer language, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_ELECTRICAL_SAFETY_CLASS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_ELECTRICAL_SAFETY_CLASS
+void uniffi_gldf_ffi_fn_method_gldfengine_set_electrical_safety_class(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_FORMAT_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_FORMAT_VERSION
 void uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(void*_Nonnull ptr, RustBuffer version, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_IP_CODE
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_IP_CODE
+void uniffi_gldf_ffi_fn_method_gldfengine_set_ip_code(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_LIGHT_DISTRIBUTION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_LIGHT_DISTRIBUTION
+void uniffi_gldf_ffi_fn_method_gldfengine_set_light_distribution(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_MANUFACTURER
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_MANUFACTURER
 void uniffi_gldf_ffi_fn_method_gldfengine_set_manufacturer(void*_Nonnull ptr, RustBuffer manufacturer, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_POWER_FACTOR
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_POWER_FACTOR
+void uniffi_gldf_ffi_fn_method_gldfengine_set_power_factor(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_SWITCHING_CAPACITY
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_SWITCHING_CAPACITY
+void uniffi_gldf_ffi_fn_method_gldfengine_set_switching_capacity(void*_Nonnull ptr, RustBuffer value, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_TO_JSON
@@ -785,15 +840,33 @@ uint16_t uniffi_gldf_ffi_checksum_func_parse_l3d_structure(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_APPLICATION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_APPLICATION
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_add_application(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_FILE
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_add_file(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_APPLICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_APPLICATIONS
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_applications(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ELECTRICAL
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ELECTRICAL
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_electrical(void
     
 );
 #endif
@@ -899,15 +972,33 @@ uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_mark_saved(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_REMOVE_APPLICATION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_REMOVE_APPLICATION
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_remove_application(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_REMOVE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_REMOVE_FILE
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_remove_file(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_APPLICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_APPLICATIONS
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_applications(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_AUTHOR
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_AUTHOR
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_author(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_CONSTANT_LIGHT_OUTPUT
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_CONSTANT_LIGHT_OUTPUT
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_constant_light_output(void
     
 );
 #endif
@@ -929,15 +1020,45 @@ uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_default_language(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_ELECTRICAL_SAFETY_CLASS
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_ELECTRICAL_SAFETY_CLASS
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_electrical_safety_class(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_FORMAT_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_FORMAT_VERSION
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_IP_CODE
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_IP_CODE
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_ip_code(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_LIGHT_DISTRIBUTION
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_LIGHT_DISTRIBUTION
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_light_distribution(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_MANUFACTURER
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_MANUFACTURER
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_manufacturer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_POWER_FACTOR
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_POWER_FACTOR
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_power_factor(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_SWITCHING_CAPACITY
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_SET_SWITCHING_CAPACITY
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_set_switching_capacity(void
     
 );
 #endif
