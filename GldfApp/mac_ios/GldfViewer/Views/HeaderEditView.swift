@@ -107,10 +107,11 @@ struct HeaderEditView: View {
     }
 
     private func updateVersion() {
-        let major = Int32(versionMajor) ?? 1
-        let minor = Int32(versionMinor) ?? 0
-        let preRelease = Int32(versionPreRelease) ?? 0
-        appState.updateFormatVersion(major: major, minor: minor, preRelease: preRelease)
+        let major = Int(versionMajor) ?? 1
+        let minor = Int(versionMinor) ?? 0
+        let preRelease = Int(versionPreRelease) ?? 0
+        let versionString = preRelease > 0 ? "\(major).\(minor).\(preRelease)" : "\(major).\(minor)"
+        appState.updateFormatVersion(versionString)
     }
 }
 
