@@ -8,7 +8,7 @@ version = "0.3.3"
 description = "Python bindings for GLDF (General Lighting Data Format) parsing library"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 authors = [{ name = "Holger Trahe" }]
 keywords = ["gldf", "lighting", "photometry", "eulumdat", "ies"]
 classifiers = [
