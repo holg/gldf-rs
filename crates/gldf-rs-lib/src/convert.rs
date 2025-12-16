@@ -28,15 +28,13 @@
 use eulumdat::{Eulumdat, IesParser};
 
 use crate::{
-    BufFile, FileBufGldf,
     gldf::{
-        GldfProduct, Header, FormatVersion, GeneralDefinitions, ProductDefinitions,
-        ProductMetaData, Variants, Variant,
-        Files, File, Photometries, Photometry, PhotometryFileReference,
-        LightSources, FixedLightSource,
-        Emitters, Emitter, FixedLightEmitter, LightSourceReference, PhotometryReference,
-        Locale, LocaleFoo,
+        Emitter, Emitters, File, Files, FixedLightEmitter, FixedLightSource, FormatVersion,
+        GeneralDefinitions, GldfProduct, Header, LightSourceReference, LightSources, Locale,
+        LocaleFoo, Photometries, Photometry, PhotometryFileReference, PhotometryReference,
+        ProductDefinitions, ProductMetaData, Variant, Variants,
     },
+    BufFile, FileBufGldf,
 };
 
 /// Metadata extracted from an Eulumdat/IES file.
@@ -89,11 +87,19 @@ impl LdtMetadata {
             },
             lumens: {
                 let flux = ldt.total_luminous_flux();
-                if flux > 0.0 { Some(flux) } else { None }
+                if flux > 0.0 {
+                    Some(flux)
+                } else {
+                    None
+                }
             },
             watts: {
                 let watts = ldt.total_wattage();
-                if watts > 0.0 { Some(watts) } else { None }
+                if watts > 0.0 {
+                    Some(watts)
+                } else {
+                    None
+                }
             },
             lamp_count: lamp_set.map(|ls| ls.num_lamps),
             lamp_type: lamp_set.and_then(|ls| {
@@ -152,8 +158,8 @@ impl LdtMetadata {
 #[cfg(feature = "eulumdat")]
 pub fn ldt_to_gldf(data: &[u8], filename: &str) -> Result<FileBufGldf, String> {
     // Parse the photometric data
-    let content = std::str::from_utf8(data)
-        .map_err(|e| format!("Invalid UTF-8 encoding: {:?}", e))?;
+    let content =
+        std::str::from_utf8(data).map_err(|e| format!("Invalid UTF-8 encoding: {:?}", e))?;
 
     let ldt = if content.trim_start().starts_with("IESNA") {
         IesParser::parse(content).map_err(|e| format!("IES parse error: {:?}", e))?
@@ -177,7 +183,11 @@ pub fn ldt_to_gldf(data: &[u8], filename: &str) -> Result<FileBufGldf, String> {
 /// * `meta` - The extracted LDT metadata
 /// * `data` - The raw LDT/IES file bytes to embed
 /// * `filename` - Filename for the embedded file
-pub fn ldt_metadata_to_gldf(meta: &LdtMetadata, data: &[u8], filename: &str) -> Result<FileBufGldf, String> {
+pub fn ldt_metadata_to_gldf(
+    meta: &LdtMetadata,
+    data: &[u8],
+    filename: &str,
+) -> Result<FileBufGldf, String> {
     // Determine content type from filename
     let is_ies = filename.to_lowercase().ends_with(".ies");
     let content_type = if is_ies { "ldc/ies" } else { "ldc/eulumdat" };
@@ -285,7 +295,10 @@ pub fn ldt_metadata_to_gldf(meta: &LdtMetadata, data: &[u8], filename: &str) -> 
         xmlns_xsi: "http://www.w3.org/2001/XMLSchema-instance".to_string(),
         xsnonamespaceschemalocation: "https://gldf.io/xsd/gldf/1.0.0/gldf.xsd".to_string(),
         header: Header {
-            manufacturer: meta.manufacturer.clone().unwrap_or_else(|| "Unknown".to_string()),
+            manufacturer: meta
+                .manufacturer
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string()),
             creation_time_code: timestamp,
             created_with_application: "gldf-rs".to_string(),
             format_version: FormatVersion {

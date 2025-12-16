@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "GPL-3.0-or-later"
@@ -20,7 +20,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.3.2", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.3.3", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }
@@ -102,9 +102,9 @@ web-sys = "0.3"
 yew = { version = "0.22", features = ["csr"] }
 
 # Leptos (for SSR-capable WASM)
+console_error_panic_hook = "0.1"
 leptos = { version = "0.7", features = ["csr"] }
 leptos_router = "0.7"
-console_error_panic_hook = "0.1"
 
 # Python
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py37"] }

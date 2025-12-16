@@ -90,13 +90,19 @@ fn parse_obj(content: &str) -> Option<ObjData> {
                 // Parse face - can be v, v/vt, v/vt/vn, or v//vn
                 let mut face_indices = Vec::new();
 
-                for i in 1..parts.len() {
-                    let vertex_parts: Vec<&str> = parts[i].split('/').collect();
+                for part in parts.iter().skip(1) {
+                    let vertex_parts: Vec<&str> = part.split('/').collect();
 
                     let pos_idx: usize = vertex_parts[0].parse::<usize>().unwrap_or(1) - 1;
                     let uv_idx: Option<usize> = vertex_parts
                         .get(1)
-                        .and_then(|s| if s.is_empty() { None } else { s.parse::<usize>().ok() })
+                        .and_then(|s| {
+                            if s.is_empty() {
+                                None
+                            } else {
+                                s.parse::<usize>().ok()
+                            }
+                        })
                         .map(|i| i - 1);
                     let norm_idx: Option<usize> = vertex_parts
                         .get(2)
@@ -106,7 +112,10 @@ fn parse_obj(content: &str) -> Option<ObjData> {
                     let vertex_idx = positions.len() as u32;
 
                     // Get position
-                    let pos = temp_positions.get(pos_idx).copied().unwrap_or([0.0, 0.0, 0.0]);
+                    let pos = temp_positions
+                        .get(pos_idx)
+                        .copied()
+                        .unwrap_or([0.0, 0.0, 0.0]);
                     positions.push(pos);
 
                     // Get UV
@@ -173,7 +182,10 @@ fn parse_obj(content: &str) -> Option<ObjData> {
 
 /// Create a Bevy mesh from OBJ data
 fn create_mesh_from_obj(obj: &ObjData) -> Mesh {
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, obj.positions.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, obj.normals.clone());
@@ -191,12 +203,19 @@ fn setup_l3d_model(
     scene_data: Res<GldfSceneData>,
     settings: Res<SceneSettings>,
 ) {
-    log(&format!("[L3D] setup_l3d_model called, has L3D: {}, has LDT: {}, emitters: {}",
+    log(&format!(
+        "[L3D] setup_l3d_model called, has L3D: {}, has LDT: {}, emitters: {}",
         scene_data.l3d_data.is_some(),
         scene_data.ldt_data.is_some(),
         scene_data.emitter_config.len()
     ));
-    spawn_l3d_model(&mut commands, &mut meshes, &mut materials, &scene_data, &settings);
+    spawn_l3d_model(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &scene_data,
+        &settings,
+    );
 }
 
 /// Update L3D model when data changes
@@ -212,7 +231,8 @@ fn update_l3d_model(
     if !scene_data.is_changed() {
         return;
     }
-    log(&format!("[L3D] update_l3d_model triggered, has L3D: {}, emitters: {}",
+    log(&format!(
+        "[L3D] update_l3d_model triggered, has L3D: {}, emitters: {}",
         scene_data.l3d_data.is_some(),
         scene_data.emitter_config.len()
     ));
@@ -228,7 +248,13 @@ fn update_l3d_model(
     }
 
     // Spawn new model
-    spawn_l3d_model(&mut commands, &mut meshes, &mut materials, &scene_data, &settings);
+    spawn_l3d_model(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &scene_data,
+        &settings,
+    );
 }
 
 /// Spawn L3D model entities and lights at light emitting surfaces
@@ -244,12 +270,16 @@ fn spawn_l3d_model(
         return;
     };
 
-    log(&format!("[L3D] Loading L3D file, {} bytes", l3d_bytes.len()));
+    log(&format!(
+        "[L3D] Loading L3D file, {} bytes",
+        l3d_bytes.len()
+    ));
 
     // Parse L3D file
     let l3d = l3d_rs::from_buffer(l3d_bytes);
 
-    log(&format!("[L3D] Parsed L3D: {} parts, {} assets",
+    log(&format!(
+        "[L3D] Parsed L3D: {} parts, {} assets",
         l3d.model.parts.len(),
         l3d.file.assets.len()
     ));
@@ -283,7 +313,10 @@ fn spawn_l3d_model(
         // Start with identity matrix
         let identity = Mat4::IDENTITY;
         extract_light_emitters(&luminaire.structure.geometry, &mut light_emitters, identity);
-        log(&format!("[L3D] Found {} light emitting objects", light_emitters.len()));
+        log(&format!(
+            "[L3D] Found {} light emitting objects",
+            light_emitters.len()
+        ));
     } else {
         log("[L3D] Failed to parse structure XML for light emitting objects");
     }
@@ -299,7 +332,10 @@ fn spawn_l3d_model(
 
         // Parse OBJ content
         let Ok(obj_content) = std::str::from_utf8(&asset.content) else {
-            log(&format!("[L3D] Failed to parse asset as UTF-8: {}", part.path));
+            log(&format!(
+                "[L3D] Failed to parse asset as UTF-8: {}",
+                part.path
+            ));
             continue;
         };
 
@@ -308,8 +344,12 @@ fn spawn_l3d_model(
             continue;
         };
 
-        log(&format!("[L3D] Loading part: {} ({} vertices, {} indices)",
-            part.path, obj_data.positions.len(), obj_data.indices.len()));
+        log(&format!(
+            "[L3D] Loading part: {} ({} vertices, {} indices)",
+            part.path,
+            obj_data.positions.len(),
+            obj_data.indices.len()
+        ));
 
         // Create mesh
         let mesh = create_mesh_from_obj(&obj_data);
@@ -346,7 +386,16 @@ fn spawn_l3d_model(
     log(&format!("[L3D] Loaded {} model parts", loaded_count));
 
     // Spawn lights at light emitting object positions
-    spawn_lights_from_emitters(commands, meshes, materials, &light_emitters, &mounting_offset, &z_to_y_rotation, settings, &scene_data.emitter_config);
+    spawn_lights_from_emitters(
+        commands,
+        meshes,
+        materials,
+        &light_emitters,
+        &mounting_offset,
+        &z_to_y_rotation,
+        settings,
+        &scene_data.emitter_config,
+    );
 }
 
 /// Convert l3d_rs Mat4 ([f32; 16] column-major) to Bevy Mat4
@@ -367,27 +416,48 @@ fn extract_light_emitters(
     let current_matrix = parent_matrix * geo_matrix;
 
     // Extract position from the matrix (translation is in the last column)
-    let current_pos = Vec3::new(current_matrix.w_axis.x, current_matrix.w_axis.y, current_matrix.w_axis.z);
+    let current_pos = Vec3::new(
+        current_matrix.w_axis.x,
+        current_matrix.w_axis.y,
+        current_matrix.w_axis.z,
+    );
 
-    log(&format!("[L3D] Checking geometry '{}' -> world({:.3},{:.3},{:.3})",
-        geometry.part_name, current_pos.x, current_pos.y, current_pos.z));
+    log(&format!(
+        "[L3D] Checking geometry '{}' -> world({:.3},{:.3},{:.3})",
+        geometry.part_name, current_pos.x, current_pos.y, current_pos.z
+    ));
 
     // Check for light emitting objects in this geometry
     if let Some(leo) = &geometry.light_emitting_objects {
-        log(&format!("[L3D] Found LightEmittingObjects with {} objects", leo.objects().len()));
+        log(&format!(
+            "[L3D] Found LightEmittingObjects with {} objects",
+            leo.objects().len()
+        ));
         for obj in leo.objects() {
             let (px, py, pz) = obj.position();
             let (rx, ry, rz) = obj.rotation();
 
             // Build transform for the LEO
-            let leo_pos = l3d_rs::Vec3f { x: px, y: py, z: pz };
-            let leo_rot = l3d_rs::Vec3f { x: rx, y: ry, z: rz };
+            let leo_pos = l3d_rs::Vec3f {
+                x: px,
+                y: py,
+                z: pz,
+            };
+            let leo_rot = l3d_rs::Vec3f {
+                x: rx,
+                y: ry,
+                z: rz,
+            };
             let leo_matrix_raw = l3d_rs::build_transform(&leo_pos, &leo_rot);
             let leo_matrix = l3d_mat_to_bevy(&leo_matrix_raw);
 
             // Combine with parent transform
             let final_matrix = current_matrix * leo_matrix;
-            let world_pos = Vec3::new(final_matrix.w_axis.x, final_matrix.w_axis.y, final_matrix.w_axis.z);
+            let world_pos = Vec3::new(
+                final_matrix.w_axis.x,
+                final_matrix.w_axis.y,
+                final_matrix.w_axis.z,
+            );
 
             // Extract rotation (simplified - just use the LEO rotation for now)
             let world_rot = Vec3::new(rx, ry, rz);
@@ -403,8 +473,15 @@ fn extract_light_emitters(
                 (0.1, 0.1) // Default small size
             };
 
-            log(&format!("[L3D] *** EMITTER '{}': world({:.3},{:.3},{:.3}), size({:.3},{:.3})",
-                obj.part_name(), world_pos.x, world_pos.y, world_pos.z, size.0, size.1));
+            log(&format!(
+                "[L3D] *** EMITTER '{}': world({:.3},{:.3},{:.3}), size({:.3},{:.3})",
+                obj.part_name(),
+                world_pos.x,
+                world_pos.y,
+                world_pos.z,
+                size.0,
+                size.1
+            ));
 
             emitters.push(LightEmitter {
                 world_position: world_pos,
@@ -417,16 +494,25 @@ fn extract_light_emitters(
 
     // Recurse into joints if present
     if let Some(joints) = &geometry.joints {
-        log(&format!("[L3D] Found {} joints to recurse into", joints.joint.len()));
+        log(&format!(
+            "[L3D] Found {} joints to recurse into",
+            joints.joint.len()
+        ));
         for joint in &joints.joint {
             // Build transform for the joint
             let joint_matrix_raw = l3d_rs::build_transform(&joint.position, &joint.rotation);
             let joint_matrix = l3d_mat_to_bevy(&joint_matrix_raw);
             let accumulated_matrix = current_matrix * joint_matrix;
 
-            let acc_pos = Vec3::new(accumulated_matrix.w_axis.x, accumulated_matrix.w_axis.y, accumulated_matrix.w_axis.z);
-            log(&format!("[L3D] Joint '{}' -> accumulated({:.3},{:.3},{:.3})",
-                joint.part_name, acc_pos.x, acc_pos.y, acc_pos.z));
+            let acc_pos = Vec3::new(
+                accumulated_matrix.w_axis.x,
+                accumulated_matrix.w_axis.y,
+                accumulated_matrix.w_axis.z,
+            );
+            log(&format!(
+                "[L3D] Joint '{}' -> accumulated({:.3},{:.3},{:.3})",
+                joint.part_name, acc_pos.x, acc_pos.y, acc_pos.z
+            ));
 
             for child_geom in &joint.geometries.geometry {
                 extract_light_emitters(child_geom, emitters, accumulated_matrix);
@@ -436,6 +522,7 @@ fn extract_light_emitters(
 }
 
 /// Spawn point lights at the light emitting object positions
+#[allow(clippy::too_many_arguments)]
 fn spawn_lights_from_emitters(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -464,8 +551,12 @@ fn spawn_lights_from_emitters(
         (Color::srgb(1.0, 0.95, 0.9), 1000.0) // Default warm white, 1000 lm
     };
 
-    log(&format!("[L3D] Spawning {} lights, default flux: {:.0} lm, {} emitter configs",
-        emitters.len(), default_flux, emitter_configs.len()));
+    log(&format!(
+        "[L3D] Spawning {} lights, default flux: {:.0} lm, {} emitter configs",
+        emitters.len(),
+        default_flux,
+        emitter_configs.len()
+    ));
 
     // Log all emitter names from L3D
     for e in emitters {
@@ -473,14 +564,20 @@ fn spawn_lights_from_emitters(
     }
     // Log all config names
     for c in emitter_configs {
-        log(&format!("[L3D] Config leo_name: '{}', flux: {:?}, temp: {:?}",
-            c.leo_name, c.luminous_flux, c.color_temperature));
+        log(&format!(
+            "[L3D] Config leo_name: '{}', flux: {:?}, temp: {:?}",
+            c.leo_name, c.luminous_flux, c.color_temperature
+        ));
     }
 
     for emitter in emitters {
         // Look up per-emitter configuration by LEO name
         let config = emitter_configs.iter().find(|c| c.leo_name == emitter.name);
-        log(&format!("[L3D] Matching '{}' -> config found: {}", emitter.name, config.is_some()));
+        log(&format!(
+            "[L3D] Matching '{}' -> config found: {}",
+            emitter.name,
+            config.is_some()
+        ));
 
         // Use per-emitter flux if available, otherwise distribute default flux
         let flux = config
@@ -579,7 +676,7 @@ fn spawn_lights_from_emitters(
                 linear_color.red * 10.0,
                 linear_color.green * 10.0,
                 linear_color.blue * 10.0,
-                1.0
+                1.0,
             ),
             unlit: true, // Don't receive lighting, just emit
             ..default()
@@ -591,8 +688,7 @@ fn spawn_lights_from_emitters(
         commands.spawn((
             Mesh3d(meshes.add(Circle::new(emitter_size))),
             MeshMaterial3d(emissive_material),
-            Transform::from_translation(glow_pos)
-                .looking_at(glow_pos + bevy_dir, Vec3::X),
+            Transform::from_translation(glow_pos).looking_at(glow_pos + bevy_dir, Vec3::X),
             L3dLight,
         ));
     }
@@ -601,11 +697,15 @@ fn spawn_lights_from_emitters(
 /// Parse color temperature from LDT color appearance string
 fn parse_color_temperature(color_appearance: &str) -> f32 {
     // Try to parse as a number (e.g., "4000" or "4000K")
-    let cleaned = color_appearance.trim().trim_end_matches('K').trim_end_matches('k');
+    let cleaned = color_appearance
+        .trim()
+        .trim_end_matches('K')
+        .trim_end_matches('k');
     cleaned.parse().unwrap_or(4000.0)
 }
 
 /// Convert color temperature (Kelvin) to RGB color
+#[allow(clippy::excessive_precision)]
 fn kelvin_to_rgb(kelvin: f32) -> Color {
     let temp = kelvin / 100.0;
 
@@ -638,6 +738,7 @@ fn kelvin_to_rgb(kelvin: f32) -> Color {
 
 /// Calculate beam angle from LDT photometric data
 /// Beam angle is defined as the angle where intensity drops to 50% of maximum
+#[allow(dead_code)]
 fn calculate_beam_angle(ldt: &eulumdat::Eulumdat) -> f32 {
     let max_intensity = ldt.max_intensity();
     if max_intensity <= 0.0 {

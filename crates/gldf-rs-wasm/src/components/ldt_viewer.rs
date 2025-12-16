@@ -123,14 +123,17 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
         let zoomed_container = zoomed_container.clone();
         let zoomed_svg_content = zoomed_svg_content.clone();
         let is_zoomed_val = *is_zoomed;
-        use_effect_with((zoomed_svg_content, is_zoomed_val), move |(zoomed_svg_content, is_zoomed_val)| {
-            if *is_zoomed_val {
-                if let Some(element) = zoomed_container.cast::<web_sys::HtmlElement>() {
-                    element.set_inner_html(zoomed_svg_content);
+        use_effect_with(
+            (zoomed_svg_content, is_zoomed_val),
+            move |(zoomed_svg_content, is_zoomed_val)| {
+                if *is_zoomed_val {
+                    if let Some(element) = zoomed_container.cast::<web_sys::HtmlElement>() {
+                        element.set_inner_html(zoomed_svg_content);
+                    }
                 }
-            }
-            || ()
-        });
+                || ()
+            },
+        );
     }
 
     let compact = props.compact;

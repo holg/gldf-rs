@@ -1,18 +1,20 @@
 //! GLDF state management for the WASM editor
 
 use gldf_rs::gldf::{
-    GldfProduct,
-    general_definitions::photometries::{DescriptivePhotometry, Photometries, Photometry, UGR4H8H705020LQ},
+    general_definitions::photometries::{
+        DescriptivePhotometry, Photometries, Photometry, UGR4H8H705020LQ,
+    },
     product_definitions::{
         Applications, DescriptiveAttributes, Electrical, Marketing, ProductMetaData,
     },
+    GldfProduct,
 };
 use std::rc::Rc;
 use yew::prelude::*;
 
 /// Actions that can be performed on the GLDF state
 #[derive(Clone, Debug)]
-#[allow(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant, dead_code)]
 pub enum GldfAction {
     /// Load a new GLDF product
     Load(GldfProduct),
@@ -71,18 +73,54 @@ pub enum GldfAction {
     RemoveApplication(usize),
     // --- Photometry (DescriptivePhotometry) ---
     /// Update photometry by index
-    SetPhotometryCieFluxCode { index: usize, value: Option<String> },
-    SetPhotometryLightOutputRatio { index: usize, value: Option<f64> },
-    SetPhotometryLuminousEfficacy { index: usize, value: Option<f64> },
-    SetPhotometryDownwardFluxFraction { index: usize, value: Option<f64> },
-    SetPhotometryDownwardLOR { index: usize, value: Option<f64> },
-    SetPhotometryUpwardLOR { index: usize, value: Option<f64> },
-    SetPhotometryCutOffAngle { index: usize, value: Option<f64> },
-    SetPhotometryLuminaireLuminance { index: usize, value: Option<i32> },
-    SetPhotometryUgrX { index: usize, value: Option<f64> },
-    SetPhotometryUgrY { index: usize, value: Option<f64> },
-    SetPhotometryPhotometricCode { index: usize, value: Option<String> },
-    SetPhotometryBugRating { index: usize, value: Option<String> },
+    SetPhotometryCieFluxCode {
+        index: usize,
+        value: Option<String>,
+    },
+    SetPhotometryLightOutputRatio {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryLuminousEfficacy {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryDownwardFluxFraction {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryDownwardLOR {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryUpwardLOR {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryCutOffAngle {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryLuminaireLuminance {
+        index: usize,
+        value: Option<i32>,
+    },
+    SetPhotometryUgrX {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryUgrY {
+        index: usize,
+        value: Option<f64>,
+    },
+    SetPhotometryPhotometricCode {
+        index: usize,
+        value: Option<String>,
+    },
+    SetPhotometryBugRating {
+        index: usize,
+        value: Option<String>,
+    },
     /// Reset state to default
     #[allow(dead_code)]
     Reset,
@@ -222,10 +260,12 @@ impl Reducible for GldfState {
                 ensure_descriptive_photometry(&mut new_state, index).downward_flux_fraction = value;
             }
             GldfAction::SetPhotometryDownwardLOR { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).downward_light_output_ratio = value;
+                ensure_descriptive_photometry(&mut new_state, index).downward_light_output_ratio =
+                    value;
             }
             GldfAction::SetPhotometryUpwardLOR { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).upward_light_output_ratio = value;
+                ensure_descriptive_photometry(&mut new_state, index).upward_light_output_ratio =
+                    value;
             }
             GldfAction::SetPhotometryCutOffAngle { index, value } => {
                 ensure_descriptive_photometry(&mut new_state, index).cut_off_angle = value;
@@ -243,7 +283,8 @@ impl Reducible for GldfState {
                 ensure_descriptive_photometry(&mut new_state, index).photometric_code = value;
             }
             GldfAction::SetPhotometryBugRating { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).light_distribution_bug_rating = value;
+                ensure_descriptive_photometry(&mut new_state, index)
+                    .light_distribution_bug_rating = value;
             }
             GldfAction::Reset => {
                 new_state = GldfState::default();
@@ -285,7 +326,12 @@ pub fn use_gldf() -> GldfContext {
 
 /// Helper to ensure ProductMetaData exists and return mutable reference
 fn ensure_product_meta_data(state: &mut GldfState) -> &mut ProductMetaData {
-    if state.product.product_definitions.product_meta_data.is_none() {
+    if state
+        .product
+        .product_definitions
+        .product_meta_data
+        .is_none()
+    {
         state.product.product_definitions.product_meta_data = Some(ProductMetaData::default());
     }
     state
@@ -337,7 +383,12 @@ fn ensure_photometries(state: &mut GldfState) -> &mut Photometries {
     if state.product.general_definitions.photometries.is_none() {
         state.product.general_definitions.photometries = Some(Photometries::default());
     }
-    state.product.general_definitions.photometries.as_mut().unwrap()
+    state
+        .product
+        .general_definitions
+        .photometries
+        .as_mut()
+        .unwrap()
 }
 
 /// Helper to ensure a specific Photometry exists at index
@@ -354,7 +405,10 @@ fn ensure_photometry(state: &mut GldfState, index: usize) -> &mut Photometry {
 }
 
 /// Helper to ensure DescriptivePhotometry exists for a specific Photometry
-fn ensure_descriptive_photometry(state: &mut GldfState, index: usize) -> &mut DescriptivePhotometry {
+fn ensure_descriptive_photometry(
+    state: &mut GldfState,
+    index: usize,
+) -> &mut DescriptivePhotometry {
     let photometry = ensure_photometry(state, index);
     if photometry.descriptive_photometry.is_none() {
         photometry.descriptive_photometry = Some(DescriptivePhotometry::default());

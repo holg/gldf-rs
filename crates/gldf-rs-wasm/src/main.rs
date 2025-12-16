@@ -145,7 +145,11 @@ impl Component for App {
                 else if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
                     #[cfg(feature = "light-convert")]
                     {
-                        let format_name = if file_name_lower.ends_with(".uld") { "ULD" } else { "ROLF" };
+                        let format_name = if file_name_lower.ends_with(".uld") {
+                            "ULD"
+                        } else {
+                            "ROLF"
+                        };
                         console::log!(format!("Converting {} to GLDF...", format_name).as_str());
 
                         match light_convert::convert_to_gldf_full(&data, Some(&file_name), None) {
@@ -160,7 +164,9 @@ impl Component for App {
                                 ).as_str());
 
                                 // Parse GLDF and load it
-                                if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(result.gldf_bytes.clone()) {
+                                if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(
+                                    result.gldf_bytes.clone(),
+                                ) {
                                     self.loaded_gldf = Some(gldf);
                                 }
 
@@ -181,13 +187,17 @@ impl Component for App {
                                 return true;
                             }
                             Err(e) => {
-                                console::log!(format!("Failed to convert {}: {}", format_name, e).as_str());
+                                console::log!(
+                                    format!("Failed to convert {}: {}", format_name, e).as_str()
+                                );
                             }
                         }
                     }
                     #[cfg(not(feature = "light-convert"))]
                     {
-                        console::log!("ULD/ROLF support not enabled. Build with 'light-convert' feature.");
+                        console::log!(
+                            "ULD/ROLF support not enabled. Build with 'light-convert' feature."
+                        );
                     }
                 }
                 // Handle LDT/IES files - convert to minimal GLDF
@@ -226,7 +236,7 @@ impl Component for App {
                 for file in files.into_iter() {
                     let file_name = file.name();
                     let file_type = file.raw_mime_type();
-                    let file_size = file.size() as u64;
+                    let file_size = file.size();
                     console::log!(
                         "Processing file:",
                         file_name.as_str(),
@@ -241,15 +251,22 @@ impl Component for App {
                         let file_name = file_name.clone();
                         let file_type = file_type.clone();
 
-                        gloo::file::callbacks::read_as_bytes(&file, move |res| {
-                            match res {
-                                Ok(data) => {
-                                    console::log!("File read success:", file_name.as_str(), "bytes:", data.len());
-                                    link.send_message(Msg::Loaded(file_name, file_type, data))
-                                }
-                                Err(e) => {
-                                    console::log!("Failed to read file:", file_name.as_str(), format!("{:?}", e).as_str());
-                                }
+                        gloo::file::callbacks::read_as_bytes(&file, move |res| match res {
+                            Ok(data) => {
+                                console::log!(
+                                    "File read success:",
+                                    file_name.as_str(),
+                                    "bytes:",
+                                    data.len()
+                                );
+                                link.send_message(Msg::Loaded(file_name, file_type, data))
+                            }
+                            Err(e) => {
+                                console::log!(
+                                    "Failed to read file:",
+                                    file_name.as_str(),
+                                    format!("{:?}", e).as_str()
+                                );
                             }
                         })
                     };
@@ -321,15 +338,16 @@ impl Component for App {
                         console::log!("Exporting GLDF:", gldf_bytes.len(), "bytes");
 
                         // Create blob and trigger download
-                        let uint8arr = js_sys::Uint8Array::new(&unsafe {
-                            js_sys::Uint8Array::view(&gldf_bytes)
-                        }.into());
+                        let uint8arr = js_sys::Uint8Array::new(
+                            &unsafe { js_sys::Uint8Array::view(&gldf_bytes) }.into(),
+                        );
                         let array = js_sys::Array::new();
                         array.push(&uint8arr.buffer());
-                        if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence_and_options(
-                            &array,
-                            web_sys::BlobPropertyBag::new().type_("application/zip"),
-                        ) {
+                        let opts = web_sys::BlobPropertyBag::new();
+                        opts.set_type("application/zip");
+                        if let Ok(blob) =
+                            web_sys::Blob::new_with_u8_array_sequence_and_options(&array, &opts)
+                        {
                             if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
                                 // Create download link and click it
                                 let window = web_sys::window().unwrap();
@@ -414,7 +432,8 @@ impl Component for App {
                 if let Some(variant) = self.get_variant_mut(&variant_id) {
                     if enabled {
                         let mountings = variant.mountings.get_or_insert_with(Default::default);
-                        mountings.ceiling = Some(gldf_rs::gldf::product_definitions::Ceiling::default());
+                        mountings.ceiling =
+                            Some(gldf_rs::gldf::product_definitions::Ceiling::default());
                     } else if let Some(ref mut mountings) = variant.mountings {
                         mountings.ceiling = None;
                     }
@@ -436,7 +455,8 @@ impl Component for App {
                 if let Some(variant) = self.get_variant_mut(&variant_id) {
                     if enabled {
                         let mountings = variant.mountings.get_or_insert_with(Default::default);
-                        mountings.ground = Some(gldf_rs::gldf::product_definitions::Ground::default());
+                        mountings.ground =
+                            Some(gldf_rs::gldf::product_definitions::Ground::default());
                     } else if let Some(ref mut mountings) = variant.mountings {
                         mountings.ground = None;
                     }
@@ -447,7 +467,8 @@ impl Component for App {
                 if let Some(variant) = self.get_variant_mut(&variant_id) {
                     if enabled {
                         let mountings = variant.mountings.get_or_insert_with(Default::default);
-                        mountings.working_plane = Some(gldf_rs::gldf::product_definitions::WorkingPlane::default());
+                        mountings.working_plane =
+                            Some(gldf_rs::gldf::product_definitions::WorkingPlane::default());
                     } else if let Some(ref mut mountings) = variant.mountings {
                         mountings.working_plane = None;
                     }
@@ -523,10 +544,11 @@ impl Component for App {
                     let mountings = variant.mountings.get_or_insert_with(Default::default);
                     let ground = mountings.ground.get_or_insert_with(Default::default);
                     if enabled {
-                        ground.pole_integrated = Some(gldf_rs::gldf::product_definitions::PoleIntegrated {
-                            pole_height: height,
-                            pole_height_element: None,
-                        });
+                        ground.pole_integrated =
+                            Some(gldf_rs::gldf::product_definitions::PoleIntegrated {
+                                pole_height: height,
+                                pole_height_element: None,
+                            });
                     } else {
                         ground.pole_integrated = None;
                     }
@@ -596,26 +618,33 @@ pub fn get_blob(buf_file: &BufFile) -> String {
 
 impl App {
     /// Helper to get mutable reference to a variant by ID
-    fn get_variant_mut(&mut self, variant_id: &str) -> Option<&mut gldf_rs::gldf::product_definitions::Variant> {
+    fn get_variant_mut(
+        &mut self,
+        variant_id: &str,
+    ) -> Option<&mut gldf_rs::gldf::product_definitions::Variant> {
         self.loaded_gldf.as_mut().and_then(|gldf| {
             gldf.gldf
                 .product_definitions
                 .variants
                 .as_mut()
-                .and_then(|variants| {
-                    variants.variant.iter_mut().find(|v| v.id == variant_id)
-                })
+                .and_then(|variants| variants.variant.iter_mut().find(|v| v.id == variant_id))
         })
     }
 
     /// Render mountings editor for a variant
-    fn render_mountings_editor(&self, ctx: &Context<Self>, variant: &gldf_rs::gldf::product_definitions::Variant) -> Html {
+    fn render_mountings_editor(
+        &self,
+        ctx: &Context<Self>,
+        variant: &gldf_rs::gldf::product_definitions::Variant,
+    ) -> Html {
         let mountings = variant.mountings.as_ref();
         let variant_id = variant.id.clone();
         let has_ceiling = mountings.map(|m| m.ceiling.is_some()).unwrap_or(false);
         let has_wall = mountings.map(|m| m.wall.is_some()).unwrap_or(false);
         let has_ground = mountings.map(|m| m.ground.is_some()).unwrap_or(false);
-        let has_working_plane = mountings.map(|m| m.working_plane.is_some()).unwrap_or(false);
+        let has_working_plane = mountings
+            .map(|m| m.working_plane.is_some())
+            .unwrap_or(false);
 
         // Callbacks for toggling
         let vid = variant_id.clone();
@@ -640,47 +669,66 @@ impl App {
         });
 
         // Build details strings
-        let ceiling_details = mountings.and_then(|m| m.ceiling.as_ref()).map(|c| {
-            let mut parts = Vec::new();
-            if let Some(ref r) = c.recessed {
-                parts.push(format!("Recessed ({}mm)", r.recessed_depth));
-            }
-            if c.surface_mounted.is_some() {
-                parts.push("Surface mounted".to_string());
-            }
-            if let Some(ref p) = c.pendant {
-                parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
-            }
-            parts
-        }).unwrap_or_default();
+        let ceiling_details = mountings
+            .and_then(|m| m.ceiling.as_ref())
+            .map(|c| {
+                let mut parts = Vec::new();
+                if let Some(ref r) = c.recessed {
+                    parts.push(format!("Recessed ({}mm)", r.recessed_depth));
+                }
+                if c.surface_mounted.is_some() {
+                    parts.push("Surface mounted".to_string());
+                }
+                if let Some(ref p) = c.pendant {
+                    parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
+                }
+                parts
+            })
+            .unwrap_or_default();
 
-        let wall_details = mountings.and_then(|m| m.wall.as_ref()).map(|w| {
-            let mut parts = Vec::new();
-            if w.mounting_height > 0 {
-                parts.push(format!("Height: {}mm", w.mounting_height));
-            }
-            if w.recessed.is_some() {
-                parts.push("Recessed".to_string());
-            }
-            if w.surface_mounted.is_some() {
-                parts.push("Surface mounted".to_string());
-            }
-            parts
-        }).unwrap_or_default();
+        let wall_details = mountings
+            .and_then(|m| m.wall.as_ref())
+            .map(|w| {
+                let mut parts = Vec::new();
+                if w.mounting_height > 0 {
+                    parts.push(format!("Height: {}mm", w.mounting_height));
+                }
+                if w.recessed.is_some() {
+                    parts.push("Recessed".to_string());
+                }
+                if w.surface_mounted.is_some() {
+                    parts.push("Surface mounted".to_string());
+                }
+                parts
+            })
+            .unwrap_or_default();
 
-        let ground_details = mountings.and_then(|m| m.ground.as_ref()).map(|g| {
-            let mut parts = Vec::new();
-            if let Some(ref pt) = g.pole_top {
-                parts.push(format!("Pole top{}", pt.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
-            }
-            if let Some(ref pi) = g.pole_integrated {
-                parts.push(format!("Pole integrated{}", pi.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
-            }
-            if g.free_standing.is_some() {
-                parts.push("Free standing".to_string());
-            }
-            parts
-        }).unwrap_or_default();
+        let ground_details = mountings
+            .and_then(|m| m.ground.as_ref())
+            .map(|g| {
+                let mut parts = Vec::new();
+                if let Some(ref pt) = g.pole_top {
+                    parts.push(format!(
+                        "Pole top{}",
+                        pt.get_pole_height()
+                            .map(|h| format!(" ({}mm)", h))
+                            .unwrap_or_default()
+                    ));
+                }
+                if let Some(ref pi) = g.pole_integrated {
+                    parts.push(format!(
+                        "Pole integrated{}",
+                        pi.get_pole_height()
+                            .map(|h| format!(" ({}mm)", h))
+                            .unwrap_or_default()
+                    ));
+                }
+                if g.free_standing.is_some() {
+                    parts.push("Free standing".to_string());
+                }
+                parts
+            })
+            .unwrap_or_default();
 
         html! {
             <div class="mountings-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
@@ -749,55 +797,79 @@ impl App {
     }
 
     /// Render mountings as read-only badges (for viewer mode)
-    fn render_mountings_readonly(&self, variant: &gldf_rs::gldf::product_definitions::Variant) -> Html {
+    fn render_mountings_readonly(
+        &self,
+        variant: &gldf_rs::gldf::product_definitions::Variant,
+    ) -> Html {
         let mountings = variant.mountings.as_ref();
         let has_ceiling = mountings.map(|m| m.ceiling.is_some()).unwrap_or(false);
         let has_wall = mountings.map(|m| m.wall.is_some()).unwrap_or(false);
         let has_ground = mountings.map(|m| m.ground.is_some()).unwrap_or(false);
-        let has_working_plane = mountings.map(|m| m.working_plane.is_some()).unwrap_or(false);
+        let has_working_plane = mountings
+            .map(|m| m.working_plane.is_some())
+            .unwrap_or(false);
 
         // Build details strings
-        let ceiling_details = mountings.and_then(|m| m.ceiling.as_ref()).map(|c| {
-            let mut parts = Vec::new();
-            if let Some(ref r) = c.recessed {
-                parts.push(format!("Recessed ({}mm)", r.recessed_depth));
-            }
-            if c.surface_mounted.is_some() {
-                parts.push("Surface mounted".to_string());
-            }
-            if let Some(ref p) = c.pendant {
-                parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
-            }
-            parts
-        }).unwrap_or_default();
+        let ceiling_details = mountings
+            .and_then(|m| m.ceiling.as_ref())
+            .map(|c| {
+                let mut parts = Vec::new();
+                if let Some(ref r) = c.recessed {
+                    parts.push(format!("Recessed ({}mm)", r.recessed_depth));
+                }
+                if c.surface_mounted.is_some() {
+                    parts.push("Surface mounted".to_string());
+                }
+                if let Some(ref p) = c.pendant {
+                    parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
+                }
+                parts
+            })
+            .unwrap_or_default();
 
-        let wall_details = mountings.and_then(|m| m.wall.as_ref()).map(|w| {
-            let mut parts = Vec::new();
-            if w.mounting_height > 0 {
-                parts.push(format!("Height: {}mm", w.mounting_height));
-            }
-            if w.recessed.is_some() {
-                parts.push("Recessed".to_string());
-            }
-            if w.surface_mounted.is_some() {
-                parts.push("Surface mounted".to_string());
-            }
-            parts
-        }).unwrap_or_default();
+        let wall_details = mountings
+            .and_then(|m| m.wall.as_ref())
+            .map(|w| {
+                let mut parts = Vec::new();
+                if w.mounting_height > 0 {
+                    parts.push(format!("Height: {}mm", w.mounting_height));
+                }
+                if w.recessed.is_some() {
+                    parts.push("Recessed".to_string());
+                }
+                if w.surface_mounted.is_some() {
+                    parts.push("Surface mounted".to_string());
+                }
+                parts
+            })
+            .unwrap_or_default();
 
-        let ground_details = mountings.and_then(|m| m.ground.as_ref()).map(|g| {
-            let mut parts = Vec::new();
-            if let Some(ref pt) = g.pole_top {
-                parts.push(format!("Pole top{}", pt.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
-            }
-            if let Some(ref pi) = g.pole_integrated {
-                parts.push(format!("Pole integrated{}", pi.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
-            }
-            if g.free_standing.is_some() {
-                parts.push("Free standing".to_string());
-            }
-            parts
-        }).unwrap_or_default();
+        let ground_details = mountings
+            .and_then(|m| m.ground.as_ref())
+            .map(|g| {
+                let mut parts = Vec::new();
+                if let Some(ref pt) = g.pole_top {
+                    parts.push(format!(
+                        "Pole top{}",
+                        pt.get_pole_height()
+                            .map(|h| format!(" ({}mm)", h))
+                            .unwrap_or_default()
+                    ));
+                }
+                if let Some(ref pi) = g.pole_integrated {
+                    parts.push(format!(
+                        "Pole integrated{}",
+                        pi.get_pole_height()
+                            .map(|h| format!(" ({}mm)", h))
+                            .unwrap_or_default()
+                    ));
+                }
+                if g.free_standing.is_some() {
+                    parts.push("Free standing".to_string());
+                }
+                parts
+            })
+            .unwrap_or_default();
 
         // Only show if there are any mountings
         if !has_ceiling && !has_wall && !has_ground && !has_working_plane {
@@ -851,53 +923,125 @@ impl App {
 
         // Context-sensitive help based on current view
         let (section_title, section_help) = match self.nav_item {
-            NavItem::Overview => ("Overview", vec![
-                ("File Loading", "Drop GLDF, LDT, IES, ULD, or ROLF files onto the window to load them."),
-                ("Product Info", "Shows basic product information like manufacturer and product name."),
-                ("Quick Stats", "Displays counts of light sources, variants, files, etc."),
-            ]),
-            NavItem::Header => ("Header Editor", vec![
-                ("Format Version", "GLDF format version (e.g., 1.0.0)."),
-                ("Manufacturer", "Company name of the luminaire manufacturer."),
-                ("Author", "Person or system that created the file."),
-                ("License Key", "Optional license key for the product data."),
-            ]),
-            NavItem::Electrical => ("Electrical Editor", vec![
-                ("Safety Class", "Electrical safety classification (I, II, or III)."),
-                ("IP Code", "Ingress Protection rating (e.g., IP65)."),
-                ("Power Factor", "Ratio of real to apparent power (0-1)."),
-                ("CLO", "Constant Light Output - maintains brightness over time."),
-            ]),
-            NavItem::Photometry => ("Photometry Editor", vec![
-                ("GLDF Values", "Values stored in the GLDF file (editable, shown in blue)."),
-                ("Calculated Values", "Values calculated from LDT/IES files (shown in orange)."),
-                ("CIE Flux Code", "5-digit code describing light distribution."),
-                ("LOR/DLOR/ULOR", "Light Output Ratios - efficiency metrics."),
-            ]),
-            NavItem::Variants => ("Variants", vec![
-                ("Product Variants", "Different configurations of the luminaire."),
-                ("Mountings", "Installation options: Ceiling, Wall, Ground, Working Plane."),
-                ("Geometry", "Reference to 3D model geometry."),
-                ("3D View", "Click 'View 3D Scene' to see the luminaire in 3D."),
-            ]),
-            NavItem::Files => ("Files", vec![
-                ("Embedded Files", "Files contained within the GLDF package."),
-                ("LDT/IES", "Photometry files with light distribution data."),
-                ("L3D", "3D geometry files for the luminaire model."),
-                ("Images", "Product photos and thumbnails."),
-            ]),
-            NavItem::LightSources => ("Light Sources", vec![
-                ("Fixed Sources", "Light sources permanently installed in the luminaire."),
-                ("Changeable Sources", "Replaceable light sources (lamps)."),
-                ("Luminous Flux", "Light output in lumens."),
-                ("Color Temperature", "CCT in Kelvin (e.g., 3000K warm, 4000K neutral)."),
-            ]),
-            _ => ("General Help", vec![
-                ("Navigation", "Use the sidebar to navigate between sections."),
-                ("Edit Mode", "Click 'Edit Mode' to enable editing features."),
-                ("Export", "Use export buttons to save as GLDF, JSON, or XML."),
-                ("Clear", "Click Clear to reset and load a new file."),
-            ]),
+            NavItem::Overview => (
+                "Overview",
+                vec![
+                    (
+                        "File Loading",
+                        "Drop GLDF, LDT, IES, ULD, or ROLF files onto the window to load them.",
+                    ),
+                    (
+                        "Product Info",
+                        "Shows basic product information like manufacturer and product name.",
+                    ),
+                    (
+                        "Quick Stats",
+                        "Displays counts of light sources, variants, files, etc.",
+                    ),
+                ],
+            ),
+            NavItem::Header => (
+                "Header Editor",
+                vec![
+                    ("Format Version", "GLDF format version (e.g., 1.0.0)."),
+                    (
+                        "Manufacturer",
+                        "Company name of the luminaire manufacturer.",
+                    ),
+                    ("Author", "Person or system that created the file."),
+                    ("License Key", "Optional license key for the product data."),
+                ],
+            ),
+            NavItem::Electrical => (
+                "Electrical Editor",
+                vec![
+                    (
+                        "Safety Class",
+                        "Electrical safety classification (I, II, or III).",
+                    ),
+                    ("IP Code", "Ingress Protection rating (e.g., IP65)."),
+                    ("Power Factor", "Ratio of real to apparent power (0-1)."),
+                    (
+                        "CLO",
+                        "Constant Light Output - maintains brightness over time.",
+                    ),
+                ],
+            ),
+            NavItem::Photometry => (
+                "Photometry Editor",
+                vec![
+                    (
+                        "GLDF Values",
+                        "Values stored in the GLDF file (editable, shown in blue).",
+                    ),
+                    (
+                        "Calculated Values",
+                        "Values calculated from LDT/IES files (shown in orange).",
+                    ),
+                    (
+                        "CIE Flux Code",
+                        "5-digit code describing light distribution.",
+                    ),
+                    ("LOR/DLOR/ULOR", "Light Output Ratios - efficiency metrics."),
+                ],
+            ),
+            NavItem::Variants => (
+                "Variants",
+                vec![
+                    (
+                        "Product Variants",
+                        "Different configurations of the luminaire.",
+                    ),
+                    (
+                        "Mountings",
+                        "Installation options: Ceiling, Wall, Ground, Working Plane.",
+                    ),
+                    ("Geometry", "Reference to 3D model geometry."),
+                    (
+                        "3D View",
+                        "Click 'View 3D Scene' to see the luminaire in 3D.",
+                    ),
+                ],
+            ),
+            NavItem::Files => (
+                "Files",
+                vec![
+                    ("Embedded Files", "Files contained within the GLDF package."),
+                    ("LDT/IES", "Photometry files with light distribution data."),
+                    ("L3D", "3D geometry files for the luminaire model."),
+                    ("Images", "Product photos and thumbnails."),
+                ],
+            ),
+            NavItem::LightSources => (
+                "Light Sources",
+                vec![
+                    (
+                        "Fixed Sources",
+                        "Light sources permanently installed in the luminaire.",
+                    ),
+                    ("Changeable Sources", "Replaceable light sources (lamps)."),
+                    ("Luminous Flux", "Light output in lumens."),
+                    (
+                        "Color Temperature",
+                        "CCT in Kelvin (e.g., 3000K warm, 4000K neutral).",
+                    ),
+                ],
+            ),
+            _ => (
+                "General Help",
+                vec![
+                    (
+                        "Navigation",
+                        "Use the sidebar to navigate between sections.",
+                    ),
+                    ("Edit Mode", "Click 'Edit Mode' to enable editing features."),
+                    (
+                        "Export",
+                        "Use export buttons to save as GLDF, JSON, or XML.",
+                    ),
+                    ("Clear", "Click Clear to reset and load a new file."),
+                ],
+            ),
         };
 
         html! {
@@ -1781,7 +1925,8 @@ impl App {
                 // Build a map from GLDF file definition id -> filename
                 // The photometry references file by id (e.g., "ldtnarrow")
                 // The file definition maps id to filename (e.g., "ldc/narrow.ldt")
-                let file_id_to_filename: std::collections::HashMap<String, String> = gldf.gldf
+                let file_id_to_filename: std::collections::HashMap<String, String> = gldf
+                    .gldf
                     .general_definitions
                     .files
                     .file
@@ -1789,34 +1934,50 @@ impl App {
                     .map(|f| (f.id.clone(), f.file_name.clone()))
                     .collect();
 
-                console::log!(format!("File ID to filename map: {:?}", file_id_to_filename));
+                console::log!(format!(
+                    "File ID to filename map: {:?}",
+                    file_id_to_filename
+                ));
 
                 // Extract photometry files as (file_definition_id, content) pairs
-                let photometry_files: Vec<(String, Vec<u8>)> = gldf.files.iter()
+                let photometry_files: Vec<(String, Vec<u8>)> = gldf
+                    .files
+                    .iter()
                     .filter_map(|f| {
                         let content = f.content.clone()?;
                         let file_path = f.name.clone().or_else(|| f.path.clone())?;
 
                         // Check if this looks like LDT or IES content
                         let path_lower = file_path.to_lowercase();
-                        let is_photometry = path_lower.ends_with(".ldt") || path_lower.ends_with(".ies");
+                        let is_photometry =
+                            path_lower.ends_with(".ldt") || path_lower.ends_with(".ies");
 
                         if is_photometry {
                             // Find the file definition ID that maps to this filename
-                            let file_def_id = file_id_to_filename.iter()
+                            let file_def_id = file_id_to_filename
+                                .iter()
                                 .find(|(_, filename)| {
                                     filename.to_lowercase() == path_lower
-                                        || file_path.to_lowercase().ends_with(&filename.to_lowercase())
+                                        || file_path
+                                            .to_lowercase()
+                                            .ends_with(&filename.to_lowercase())
                                 })
                                 .map(|(id, _)| id.clone());
 
                             if let Some(id) = file_def_id {
-                                console::log!(format!("Found photometry file: def_id={}, path={}, content_len={}",
-                                    id, file_path, content.len()));
+                                console::log!(format!(
+                                    "Found photometry file: def_id={}, path={}, content_len={}",
+                                    id,
+                                    file_path,
+                                    content.len()
+                                ));
                                 Some((id, content))
                             } else {
                                 // Fallback: use the path as id
-                                console::log!(format!("No file def found for: path={}, using path as id", file_path));
+                                console::log!(format!(
+                                    "No file def found for: path={}, using path as id",
+                                    file_path
+                                ));
                                 Some((file_path, content))
                             }
                         } else {
@@ -1825,7 +1986,10 @@ impl App {
                     })
                     .collect();
 
-                console::log!(format!("Total photometry files found: {}", photometry_files.len()));
+                console::log!(format!(
+                    "Total photometry files found: {}",
+                    photometry_files.len()
+                ));
 
                 html! {
                     <GldfProviderWithData gldf={gldf.gldf.clone()}>
@@ -2008,8 +2172,15 @@ impl App {
                     <LdtViewer ldt_data={content} width={500.0} height={500.0} />
                 </div>
             }
-        } else if fname_lower.ends_with(".jpg") || fname_lower.ends_with(".jpeg") || fname_lower.ends_with(".png") {
-            let mime = if fname_lower.ends_with(".png") { "png" } else { "jpeg" };
+        } else if fname_lower.ends_with(".jpg")
+            || fname_lower.ends_with(".jpeg")
+            || fname_lower.ends_with(".png")
+        {
+            let mime = if fname_lower.ends_with(".png") {
+                "png"
+            } else {
+                "jpeg"
+            };
             html! {
                 <img
                     src={format!("data:image/{};base64,{}", mime, BASE64_STANDARD.encode(&content))}
@@ -2035,10 +2206,13 @@ impl App {
                 let file_def = files.iter().find(|f| &f.id == file_id)?;
                 // Find the actual file content
                 let content = gldf.files.iter().find(|bf| {
-                    bf.name.as_ref().map(|n| {
-                        let stored = n.rsplit('/').next().unwrap_or(n);
-                        stored.eq_ignore_ascii_case(&file_def.file_name)
-                    }).unwrap_or(false)
+                    bf.name
+                        .as_ref()
+                        .map(|n| {
+                            let stored = n.rsplit('/').next().unwrap_or(n);
+                            stored.eq_ignore_ascii_case(&file_def.file_name)
+                        })
+                        .unwrap_or(false)
                 })?;
                 Some((file_def.clone(), content.content.clone()?))
             });
@@ -2055,12 +2229,19 @@ impl App {
 
             // Helper to get content type class
             let content_type_class = |ct: &str| -> &'static str {
-                if ct.starts_with("ldc/") { "content-type-ldc" }
-                else if ct.starts_with("geo/") { "content-type-geo" }
-                else if ct.starts_with("image/") { "content-type-image" }
-                else if ct.starts_with("sensor/") { "content-type-sensor" }
-                else if ct.starts_with("document/") { "content-type-doc" }
-                else { "content-type-other" }
+                if ct.starts_with("ldc/") {
+                    "content-type-ldc"
+                } else if ct.starts_with("geo/") {
+                    "content-type-geo"
+                } else if ct.starts_with("image/") {
+                    "content-type-image"
+                } else if ct.starts_with("sensor/") {
+                    "content-type-sensor"
+                } else if ct.starts_with("document/") {
+                    "content-type-doc"
+                } else {
+                    "content-type-other"
+                }
             };
 
             html! {
@@ -2308,7 +2489,11 @@ impl App {
 
     fn view_emitters(&self) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
-            let emitters = gldf.gldf.general_definitions.emitters.as_ref()
+            let emitters = gldf
+                .gldf
+                .general_definitions
+                .emitters
+                .as_ref()
                 .map(|e| &e.emitter)
                 .map(|e| e.iter().collect::<Vec<_>>())
                 .unwrap_or_default();
@@ -2334,16 +2519,25 @@ impl App {
                 let file_id = &file_ref.file_id;
 
                 // Find file definition
-                let file_def = gldf.gldf.general_definitions.files.file.iter()
+                let file_def = gldf
+                    .gldf
+                    .general_definitions
+                    .files
+                    .file
+                    .iter()
                     .find(|f| &f.id == file_id)?;
 
                 // Find content
-                gldf.files.iter()
+                gldf.files
+                    .iter()
                     .find(|bf| {
-                        bf.name.as_ref().map(|n| {
-                            let stored = n.rsplit('/').next().unwrap_or(n);
-                            stored.eq_ignore_ascii_case(&file_def.file_name)
-                        }).unwrap_or(false)
+                        bf.name
+                            .as_ref()
+                            .map(|n| {
+                                let stored = n.rsplit('/').next().unwrap_or(n);
+                                stored.eq_ignore_ascii_case(&file_def.file_name)
+                            })
+                            .unwrap_or(false)
                     })
                     .and_then(|bf| bf.content.clone())
             };
@@ -2482,11 +2676,15 @@ impl App {
         };
 
         // Find L3D content
-        let l3d_content = gldf.files.iter()
+        let l3d_content = gldf
+            .files
+            .iter()
             .find(|f| {
                 if let Some(ref name) = f.name {
                     let stored_name = name.rsplit('/').next().unwrap_or(name);
-                    mapping.l3d_file_name.as_ref()
+                    mapping
+                        .l3d_file_name
+                        .as_ref()
                         .map(|n| stored_name.eq_ignore_ascii_case(n))
                         .unwrap_or(false)
                 } else {
@@ -2497,7 +2695,8 @@ impl App {
 
         // Find LDT content
         let ldt_content = mapping.ldt_file_name.as_ref().and_then(|ldt_name| {
-            gldf.files.iter()
+            gldf.files
+                .iter()
                 .find(|f| {
                     if let Some(ref name) = f.name {
                         let stored_name = name.rsplit('/').next().unwrap_or(name);
@@ -2537,14 +2736,16 @@ impl App {
                 let (l3d_data, ldt_data) = self.get_variant_l3d_ldt(variant_id);
                 l3d_data.map(|l3d| {
                     let emitter_data = gldf_rs::get_variant_emitter_data(&gldf.gldf, variant_id);
-                    let emitter_config: Vec<EmitterConfig> = emitter_data.emitters.iter().map(|em| {
-                        EmitterConfig {
+                    let emitter_config: Vec<EmitterConfig> = emitter_data
+                        .emitters
+                        .iter()
+                        .map(|em| EmitterConfig {
                             leo_name: em.leo_name.clone(),
                             luminous_flux: em.luminous_flux,
                             color_temperature: em.color_temperature,
                             emergency_behavior: em.emergency_behavior.clone(),
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     (l3d, ldt_data, emitter_config, variant_id.clone())
                 })
             });

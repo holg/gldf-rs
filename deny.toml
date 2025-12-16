@@ -13,11 +13,13 @@ confidence-threshold = 0.8
 # These are common open-source licenses used in the Rust ecosystem
 allow = [
   "MIT",
+  "MIT-0",
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
   "BSD-3-Clause",
   "BSD-2-Clause",
   "0BSD",
+  "CC0-1.0",
   "ISC",
   "Zlib",
   "Unicode-DFS-2016",

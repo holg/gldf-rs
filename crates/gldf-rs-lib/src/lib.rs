@@ -67,16 +67,15 @@ pub mod operations;
 /// L3D to LDT mapping utilities
 pub mod mapping;
 pub use mapping::{
-    get_l3d_ldt_mappings, get_l3d_files_with_ldt, get_first_l3d_with_ldt,
-    get_variant_emitter_data,
-    L3dLdtMapping, L3dWithLdt, EmitterRenderData, VariantEmitterData,
+    get_first_l3d_with_ldt, get_l3d_files_with_ldt, get_l3d_ldt_mappings, get_variant_emitter_data,
+    EmitterRenderData, L3dLdtMapping, L3dWithLdt, VariantEmitterData,
 };
 
 /// Conversion utilities for creating GLDF from other formats (LDT/IES)
 #[cfg(feature = "eulumdat")]
 pub mod convert;
 #[cfg(feature = "eulumdat")]
-pub use convert::{ldt_to_gldf, ldt_metadata_to_gldf, LdtMetadata};
+pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 
 #[cfg(test)]
 mod tests;

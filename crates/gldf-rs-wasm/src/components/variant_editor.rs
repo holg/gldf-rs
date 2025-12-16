@@ -1,7 +1,7 @@
 //! Variant editor component for GLDF files
 
 use crate::state::use_gldf;
-use gldf_rs::gldf::product_definitions::{Mountings, Ceiling, Wall, Ground};
+use gldf_rs::gldf::product_definitions::{Ceiling, Ground, Mountings, Wall};
 use yew::prelude::*;
 
 /// Render mounting details for Ceiling type

@@ -19,8 +19,8 @@ crate-type = ["cdylib", "rlib"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-# Core library
-gldf-rs.workspace = true
+# Core library with eulumdat support for LDT/IES conversion
+gldf-rs = { workspace = true, features = ["eulumdat"] }
 
 # Python bindings
 pyo3.workspace = true

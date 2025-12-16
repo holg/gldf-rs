@@ -119,7 +119,13 @@ impl GldfProduct {
     /// Returns an error if a file with the same ID already exists.
     pub fn add_file(&mut self, file: File) -> Result<()> {
         // Check for duplicate ID
-        if self.general_definitions.files.file.iter().any(|f| f.id == file.id) {
+        if self
+            .general_definitions
+            .files
+            .file
+            .iter()
+            .any(|f| f.id == file.id)
+        {
             return Err(anyhow!("File with ID '{}' already exists", file.id));
         }
         self.general_definitions.files.file.push(file);
@@ -161,12 +167,20 @@ impl GldfProduct {
 
     /// Gets a file definition by ID.
     pub fn get_file(&self, id: &str) -> Option<&File> {
-        self.general_definitions.files.file.iter().find(|f| f.id == id)
+        self.general_definitions
+            .files
+            .file
+            .iter()
+            .find(|f| f.id == id)
     }
 
     /// Gets a mutable reference to a file definition by ID.
     pub fn get_file_mut(&mut self, id: &str) -> Option<&mut File> {
-        self.general_definitions.files.file.iter_mut().find(|f| f.id == id)
+        self.general_definitions
+            .files
+            .file
+            .iter_mut()
+            .find(|f| f.id == id)
     }
 
     // ==================== Variant Operations ====================
@@ -264,8 +278,15 @@ impl GldfProduct {
         let photometries = self.general_definitions.photometries.as_mut().unwrap();
 
         // Check for duplicate ID
-        if photometries.photometry.iter().any(|p| p.id == photometry.id) {
-            return Err(anyhow!("Photometry with ID '{}' already exists", photometry.id));
+        if photometries
+            .photometry
+            .iter()
+            .any(|p| p.id == photometry.id)
+        {
+            return Err(anyhow!(
+                "Photometry with ID '{}' already exists",
+                photometry.id
+            ));
         }
 
         photometries.photometry.push(photometry);
@@ -336,8 +357,14 @@ impl GldfProduct {
         let geometries = self.general_definitions.geometries.as_mut().unwrap();
 
         // Check for duplicate ID across both simple and model geometries
-        if geometries.simple_geometry.iter().any(|g| g.id == geometry.id)
-            || geometries.model_geometry.iter().any(|g| g.id == geometry.id)
+        if geometries
+            .simple_geometry
+            .iter()
+            .any(|g| g.id == geometry.id)
+            || geometries
+                .model_geometry
+                .iter()
+                .any(|g| g.id == geometry.id)
         {
             return Err(anyhow!("Geometry with ID '{}' already exists", geometry.id));
         }
@@ -359,8 +386,14 @@ impl GldfProduct {
         let geometries = self.general_definitions.geometries.as_mut().unwrap();
 
         // Check for duplicate ID across both simple and model geometries
-        if geometries.simple_geometry.iter().any(|g| g.id == geometry.id)
-            || geometries.model_geometry.iter().any(|g| g.id == geometry.id)
+        if geometries
+            .simple_geometry
+            .iter()
+            .any(|g| g.id == geometry.id)
+            || geometries
+                .model_geometry
+                .iter()
+                .any(|g| g.id == geometry.id)
         {
             return Err(anyhow!("Geometry with ID '{}' already exists", geometry.id));
         }
@@ -440,10 +473,19 @@ impl GldfProduct {
         let light_sources = self.general_definitions.light_sources.as_mut().unwrap();
 
         // Check for duplicate ID
-        if light_sources.fixed_light_source.iter().any(|s| s.id == source.id)
-            || light_sources.changeable_light_source.iter().any(|s| s.id == source.id)
+        if light_sources
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == source.id)
+            || light_sources
+                .changeable_light_source
+                .iter()
+                .any(|s| s.id == source.id)
         {
-            return Err(anyhow!("Light source with ID '{}' already exists", source.id));
+            return Err(anyhow!(
+                "Light source with ID '{}' already exists",
+                source.id
+            ));
         }
 
         light_sources.fixed_light_source.push(source);
@@ -463,10 +505,19 @@ impl GldfProduct {
         let light_sources = self.general_definitions.light_sources.as_mut().unwrap();
 
         // Check for duplicate ID
-        if light_sources.fixed_light_source.iter().any(|s| s.id == source.id)
-            || light_sources.changeable_light_source.iter().any(|s| s.id == source.id)
+        if light_sources
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == source.id)
+            || light_sources
+                .changeable_light_source
+                .iter()
+                .any(|s| s.id == source.id)
         {
-            return Err(anyhow!("Light source with ID '{}' already exists", source.id));
+            return Err(anyhow!(
+                "Light source with ID '{}' already exists",
+                source.id
+            ));
         }
 
         light_sources.changeable_light_source.push(source);
@@ -625,13 +676,15 @@ mod tests {
         assert_eq!(id1, "file_1");
 
         let mut product2 = GldfProduct::default();
-        product2.add_file(File {
-            id: "file_1".to_string(),
-            content_type: "ldc/eulumdat".to_string(),
-            type_attr: "localFileName".to_string(),
-            file_name: "test.ldt".to_string(),
-            language: String::new(),
-        }).unwrap();
+        product2
+            .add_file(File {
+                id: "file_1".to_string(),
+                content_type: "ldc/eulumdat".to_string(),
+                type_attr: "localFileName".to_string(),
+                file_name: "test.ldt".to_string(),
+                language: String::new(),
+            })
+            .unwrap();
 
         let id2 = product2.generate_unique_id("file");
         assert_eq!(id2, "file_2");
@@ -662,7 +715,10 @@ mod tests {
         let mut updated_file = file.clone();
         updated_file.file_name = "updated.ldt".to_string();
         assert!(product.update_file("test_file", updated_file).is_ok());
-        assert_eq!(product.get_file("test_file").unwrap().file_name, "updated.ldt");
+        assert_eq!(
+            product.get_file("test_file").unwrap().file_name,
+            "updated.ldt"
+        );
 
         // Remove file
         assert!(product.remove_file("test_file").is_ok());
