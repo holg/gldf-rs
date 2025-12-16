@@ -21,7 +21,7 @@ pub use product_definitions::*;
 use serde::{Deserialize, Serialize};
 
 fn get_xsnonamespaceschemalocation() -> String {
-    "https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd".to_string()
+    "https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd".to_string()
 }
 
 fn get_xmlns_xsi() -> String {
@@ -34,7 +34,7 @@ fn get_xmlns_xsi() -> String {
 /// It provides serialization and deserialization methods for working with GLDF XML data.
 ///
 /// This struct is intended to represent GLDF products conforming to the schema specified at
-/// `<https://gldf.io/xsd/gldf/1.0.0-rc.1/gldf.xsd.>`
+/// `<https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd.>`
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "Root")]
 pub struct GldfProduct {

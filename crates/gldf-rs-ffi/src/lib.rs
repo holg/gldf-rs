@@ -155,11 +155,10 @@ impl GldfEngine {
     /// Get header information
     pub fn get_header(&self) -> GldfHeader {
         let product = self.product.read().unwrap();
-        let fv = &product.header.format_version;
         GldfHeader {
             manufacturer: product.header.manufacturer.clone(),
             author: product.header.author.clone(),
-            format_version: format!("{}.{}.{}", fv.major, fv.minor, fv.pre_release),
+            format_version: product.header.format_version.to_version_string(),
             created_with_application: product.header.created_with_application.clone(),
             creation_time_code: product.header.creation_time_code.clone(),
         }
@@ -483,12 +482,11 @@ impl GldfEngine {
         *self.is_modified.write().unwrap() = true;
     }
 
-    /// Set the format version
-    pub fn set_format_version(&self, major: i32, minor: i32, pre_release: i32) {
+    /// Set the format version (e.g., "1.0.0-rc.3")
+    pub fn set_format_version(&self, version: String) {
+        use gldf_rs::gldf::FormatVersion;
         let mut product = self.product.write().unwrap();
-        product.header.format_version.major = major;
-        product.header.format_version.minor = minor;
-        product.header.format_version.pre_release = pre_release;
+        product.header.format_version = FormatVersion::from_string(&version);
         *self.is_modified.write().unwrap() = true;
     }
 

@@ -3,26 +3,102 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Represents the format version
-/// some more needed
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename = "FormatVersion")]
-pub struct FormatVersion {
-    /// The major version number.
-    #[serde(rename = "@major", default)]
-    pub major: i32,
-
-    /// The minor version number.
-    #[serde(rename = "@minor", default)]
-    pub minor: i32,
-
-    /// The pre-release version number.
-    #[serde(rename = "@pre-release", default, skip_serializing_if = "is_zero")]
-    pub pre_release: i32,
+fn default_major() -> i32 {
+    1
 }
 
-fn is_zero(val: &i32) -> bool {
-    *val == 0
+fn default_minor() -> i32 {
+    0
+}
+
+/// Represents the format version with major, minor, and pre-release attributes.
+///
+/// GLDF FormatVersion is an element with attributes for the version components.
+/// Supports both the old simple text format and the new rc.3 attribute format.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "FormatVersion")]
+pub struct FormatVersion {
+    /// The major version number (defaults to 1 for backward compatibility)
+    #[serde(rename = "@major", default = "default_major")]
+    pub major: i32,
+
+    /// The minor version number (defaults to 0 for backward compatibility)
+    #[serde(rename = "@minor", default = "default_minor")]
+    pub minor: i32,
+
+    /// The pre-release version number (optional, but typically "3" for rc.3)
+    #[serde(
+        rename = "@pre-release",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub pre_release: Option<i32>,
+
+    /// Legacy text value for backward compatibility with old format
+    /// This is only used during deserialization of old GLDF files
+    #[serde(rename = "$text", skip_serializing, default)]
+    legacy_value: Option<String>,
+}
+
+impl Default for FormatVersion {
+    fn default() -> Self {
+        Self {
+            major: 1,
+            minor: 0,
+            pre_release: Some(3),
+            legacy_value: None,
+        }
+    }
+}
+
+impl FormatVersion {
+    /// Create a new FormatVersion with the given components
+    pub fn new(major: i32, minor: i32, pre_release: Option<i32>) -> Self {
+        Self {
+            major,
+            minor,
+            pre_release,
+            legacy_value: None,
+        }
+    }
+
+    /// Create FormatVersion from a version string like "1.0.0-rc.3"
+    pub fn from_string(value: &str) -> Self {
+        let parts: Vec<&str> = value.split('-').collect();
+        let version_parts: Vec<&str> = parts.first().unwrap_or(&"1.0.0").split('.').collect();
+        let major = version_parts
+            .first()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+        let minor = version_parts
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let pre_release = if parts.len() > 1 {
+            // Extract number from "rc.3" -> 3
+            parts[1].split('.').next_back().and_then(|s| s.parse().ok())
+        } else {
+            None
+        };
+        Self {
+            major,
+            minor,
+            pre_release,
+            legacy_value: None,
+        }
+    }
+
+    /// Convert to version string like "1.0.0-rc.3"
+    /// If legacy_value is present (from old GLDF files), return that instead
+    pub fn to_version_string(&self) -> String {
+        if let Some(ref legacy) = self.legacy_value {
+            return legacy.clone();
+        }
+        match self.pre_release {
+            Some(pr) => format!("{}.{}.0-rc.{}", self.major, self.minor, pr),
+            None => format!("{}.{}.0", self.major, self.minor),
+        }
+    }
 }
 
 /// Represents a license key.
@@ -132,6 +208,7 @@ pub struct Address {
 ///
 /// The `Contact` struct models contact information, including addresses. It supports serialization
 /// and deserialization of XML data for working with contact details.
+/// Note: According to GLDF schema, Contact must have at least one Address child.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Contact {
     /// A vector of addresses associated with the contact.
@@ -142,37 +219,60 @@ pub struct Contact {
     pub address: Vec<Address>,
 }
 
+impl Contact {
+    /// Returns true if the contact has no addresses
+    pub fn is_empty(&self) -> bool {
+        self.address.is_empty()
+    }
+}
+
+fn is_contact_empty(contact: &Contact) -> bool {
+    contact.is_empty()
+}
+
+fn default_author() -> String {
+    "__empty__".to_string()
+}
+
+fn is_default_author(s: &str) -> bool {
+    s.is_empty()
+}
+
 /// Represents the header information of a GLDF file.
 ///
 /// The `Header` struct models the header section of a GLDF (Global Lighting Data Format) file. It
 /// includes information about the software used to create the file, author details, creation time,
 /// format version, and more. It supports serialization and deserialization of XML data for working
 /// with GLDF header information.
+///
+/// Field order follows GLDF 1.0.0-rc.3 schema requirements.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Header {
-    /// The author of the GLDF file.
-    #[serde(rename = "Author", default)]
-    pub author: String,
-
-    /// The manufacturer associated with the GLDF file.
+    /// The manufacturer associated with the GLDF file (required, must come first).
     #[serde(rename = "Manufacturer", default)]
     pub manufacturer: String,
 
-    /// The creation time code of the GLDF file.
-    #[serde(rename = "GldfCreationTimeCode", alias = "CreationTimeCode", default)]
-    pub creation_time_code: String,
+    /// The format version of the GLDF file (required, must come second).
+    #[serde(rename = "FormatVersion", default)]
+    pub format_version: FormatVersion,
 
     /// The application used to create the GLDF file.
     #[serde(rename = "CreatedWithApplication", default)]
     pub created_with_application: String,
 
-    /// The format version of the GLDF file.
-    #[serde(rename = "FormatVersion", default)]
-    pub format_version: FormatVersion,
+    /// The creation time code of the GLDF file.
+    #[serde(rename = "GldfCreationTimeCode", alias = "CreationTimeCode", default)]
+    pub creation_time_code: String,
+
+    /// The unique GLDF ID (optional).
+    #[serde(
+        rename = "UniqueGldfId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub unique_gldf_id: Option<String>,
 
     /// The default language for the GLDF content.
-    ///
-    /// This field is optional and may not be present in all GLDF files.
     #[serde(
         rename = "DefaultLanguage",
         default,
@@ -181,8 +281,6 @@ pub struct Header {
     pub default_language: Option<String>,
 
     /// A collection of license keys associated with the GLDF file.
-    ///
-    /// This field is optional and may not be present in all GLDF files.
     #[serde(
         rename = "LicenseKeys",
         default,
@@ -191,8 +289,6 @@ pub struct Header {
     pub license_keys: Option<LicenseKeys>,
 
     /// The Relux member ID.
-    ///
-    /// This field is optional and may not be present in all GLDF files.
     #[serde(
         rename = "ReluxMemberId",
         default,
@@ -201,8 +297,6 @@ pub struct Header {
     pub relux_member_id: Option<String>,
 
     /// The DIALux member ID.
-    ///
-    /// This field is optional and may not be present in all GLDF files.
     #[serde(
         rename = "DIALuxMemberId",
         default,
@@ -210,8 +304,18 @@ pub struct Header {
     )]
     pub dia_lux_member_id: Option<String>,
 
+    /// The author of the GLDF file (comes after member IDs in rc.3).
+    /// Defaults to "__empty__" if not set.
+    #[serde(
+        rename = "Author",
+        default = "default_author",
+        skip_serializing_if = "is_default_author"
+    )]
+    pub author: String,
+
     /// The contact information associated with the GLDF file.
-    #[serde(rename = "Contact", default)]
+    /// Only serialized if it contains at least one address.
+    #[serde(rename = "Contact", default, skip_serializing_if = "is_contact_empty")]
     pub contact: Contact,
 }
 

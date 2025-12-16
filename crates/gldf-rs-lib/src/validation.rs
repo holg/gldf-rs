@@ -211,13 +211,13 @@ fn validate_header(product: &GldfProduct, result: &mut ValidationResult) {
         ));
     }
 
-    // Format version check
+    // Format version check - major should be at least 1
     let version = &header.format_version;
-    if version.major == 0 && version.minor == 0 {
+    if version.major < 1 {
         result.add(ValidationError::warning(
             "header.formatVersion",
             "HEADER_003",
-            "Format version 0.0 may not be valid",
+            "Format version major should be at least 1",
         ));
     }
 

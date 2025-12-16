@@ -30,6 +30,13 @@ pub use geometries::*;
 
 use serde::{Deserialize, Serialize};
 
+fn is_emitters_empty(emitters: &Option<Emitters>) -> bool {
+    match emitters {
+        None => true,
+        Some(e) => e.is_empty(),
+    }
+}
+
 /// The GeneralDefinitions struct describes the general definitions of the GLDF file
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneralDefinitions {
@@ -72,7 +79,8 @@ pub struct GeneralDefinitions {
     /// A collection of emitter definitions.
     ///
     /// This field is optional and may not be present in all GLDF files.
-    #[serde(rename = "Emitters", skip_serializing_if = "Option::is_none")]
+    /// Skipped if empty or contains only empty emitters.
+    #[serde(rename = "Emitters", skip_serializing_if = "is_emitters_empty")]
     pub emitters: Option<Emitters>,
 
     /// A collection of geometry definitions.
@@ -85,6 +93,10 @@ pub struct GeneralDefinitions {
 /// The ProductSerie struct describes a product serie of the GLDF file.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProductSerie {
+    /// The unique identifier for the product series (required in rc.3).
+    #[serde(rename = "@id", default)]
+    pub id: String,
+
     /// The name of the product series.
     #[serde(rename = "Name", skip_serializing_if = "Option::is_none")]
     pub name: Option<LocaleFoo>,

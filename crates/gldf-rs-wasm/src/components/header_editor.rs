@@ -54,45 +54,11 @@ pub fn header_editor() -> Html {
         })
     };
 
-    let on_major_change = {
+    let on_format_version_change = {
         let gldf = gldf.clone();
-        let format_version = header.format_version.clone();
         Callback::from(move |e: Event| {
             let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-            let major: i32 = input.value().parse().unwrap_or(1);
-            gldf.dispatch(GldfAction::SetFormatVersion {
-                major,
-                minor: format_version.minor,
-                pre_release: format_version.pre_release,
-            });
-        })
-    };
-
-    let on_minor_change = {
-        let gldf = gldf.clone();
-        let format_version = header.format_version.clone();
-        Callback::from(move |e: Event| {
-            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-            let minor: i32 = input.value().parse().unwrap_or(0);
-            gldf.dispatch(GldfAction::SetFormatVersion {
-                major: format_version.major,
-                minor,
-                pre_release: format_version.pre_release,
-            });
-        })
-    };
-
-    let on_pre_release_change = {
-        let gldf = gldf.clone();
-        let format_version = header.format_version.clone();
-        Callback::from(move |e: Event| {
-            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-            let pre_release: i32 = input.value().parse().unwrap_or(0);
-            gldf.dispatch(GldfAction::SetFormatVersion {
-                major: format_version.major,
-                minor: format_version.minor,
-                pre_release,
-            });
+            gldf.dispatch(GldfAction::SetFormatVersion(input.value()));
         })
     };
 
@@ -155,41 +121,16 @@ pub fn header_editor() -> Html {
                 />
             </div>
 
-            <fieldset class="version-fieldset">
-                <legend>{ "Format Version" }</legend>
-                <div class="version-inputs">
-                    <div class="form-group inline">
-                        <label for="version-major">{ "Major" }</label>
-                        <input
-                            type="number"
-                            id="version-major"
-                            value={header.format_version.major.to_string()}
-                            onchange={on_major_change}
-                            min="1"
-                        />
-                    </div>
-                    <div class="form-group inline">
-                        <label for="version-minor">{ "Minor" }</label>
-                        <input
-                            type="number"
-                            id="version-minor"
-                            value={header.format_version.minor.to_string()}
-                            onchange={on_minor_change}
-                            min="0"
-                        />
-                    </div>
-                    <div class="form-group inline">
-                        <label for="version-pre-release">{ "Pre-release" }</label>
-                        <input
-                            type="number"
-                            id="version-pre-release"
-                            value={header.format_version.pre_release.to_string()}
-                            onchange={on_pre_release_change}
-                            min="0"
-                        />
-                    </div>
-                </div>
-            </fieldset>
+            <div class="form-group">
+                <label for="format-version">{ "Format Version" }</label>
+                <input
+                    type="text"
+                    id="format-version"
+                    value={header.format_version.to_version_string()}
+                    onchange={on_format_version_change}
+                    placeholder="e.g., 1.0.0-rc.3"
+                />
+            </div>
         </div>
     }
 }
