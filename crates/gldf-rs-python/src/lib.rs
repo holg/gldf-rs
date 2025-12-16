@@ -109,7 +109,7 @@ fn ldt_to_gldf_bytes<'py>(
         .save_to_buf()
         .map_err(|e| PyValueError::new_err(format!("Failed to create GLDF bytes: {}", e)))?;
 
-    Ok(pyo3::types::PyBytes::new_bound(py, &gldf_bytes))
+    Ok(pyo3::types::PyBytes::new(py, &gldf_bytes))
 }
 
 /// Export GLDF from JSON to bytes (ZIP archive)
@@ -133,7 +133,7 @@ fn gldf_json_to_bytes<'py>(
         .save_to_buf()
         .map_err(|e| PyValueError::new_err(format!("Failed to create GLDF bytes: {}", e)))?;
 
-    Ok(pyo3::types::PyBytes::new_bound(py, &gldf_bytes))
+    Ok(pyo3::types::PyBytes::new(py, &gldf_bytes))
 }
 
 /// A Python module for GLDF file handling implemented in Rust.
