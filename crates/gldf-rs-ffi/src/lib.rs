@@ -66,6 +66,29 @@ pub struct GldfVariant {
     pub id: String,
     pub name: String,
     pub description: String,
+    /// Geometry ID reference (if variant has 3D model)
+    pub geometry_id: Option<String>,
+    /// List of emitter references with their external names
+    pub emitter_refs: Vec<GldfEmitterRef>,
+}
+
+/// Emitter reference in a variant
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct GldfEmitterRef {
+    pub emitter_id: String,
+    pub external_name: Option<String>,
+}
+
+/// Emitter data for 3D rendering
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct GldfEmitterData {
+    pub emitter_id: String,
+    /// Photometry file ID (for IES/LDT lookup)
+    pub photometry_file_id: Option<String>,
+    /// Light source type
+    pub light_source_type: String,
+    /// Rated luminous flux in lumens
+    pub rated_luminous_flux: Option<i32>,
 }
 
 /// Statistics about loaded GLDF
@@ -266,7 +289,7 @@ impl GldfEngine {
         result
     }
 
-    /// Get product variants
+    /// Get product variants with geometry and emitter references
     pub fn get_variants(&self) -> Vec<GldfVariant> {
         let product = self.product.read().unwrap();
         product
@@ -277,24 +300,123 @@ impl GldfEngine {
                 variants
                     .variant
                     .iter()
-                    .map(|v| GldfVariant {
-                        id: v.id.clone(),
-                        name: v
-                            .name
+                    .map(|v| {
+                        // Extract geometry ID and emitter refs from ModelGeometryReference
+                        let (geometry_id, emitter_refs) = v
+                            .geometry
                             .as_ref()
-                            .and_then(|n| n.locale.first())
-                            .map(|l| l.value.clone())
-                            .unwrap_or_default(),
-                        description: v
-                            .description
-                            .as_ref()
-                            .and_then(|d| d.locale.first())
-                            .map(|l| l.value.clone())
-                            .unwrap_or_default(),
+                            .and_then(|g| g.model_geometry_reference.as_ref())
+                            .map(|mgr| {
+                                let geom_id = mgr.geometry_id.clone();
+                                let refs: Vec<GldfEmitterRef> = mgr
+                                    .emitter_reference
+                                    .iter()
+                                    .map(|er| GldfEmitterRef {
+                                        emitter_id: er.emitter_id.clone(),
+                                        external_name: Some(er.emitter_object_external_name.clone()),
+                                    })
+                                    .collect();
+                                (Some(geom_id), refs)
+                            })
+                            .unwrap_or((None, vec![]));
+
+                        GldfVariant {
+                            id: v.id.clone(),
+                            name: v
+                                .name
+                                .as_ref()
+                                .and_then(|n| n.locale.first())
+                                .map(|l| l.value.clone())
+                                .unwrap_or_default(),
+                            description: v
+                                .description
+                                .as_ref()
+                                .and_then(|d| d.locale.first())
+                                .map(|l| l.value.clone())
+                                .unwrap_or_default(),
+                            geometry_id,
+                            emitter_refs,
+                        }
                     })
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Get emitter data for 3D rendering (photometry info, luminous flux)
+    pub fn get_emitter_data(&self, emitter_id: String) -> Option<GldfEmitterData> {
+        let product = self.product.read().unwrap();
+        let emitters = product.general_definitions.emitters.as_ref()?;
+
+        for emitter in &emitters.emitter {
+            if emitter.id == emitter_id {
+                // Check fixed light emitters first
+                if let Some(fle) = emitter.fixed_light_emitter.first() {
+                    let photometry_id = &fle.photometry_reference.photometry_id;
+                    let photometry_file_id = product
+                        .general_definitions
+                        .photometries
+                        .as_ref()
+                        .and_then(|phots| {
+                            phots
+                                .photometry
+                                .iter()
+                                .find(|p| &p.id == photometry_id)
+                                .and_then(|p| {
+                                    p.photometry_file_reference
+                                        .as_ref()
+                                        .map(|pfr| pfr.file_id.clone())
+                                })
+                        });
+
+                    return Some(GldfEmitterData {
+                        emitter_id: emitter_id.clone(),
+                        photometry_file_id,
+                        light_source_type: "fixed".to_string(),
+                        rated_luminous_flux: fle.rated_luminous_flux,
+                    });
+                }
+
+                // Check changeable light emitters
+                if let Some(cle) = emitter.changeable_light_emitter.first() {
+                    let photometry_id = &cle.photometry_reference.photometry_id;
+                    let photometry_file_id = product
+                        .general_definitions
+                        .photometries
+                        .as_ref()
+                        .and_then(|phots| {
+                            phots
+                                .photometry
+                                .iter()
+                                .find(|p| &p.id == photometry_id)
+                                .and_then(|p| {
+                                    p.photometry_file_reference
+                                        .as_ref()
+                                        .map(|pfr| pfr.file_id.clone())
+                                })
+                        });
+
+                    return Some(GldfEmitterData {
+                        emitter_id: emitter_id.clone(),
+                        photometry_file_id,
+                        light_source_type: "changeable".to_string(),
+                        rated_luminous_flux: None,
+                    });
+                }
+
+                // Check sensor emitters
+                if !emitter.sensor_emitter.is_empty() {
+                    return Some(GldfEmitterData {
+                        emitter_id: emitter_id.clone(),
+                        photometry_file_id: None,
+                        light_source_type: "sensor".to_string(),
+                        rated_luminous_flux: None,
+                    });
+                }
+            }
+        }
+
+        None
     }
 
     /// Get statistics about the loaded GLDF
