@@ -56,9 +56,8 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
   # proc-macro-error is unmaintained but still widely used by many crates
   "RUSTSEC-2024-0370",
-  "RUSTSEC-2023-0055"
-  # pyo3 buffer overflow - fixed in 0.23.4, but we need 0.22 for abi3-py37 support
-  "RUSTSEC-2025-0020",
+  "RUSTSEC-2023-0055",
+  # pyo3 buffer overflow - fixed in 0.24.1, we upgraded pyo3 so can remove this
 ]
 
 # ============================================================================
