@@ -567,6 +567,17 @@ public protocol GldfEngineProtocol : AnyObject {
     func getFiles()  -> [GldfFile]
     
     /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+    func getGeometryContent(geometryId: String) throws  -> GldfFileContent
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */
+    func getGeometryFileId(geometryId: String)  -> String?
+    
+    /**
      * Get geometry (L3D) files
      */
     func getGeometryFiles()  -> [GldfFile]
@@ -827,6 +838,29 @@ open func getFileContentAsString(fileId: String)throws  -> String {
 open func getFiles() -> [GldfFile] {
     return try!  FfiConverterSequenceTypeGldfFile.lift(try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_get_files(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+open func getGeometryContent(geometryId: String)throws  -> GldfFileContent {
+    return try  FfiConverterTypeGldfFileContent.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_content(self.uniffiClonePointer(),
+        FfiConverterString.lower(geometryId),$0
+    )
+})
+}
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */
+open func getGeometryFileId(geometryId: String) -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_file_id(self.uniffiClonePointer(),
+        FfiConverterString.lower(geometryId),$0
     )
 })
 }
@@ -3972,6 +4006,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_files() != 13639) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_content() != 30019) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_file_id() != 40073) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_files() != 24591) {

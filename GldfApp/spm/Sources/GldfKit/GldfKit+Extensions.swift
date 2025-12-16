@@ -8,3 +8,9 @@ import Foundation
 extension GldfFile: Identifiable {}
 extension GldfLightSource: Identifiable {}
 extension GldfVariant: Identifiable {}
+extension GldfEmitterRef: Identifiable {
+    public var id: String { emitterId }
+}
+extension GldfEmitterData: Identifiable {
+    public var id: String { emitterId }
+}

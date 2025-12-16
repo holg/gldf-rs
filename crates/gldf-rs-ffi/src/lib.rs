@@ -313,7 +313,9 @@ impl GldfEngine {
                                     .iter()
                                     .map(|er| GldfEmitterRef {
                                         emitter_id: er.emitter_id.clone(),
-                                        external_name: Some(er.emitter_object_external_name.clone()),
+                                        external_name: Some(
+                                            er.emitter_object_external_name.clone(),
+                                        ),
                                     })
                                     .collect();
                                 (Some(geom_id), refs)
@@ -454,6 +456,41 @@ impl GldfEngine {
                 .map(|g| g.model_geometry.len())
                 .unwrap_or(0) as u64,
         }
+    }
+
+    /// Get geometry file content by geometry ID (from variant)
+    /// This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+    pub fn get_geometry_content(&self, geometry_id: String) -> Result<GldfFileContent, GldfError> {
+        // Resolve geometry_id to file_id
+        let file_id = self
+            .get_geometry_file_id(geometry_id.clone())
+            .ok_or_else(|| GldfError::FileNotFound {
+                msg: format!(
+                    "Geometry '{}' not found or has no file reference",
+                    geometry_id
+                ),
+            })?;
+
+        // Use existing method to get file content
+        self.get_file_content(file_id)
+    }
+
+    /// Get the file ID for a geometry ID (resolves ModelGeometry reference)
+    pub fn get_geometry_file_id(&self, geometry_id: String) -> Option<String> {
+        let product = self.product.read().unwrap();
+
+        product
+            .general_definitions
+            .geometries
+            .as_ref()
+            .and_then(|geometries| {
+                geometries
+                    .model_geometry
+                    .iter()
+                    .find(|mg| mg.id == geometry_id)
+            })
+            .and_then(|mg| mg.geometry_file_reference.first())
+            .map(|fr| fr.file_id.clone())
     }
 
     // =========================================================================

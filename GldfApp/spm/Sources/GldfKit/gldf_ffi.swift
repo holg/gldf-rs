@@ -548,6 +548,11 @@ public protocol GldfEngineProtocol : AnyObject {
     func getArchiveFile(path: String) throws  -> Data
     
     /**
+     * Get emitter data for 3D rendering (photometry info, luminous flux)
+     */
+    func getEmitterData(emitterId: String)  -> GldfEmitterData?
+    
+    /**
      * Extract file content by file ID
      * Returns the binary content of the file from the GLDF archive
      */
@@ -562,6 +567,17 @@ public protocol GldfEngineProtocol : AnyObject {
      * Get all file definitions
      */
     func getFiles()  -> [GldfFile]
+    
+    /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+    func getGeometryContent(geometryId: String) throws  -> GldfFileContent
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */
+    func getGeometryFileId(geometryId: String)  -> String?
     
     /**
      * Get geometry (L3D) files
@@ -594,7 +610,7 @@ public protocol GldfEngineProtocol : AnyObject {
     func getStats()  -> GldfStats
     
     /**
-     * Get product variants
+     * Get product variants with geometry and emitter references
      */
     func getVariants()  -> [GldfVariant]
     
@@ -644,9 +660,9 @@ public protocol GldfEngineProtocol : AnyObject {
     func setDefaultLanguage(language: String?) 
     
     /**
-     * Set the format version
+     * Set the format version (e.g., "1.0.0-rc.3")
      */
-    func setFormatVersion(major: Int32, minor: Int32, preRelease: Int32) 
+    func setFormatVersion(version: String) 
     
     /**
      * Set the manufacturer
@@ -785,6 +801,17 @@ open func getArchiveFile(path: String)throws  -> Data {
 }
     
     /**
+     * Get emitter data for 3D rendering (photometry info, luminous flux)
+     */
+open func getEmitterData(emitterId: String) -> GldfEmitterData? {
+    return try!  FfiConverterOptionTypeGldfEmitterData.lift(try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_emitter_data(self.uniffiClonePointer(),
+        FfiConverterString.lower(emitterId),$0
+    )
+})
+}
+    
+    /**
      * Extract file content by file ID
      * Returns the binary content of the file from the GLDF archive
      */
@@ -813,6 +840,29 @@ open func getFileContentAsString(fileId: String)throws  -> String {
 open func getFiles() -> [GldfFile] {
     return try!  FfiConverterSequenceTypeGldfFile.lift(try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_get_files(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+open func getGeometryContent(geometryId: String)throws  -> GldfFileContent {
+    return try  FfiConverterTypeGldfFileContent.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_content(self.uniffiClonePointer(),
+        FfiConverterString.lower(geometryId),$0
+    )
+})
+}
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */
+open func getGeometryFileId(geometryId: String) -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_file_id(self.uniffiClonePointer(),
+        FfiConverterString.lower(geometryId),$0
     )
 })
 }
@@ -878,7 +928,7 @@ open func getStats() -> GldfStats {
 }
     
     /**
-     * Get product variants
+     * Get product variants with geometry and emitter references
      */
 open func getVariants() -> [GldfVariant] {
     return try!  FfiConverterSequenceTypeGldfVariant.lift(try! rustCall() {
@@ -977,13 +1027,11 @@ open func setDefaultLanguage(language: String?) {try! rustCall() {
 }
     
     /**
-     * Set the format version
+     * Set the format version (e.g., "1.0.0-rc.3")
      */
-open func setFormatVersion(major: Int32, minor: Int32, preRelease: Int32) {try! rustCall() {
+open func setFormatVersion(version: String) {try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(self.uniffiClonePointer(),
-        FfiConverterInt32.lower(major),
-        FfiConverterInt32.lower(minor),
-        FfiConverterInt32.lower(preRelease),$0
+        FfiConverterString.lower(version),$0
     )
 }
 }
@@ -1414,6 +1462,178 @@ public func FfiConverterTypeEulumdatData_lift(_ buf: RustBuffer) throws -> Eulum
 #endif
 public func FfiConverterTypeEulumdatData_lower(_ value: EulumdatData) -> RustBuffer {
     return FfiConverterTypeEulumdatData.lower(value)
+}
+
+
+/**
+ * Emitter data for 3D rendering
+ */
+public struct GldfEmitterData {
+    public var emitterId: String
+    /**
+     * Photometry file ID (for IES/LDT lookup)
+     */
+    public var photometryFileId: String?
+    /**
+     * Light source type
+     */
+    public var lightSourceType: String
+    /**
+     * Rated luminous flux in lumens
+     */
+    public var ratedLuminousFlux: Int32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(emitterId: String, 
+        /**
+         * Photometry file ID (for IES/LDT lookup)
+         */photometryFileId: String?, 
+        /**
+         * Light source type
+         */lightSourceType: String, 
+        /**
+         * Rated luminous flux in lumens
+         */ratedLuminousFlux: Int32?) {
+        self.emitterId = emitterId
+        self.photometryFileId = photometryFileId
+        self.lightSourceType = lightSourceType
+        self.ratedLuminousFlux = ratedLuminousFlux
+    }
+}
+
+
+
+extension GldfEmitterData: Equatable, Hashable {
+    public static func ==(lhs: GldfEmitterData, rhs: GldfEmitterData) -> Bool {
+        if lhs.emitterId != rhs.emitterId {
+            return false
+        }
+        if lhs.photometryFileId != rhs.photometryFileId {
+            return false
+        }
+        if lhs.lightSourceType != rhs.lightSourceType {
+            return false
+        }
+        if lhs.ratedLuminousFlux != rhs.ratedLuminousFlux {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(emitterId)
+        hasher.combine(photometryFileId)
+        hasher.combine(lightSourceType)
+        hasher.combine(ratedLuminousFlux)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGldfEmitterData: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GldfEmitterData {
+        return
+            try GldfEmitterData(
+                emitterId: FfiConverterString.read(from: &buf), 
+                photometryFileId: FfiConverterOptionString.read(from: &buf), 
+                lightSourceType: FfiConverterString.read(from: &buf), 
+                ratedLuminousFlux: FfiConverterOptionInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GldfEmitterData, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.emitterId, into: &buf)
+        FfiConverterOptionString.write(value.photometryFileId, into: &buf)
+        FfiConverterString.write(value.lightSourceType, into: &buf)
+        FfiConverterOptionInt32.write(value.ratedLuminousFlux, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfEmitterData_lift(_ buf: RustBuffer) throws -> GldfEmitterData {
+    return try FfiConverterTypeGldfEmitterData.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfEmitterData_lower(_ value: GldfEmitterData) -> RustBuffer {
+    return FfiConverterTypeGldfEmitterData.lower(value)
+}
+
+
+/**
+ * Emitter reference in a variant
+ */
+public struct GldfEmitterRef {
+    public var emitterId: String
+    public var externalName: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(emitterId: String, externalName: String?) {
+        self.emitterId = emitterId
+        self.externalName = externalName
+    }
+}
+
+
+
+extension GldfEmitterRef: Equatable, Hashable {
+    public static func ==(lhs: GldfEmitterRef, rhs: GldfEmitterRef) -> Bool {
+        if lhs.emitterId != rhs.emitterId {
+            return false
+        }
+        if lhs.externalName != rhs.externalName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(emitterId)
+        hasher.combine(externalName)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGldfEmitterRef: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GldfEmitterRef {
+        return
+            try GldfEmitterRef(
+                emitterId: FfiConverterString.read(from: &buf), 
+                externalName: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GldfEmitterRef, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.emitterId, into: &buf)
+        FfiConverterOptionString.write(value.externalName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfEmitterRef_lift(_ buf: RustBuffer) throws -> GldfEmitterRef {
+    return try FfiConverterTypeGldfEmitterRef.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfEmitterRef_lower(_ value: GldfEmitterRef) -> RustBuffer {
+    return FfiConverterTypeGldfEmitterRef.lower(value)
 }
 
 
@@ -1873,13 +2093,29 @@ public struct GldfVariant {
     public var id: String
     public var name: String
     public var description: String
+    /**
+     * Geometry ID reference (if variant has 3D model)
+     */
+    public var geometryId: String?
+    /**
+     * List of emitter references with their external names
+     */
+    public var emitterRefs: [GldfEmitterRef]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, description: String) {
+    public init(id: String, name: String, description: String, 
+        /**
+         * Geometry ID reference (if variant has 3D model)
+         */geometryId: String?, 
+        /**
+         * List of emitter references with their external names
+         */emitterRefs: [GldfEmitterRef]) {
         self.id = id
         self.name = name
         self.description = description
+        self.geometryId = geometryId
+        self.emitterRefs = emitterRefs
     }
 }
 
@@ -1896,6 +2132,12 @@ extension GldfVariant: Equatable, Hashable {
         if lhs.description != rhs.description {
             return false
         }
+        if lhs.geometryId != rhs.geometryId {
+            return false
+        }
+        if lhs.emitterRefs != rhs.emitterRefs {
+            return false
+        }
         return true
     }
 
@@ -1903,6 +2145,8 @@ extension GldfVariant: Equatable, Hashable {
         hasher.combine(id)
         hasher.combine(name)
         hasher.combine(description)
+        hasher.combine(geometryId)
+        hasher.combine(emitterRefs)
     }
 }
 
@@ -1916,7 +2160,9 @@ public struct FfiConverterTypeGldfVariant: FfiConverterRustBuffer {
             try GldfVariant(
                 id: FfiConverterString.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf)
+                description: FfiConverterString.read(from: &buf), 
+                geometryId: FfiConverterOptionString.read(from: &buf), 
+                emitterRefs: FfiConverterSequenceTypeGldfEmitterRef.read(from: &buf)
         )
     }
 
@@ -1924,6 +2170,8 @@ public struct FfiConverterTypeGldfVariant: FfiConverterRustBuffer {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.geometryId, into: &buf)
+        FfiConverterSequenceTypeGldfEmitterRef.write(value.emitterRefs, into: &buf)
     }
 }
 
@@ -3197,6 +3445,30 @@ extension GldfError: Foundation.LocalizedError {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
+    typealias SwiftType = Int32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -3237,6 +3509,30 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeGldfEmitterData: FfiConverterRustBuffer {
+    typealias SwiftType = GldfEmitterData?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeGldfEmitterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeGldfEmitterData.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -3335,6 +3631,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeGldfEmitterRef: FfiConverterRustBuffer {
+    typealias SwiftType = [GldfEmitterRef]
+
+    public static func write(_ value: [GldfEmitterRef], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeGldfEmitterRef.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [GldfEmitterRef] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [GldfEmitterRef]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeGldfEmitterRef.read(from: &buf))
         }
         return seq
     }
@@ -3677,6 +3998,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file() != 13214) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_emitter_data() != 58923) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_file_content() != 58159) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3684,6 +4008,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_files() != 13639) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_content() != 30019) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_file_id() != 40073) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_files() != 24591) {
@@ -3704,7 +4034,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_stats() != 47316) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_variants() != 3574) {
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_variants() != 61898) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_has_archive_data() != 16000) {
@@ -3734,7 +4064,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_default_language() != 17385) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version() != 5986) {
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version() != 21660) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_manufacturer() != 5472) {

@@ -228,8 +228,8 @@ class AppState: ObservableObject {
         header = engine?.getHeader()
     }
 
-    func updateFormatVersion(major: Int32, minor: Int32, preRelease: Int32) {
-        engine?.setFormatVersion(major: major, minor: minor, preRelease: preRelease)
+    func updateFormatVersion(_ version: String) {
+        engine?.setFormatVersion(version: version)
         markModified()
         header = engine?.getHeader()
     }

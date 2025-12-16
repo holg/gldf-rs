@@ -8,7 +8,7 @@ echo "======================================================================"
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-FFI_CRATE="$ROOT_DIR/gldf-rs-ffi"
+FFI_CRATE="$ROOT_DIR/crates/gldf-rs-ffi"
 SPM_PACKAGE="$ROOT_DIR/GldfApp/spm"
 TARGET_DIR="$ROOT_DIR/target"
 
