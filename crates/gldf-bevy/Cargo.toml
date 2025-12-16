@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
 description = "Bevy-based 3D scene viewer for GLDF files with L3D models and LDT photometric lighting"
 
 [lib]
