@@ -20,7 +20,7 @@ path = "src/main.rs"
 [features]
 default = []
 # Enable ULD/ROLF file conversion (requires unpublished light-convert crate)
-light-convert = ["dep:light-convert"]
+# light-convert = ["dep:light-convert"]
 
 [dependencies]
 # Core library - enable eulumdat feature for LDT/IES to GLDF conversion
@@ -48,7 +48,7 @@ yew.workspace = true
 zip.workspace = true
 
 # Unified lighting file conversion (ULD, ROLF -> GLDF) - optional, not published
-light-convert = { workspace = true, optional = true }
+# light-convert = { workspace = true, optional = true }
 
 [dependencies.web-sys]
 workspace = true

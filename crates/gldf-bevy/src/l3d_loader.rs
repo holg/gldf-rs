@@ -434,8 +434,8 @@ fn extract_light_emitters(
             leo.objects().len()
         ));
         for obj in leo.objects() {
-            let (px, py, pz) = obj.position();
-            let (rx, ry, rz) = obj.rotation();
+            let (px, py, pz): (f32, f32, f32) = obj.position();
+            let (rx, ry, rz): (f32, f32, f32) = obj.rotation();
 
             // Build transform for the LEO
             let leo_pos = l3d_rs::Vec3f {
@@ -464,10 +464,10 @@ fn extract_light_emitters(
 
             // Get size from rectangle or circle
             let size = if let Some(rect) = obj.rectangle() {
-                let (w, h) = rect.size();
-                (w as f32, h as f32)
+                let (w, h): (f32, f32) = rect.size();
+                (w, h)
             } else if let Some(circle) = obj.circle() {
-                let d = circle.diameter() as f32;
+                let d: f32 = circle.diameter();
                 (d, d)
             } else {
                 (0.1, 0.1) // Default small size

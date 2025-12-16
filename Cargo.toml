@@ -79,14 +79,14 @@ bevy = { version = "0.15", default-features = false, features = [
 ] }
 
 # eulumdat-bevy for lighting plugins
-eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
+eulumdat-bevy = "0.3.0"
 
 # Photometric data
-eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
-l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
+eulumdat = "0.3.0"
+l3d_rs = "0.2.1"
 
-# Unified lighting file conversion (ULD, ROLF -> GLDF)
-light-convert = { path = "../light-other-rs/crates/light-convert" }
+# Unified lighting file conversion (ULD, ROLF -> GLDF) - not published yet
+# light-convert = { path = "../light-other-rs/crates/light-convert" }
 
 # File dialogs (native)
 rfd = "0.15"

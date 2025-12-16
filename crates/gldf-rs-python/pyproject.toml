@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "gldf-rs-python"
-version = "0.3.1"
+version = "0.3.3"
 description = "Python bindings for GLDF (General Lighting Data Format) parsing library"
 readme = "README.md"
 license = { text = "MIT" }
