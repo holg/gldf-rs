@@ -72,8 +72,13 @@ pub fn load_l3d_from_storage() -> Option<Vec<u8>> {
     let window = web_sys::window()?;
     let storage = window.local_storage().ok()??;
     let l3d_b64 = storage.get_item(L3D_STORAGE_KEY).ok()??;
-    log(&format!("[Bevy] Loading L3D from storage, base64 len: {}", l3d_b64.len()));
-    let decoded = base64::engine::general_purpose::STANDARD.decode(&l3d_b64).ok();
+    log(&format!(
+        "[Bevy] Loading L3D from storage, base64 len: {}",
+        l3d_b64.len()
+    ));
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&l3d_b64)
+        .ok();
     if let Some(ref data) = decoded {
         log(&format!("[Bevy] L3D decoded, {} bytes", data.len()));
     }
@@ -91,7 +96,10 @@ pub fn load_ldt_from_storage() -> Option<eulumdat::Eulumdat> {
     let window = web_sys::window()?;
     let storage = window.local_storage().ok()??;
     let ldt_string = storage.get_item(LDT_STORAGE_KEY).ok()??;
-    log(&format!("[Bevy] Loading LDT from storage, len: {}", ldt_string.len()));
+    log(&format!(
+        "[Bevy] Loading LDT from storage, len: {}",
+        ldt_string.len()
+    ));
     let parsed = eulumdat::Eulumdat::parse(&ldt_string).ok();
     if parsed.is_some() {
         log("[Bevy] LDT parsed successfully");
@@ -152,7 +160,10 @@ pub fn poll_gldf_changes(
     {
         if let Some(new_timestamp) = get_gldf_timestamp() {
             if new_timestamp != last_timestamp.0 {
-                log(&format!("[Bevy] Timestamp changed: {} -> {}", last_timestamp.0, new_timestamp));
+                log(&format!(
+                    "[Bevy] Timestamp changed: {} -> {}",
+                    last_timestamp.0, new_timestamp
+                ));
                 // Timestamp changed - reload data
                 if let Some(l3d_bytes) = load_l3d_from_storage() {
                     log(&format!("[Bevy] Loaded L3D: {} bytes", l3d_bytes.len()));
@@ -170,7 +181,10 @@ pub fn poll_gldf_changes(
                 // Load emitter configuration
                 let emitter_config = load_emitter_config_from_storage();
                 if !emitter_config.is_empty() {
-                    log(&format!("[Bevy] Loaded {} emitter configs", emitter_config.len()));
+                    log(&format!(
+                        "[Bevy] Loaded {} emitter configs",
+                        emitter_config.len()
+                    ));
                     scene_data.emitter_config = emitter_config;
                 }
                 last_timestamp.0 = new_timestamp;
@@ -232,7 +246,7 @@ fn ensure_visible_scene(
         commands.spawn((
             PointLight {
                 color: Color::srgb(1.0, 0.95, 0.9), // Warm white
-                intensity: 100000.0, // Bright enough to see
+                intensity: 100000.0,                // Bright enough to see
                 radius: 0.1,
                 range: 50.0,
                 shadows_enabled: true,
@@ -255,7 +269,8 @@ pub fn run_on_canvas(canvas_selector: &str) {
     let ldt_data = load_ldt_from_storage();
     let emitter_config = load_emitter_config_from_storage();
 
-    log(&format!("[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}",
+    log(&format!(
+        "[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}",
         l3d_data.as_ref().map(|d| d.len()).unwrap_or(0),
         ldt_data.is_some(),
         emitter_config.len()
@@ -287,21 +302,17 @@ pub fn run_on_canvas(canvas_selector: &str) {
 
     // Now add plugins
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "GLDF 3D Viewer".to_string(),
-                canvas: Some(canvas_selector.to_string()),
-                fit_canvas_to_parent: true,
-                prevent_default_event_handling: false,
-                ..default()
-            }),
+        primary_window: Some(Window {
+            title: "GLDF 3D Viewer".to_string(),
+            canvas: Some(canvas_selector.to_string()),
+            fit_canvas_to_parent: true,
+            prevent_default_event_handling: false,
             ..default()
-        }));
+        }),
+        ..default()
+    }));
 
-    app.add_plugins((
-            CameraPlugin,
-            ScenePlugin,
-            l3d_loader::L3dLoaderPlugin,
-        ));
+    app.add_plugins((CameraPlugin, ScenePlugin, l3d_loader::L3dLoaderPlugin));
 
     // Only add PhotometricLightPlugin if we don't have L3D with emitters
     // (L3D loader handles its own lights from LEO positions)

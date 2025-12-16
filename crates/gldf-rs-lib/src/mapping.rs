@@ -89,7 +89,8 @@ pub fn get_l3d_ldt_mappings(gldf: &GldfProduct) -> Vec<L3dLdtMapping> {
 
     // Helper to find file name by file_id
     let get_file_name = |file_id: &str| -> Option<String> {
-        files.iter()
+        files
+            .iter()
             .find(|f| f.id == file_id)
             .map(|f| f.file_name.clone())
     };
@@ -97,7 +98,8 @@ pub fn get_l3d_ldt_mappings(gldf: &GldfProduct) -> Vec<L3dLdtMapping> {
     // Helper to find L3D file_id from geometry_id
     let get_l3d_file_id = |geometry_id: &str| -> Option<String> {
         geometries.and_then(|g| {
-            g.model_geometry.iter()
+            g.model_geometry
+                .iter()
                 .find(|mg| mg.id == geometry_id)
                 .and_then(|mg| mg.geometry_file_reference.first())
                 .map(|gfr| gfr.file_id.clone())
@@ -107,15 +109,18 @@ pub fn get_l3d_ldt_mappings(gldf: &GldfProduct) -> Vec<L3dLdtMapping> {
     // Helper to find photometry_id from emitter_id
     let get_photometry_id = |emitter_id: &str| -> Option<String> {
         emitters.and_then(|e| {
-            e.emitter.iter()
+            e.emitter
+                .iter()
                 .find(|em| em.id == emitter_id)
                 .and_then(|em| {
                     // Check fixed light emitters first
-                    em.fixed_light_emitter.first()
+                    em.fixed_light_emitter
+                        .first()
                         .map(|fle| fle.photometry_reference.photometry_id.clone())
                         .or_else(|| {
                             // Then check changeable light emitters
-                            em.changeable_light_emitter.first()
+                            em.changeable_light_emitter
+                                .first()
                                 .map(|cle| cle.photometry_reference.photometry_id.clone())
                         })
                 })
@@ -125,7 +130,8 @@ pub fn get_l3d_ldt_mappings(gldf: &GldfProduct) -> Vec<L3dLdtMapping> {
     // Helper to find LDT file_id from photometry_id
     let get_ldt_file_id = |photometry_id: &str| -> Option<String> {
         photometries.and_then(|p| {
-            p.photometry.iter()
+            p.photometry
+                .iter()
                 .find(|ph| ph.id == photometry_id)
                 .and_then(|ph| ph.photometry_file_reference.as_ref())
                 .map(|pfr| pfr.file_id.clone())
@@ -207,22 +213,31 @@ pub fn get_l3d_files_with_ldt(gldf: &FileBufGldf) -> Vec<L3dWithLdt> {
 
     for mapping in mappings {
         // Find L3D content
-        let l3d_content = gldf.files.iter()
-            .find(|f| f.file_id.as_ref() == Some(&mapping.l3d_file_id) ||
-                      f.name.as_ref() == mapping.l3d_file_name.as_ref())
+        let l3d_content = gldf
+            .files
+            .iter()
+            .find(|f| {
+                f.file_id.as_ref() == Some(&mapping.l3d_file_id)
+                    || f.name.as_ref() == mapping.l3d_file_name.as_ref()
+            })
             .and_then(|f| f.content.clone());
 
         // Find LDT content
         let ldt_content = mapping.ldt_file_id.as_ref().and_then(|ldt_id| {
-            gldf.files.iter()
-                .find(|f| f.file_id.as_ref() == Some(ldt_id) ||
-                          f.name.as_ref() == mapping.ldt_file_name.as_ref())
+            gldf.files
+                .iter()
+                .find(|f| {
+                    f.file_id.as_ref() == Some(ldt_id)
+                        || f.name.as_ref() == mapping.ldt_file_name.as_ref()
+                })
                 .and_then(|f| f.content.clone())
         });
 
         if l3d_content.is_some() {
             results.push(L3dWithLdt {
-                l3d_file_name: mapping.l3d_file_name.unwrap_or_else(|| mapping.l3d_file_id.clone()),
+                l3d_file_name: mapping
+                    .l3d_file_name
+                    .unwrap_or_else(|| mapping.l3d_file_id.clone()),
                 l3d_content,
                 ldt_file_name: mapping.ldt_file_name,
                 ldt_content,
@@ -252,9 +267,9 @@ pub struct L3dWithLdt {
 impl L3dWithLdt {
     /// Get the LDT content as a string (for parsing externally)
     pub fn ldt_as_string(&self) -> Option<String> {
-        self.ldt_content.as_ref().and_then(|content| {
-            std::str::from_utf8(content).ok().map(|s| s.to_string())
-        })
+        self.ldt_content
+            .as_ref()
+            .and_then(|content| std::str::from_utf8(content).ok().map(|s| s.to_string()))
     }
 
     /// Check if this mapping has both L3D and LDT content
@@ -322,7 +337,8 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
 
     // Helper to find file name by file_id
     let get_file_name = |file_id: &str| -> Option<String> {
-        files.iter()
+        files
+            .iter()
             .find(|f| f.id == file_id)
             .map(|f| f.file_name.clone())
     };
@@ -330,7 +346,8 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
     // Helper to find L3D file_id from geometry_id
     let get_l3d_file_id = |geometry_id: &str| -> Option<String> {
         geometries.and_then(|g| {
-            g.model_geometry.iter()
+            g.model_geometry
+                .iter()
                 .find(|mg| mg.id == geometry_id)
                 .and_then(|mg| mg.geometry_file_reference.first())
                 .map(|gfr| gfr.file_id.clone())
@@ -340,13 +357,16 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
     // Helper to find photometry file info from emitter_id
     let get_photometry_info = |emitter_id: &str| -> (Option<String>, Option<String>) {
         let photometry_id = emitters.and_then(|e| {
-            e.emitter.iter()
+            e.emitter
+                .iter()
                 .find(|em| em.id == emitter_id)
                 .and_then(|em| {
-                    em.fixed_light_emitter.first()
+                    em.fixed_light_emitter
+                        .first()
                         .map(|fle| fle.photometry_reference.photometry_id.clone())
                         .or_else(|| {
-                            em.changeable_light_emitter.first()
+                            em.changeable_light_emitter
+                                .first()
                                 .map(|cle| cle.photometry_reference.photometry_id.clone())
                         })
                 })
@@ -354,7 +374,8 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
 
         if let Some(ref photo_id) = photometry_id {
             let ldt_file_id = photometries.and_then(|p| {
-                p.photometry.iter()
+                p.photometry
+                    .iter()
                     .find(|ph| ph.id == *photo_id)
                     .and_then(|ph| ph.photometry_file_reference.as_ref())
                     .map(|pfr| pfr.file_id.clone())
@@ -368,9 +389,7 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
 
     // Helper to get emitter details (flux, color temp, emergency behavior)
     let get_emitter_details = |emitter_id: &str| -> (Option<i32>, Option<i32>, Option<String>) {
-        let emitter = emitters.and_then(|e| {
-            e.emitter.iter().find(|em| em.id == emitter_id)
-        });
+        let emitter = emitters.and_then(|e| e.emitter.iter().find(|em| em.id == emitter_id));
 
         let Some(emitter) = emitter else {
             return (None, None, None);
@@ -382,10 +401,14 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
             let emergency = fle.emergency_behaviour.clone();
 
             // Get color temperature from referenced light source
-            let color_temp = fle.light_source_reference.fixed_light_source_id.as_ref()
+            let color_temp = fle
+                .light_source_reference
+                .fixed_light_source_id
+                .as_ref()
                 .and_then(|ls_id| {
                     light_sources.and_then(|lss| {
-                        lss.fixed_light_source.iter()
+                        lss.fixed_light_source
+                            .iter()
                             .find(|ls| ls.id == *ls_id)
                             .and_then(|ls| ls.color_information.as_ref())
                             .and_then(|ci| ci.correlated_color_temperature)

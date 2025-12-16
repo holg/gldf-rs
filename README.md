@@ -45,9 +45,10 @@ gldf-rs/
 - Parse GLDF containers and `product.xml` definitions
 - Convert between XML and JSON representations
 - Extract and process embedded files (images, photometry, 3D models)
+- **Convert LDT/IES photometry files to GLDF** (Rust, Python, WASM)
 - Support for meta-information.xml
 - WebGL-based L3D 3D model viewer
-- LDT/IES photometry diagram rendering
+- LDT/IES photometry diagram rendering (Polar, Cartesian, Heatmap, BUG, LCS)
 - Native apps with Swift Package Manager support
 
 ## Live Demo
@@ -114,6 +115,17 @@ for f in phot_files.iter() {
 ```
 
 ## Release Notes
+
+### 0.3.3
+- **LDT/IES to GLDF conversion**: New Python bindings for converting photometry files
+  - `ldt_to_gldf_json()`, `ldt_to_gldf_bytes()`, `gldf_from_bytes()`, `gldf_json_to_bytes()`
+- **WASM Viewer improvements**:
+  - Clear and Help buttons in toolbar
+  - Context-sensitive help overlay
+  - Photometry editor with dual-value display (GLDF vs calculated from LDT/IES)
+  - LDT diagram tabs (Polar, Cartesian, Heatmap, 3D Butterfly, BUG, LCS)
+  - Click-to-zoom for diagram inspection
+- **CI improvements**: Updated deny.toml, fixed clippy warnings
 
 ### 0.3.1
 - **Workspace reorganization**: All crates moved to `crates/` directory

@@ -19,7 +19,11 @@ extern "C" {
     fn is_bevy_loading() -> bool;
 
     #[wasm_bindgen(js_name = saveL3dForBevy)]
-    fn save_l3d_for_bevy(l3d_data: &js_sys::Uint8Array, ldt_data: Option<&str>, emitter_json: Option<&str>);
+    fn save_l3d_for_bevy(
+        l3d_data: &js_sys::Uint8Array,
+        ldt_data: Option<&str>,
+        emitter_json: Option<&str>,
+    );
 }
 
 /// Per-emitter rendering data (serializable for localStorage)
@@ -86,11 +90,14 @@ pub fn bevy_scene_viewer(props: &BevySceneViewerProps) -> Html {
         // Use variant_id as the key to ensure effect re-runs when switching variants
         use_effect_with(variant_id.clone(), move |_| {
             if !l3d_data.is_empty() {
-                log!(format!("[BevyScene] Saving data for variant: {}", variant_id));
+                log!(format!(
+                    "[BevyScene] Saving data for variant: {}",
+                    variant_id
+                ));
                 let js_array = js_sys::Uint8Array::from(l3d_data.as_slice());
-                let ldt_str = ldt_data.as_ref().and_then(|data| {
-                    std::str::from_utf8(data).ok()
-                });
+                let ldt_str = ldt_data
+                    .as_ref()
+                    .and_then(|data| std::str::from_utf8(data).ok());
                 // Serialize emitter config to JSON
                 let emitter_json = if !emitter_config.is_empty() {
                     serde_json::to_string(&emitter_config).ok()
@@ -130,8 +137,9 @@ pub fn bevy_scene_viewer(props: &BevySceneViewerProps) -> Html {
                         let msg = format!("{:?}", e);
                         log!(format!("[BevyScene] Load error: {}", msg));
                         // Check if it's the fake "control flow" error
-                        if msg.contains("Using exceptions for control flow") ||
-                           msg.contains("don't mind me") {
+                        if msg.contains("Using exceptions for control flow")
+                            || msg.contains("don't mind me")
+                        {
                             load_state.set(BevyLoadState::Loaded);
                         } else {
                             error_msg.set(Some(msg));

@@ -20,7 +20,7 @@ pub enum ValidationLevel {
 /// A validation error or warning.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
-    /// The path to the problematic field (e.g., "variants[0].geometry")
+    /// The path to the problematic field (e.g., "variants\[0\].geometry")
     pub path: String,
     /// The severity level
     pub level: ValidationLevel,
@@ -42,7 +42,11 @@ impl ValidationError {
     }
 
     /// Creates a new validation warning.
-    pub fn warning(path: impl Into<String>, code: &'static str, message: impl Into<String>) -> Self {
+    pub fn warning(
+        path: impl Into<String>,
+        code: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             path: path.into(),
             level: ValidationLevel::Warning,
@@ -82,12 +86,16 @@ impl ValidationResult {
 
     /// Returns true if there are any errors (not warnings or info).
     pub fn has_errors(&self) -> bool {
-        self.errors.iter().any(|e| e.level == ValidationLevel::Error)
+        self.errors
+            .iter()
+            .any(|e| e.level == ValidationLevel::Error)
     }
 
     /// Returns true if there are any warnings.
     pub fn has_warnings(&self) -> bool {
-        self.errors.iter().any(|e| e.level == ValidationLevel::Warning)
+        self.errors
+            .iter()
+            .any(|e| e.level == ValidationLevel::Warning)
     }
 
     /// Returns true if the result is completely clean (no issues at all).
@@ -97,19 +105,37 @@ impl ValidationResult {
 
     /// Returns only errors (excludes warnings and info).
     pub fn errors_only(&self) -> Vec<&ValidationError> {
-        self.errors.iter().filter(|e| e.level == ValidationLevel::Error).collect()
+        self.errors
+            .iter()
+            .filter(|e| e.level == ValidationLevel::Error)
+            .collect()
     }
 
     /// Returns only warnings.
     pub fn warnings_only(&self) -> Vec<&ValidationError> {
-        self.errors.iter().filter(|e| e.level == ValidationLevel::Warning).collect()
+        self.errors
+            .iter()
+            .filter(|e| e.level == ValidationLevel::Warning)
+            .collect()
     }
 
     /// Returns the count of issues by level.
     pub fn count_by_level(&self) -> (usize, usize, usize) {
-        let errors = self.errors.iter().filter(|e| e.level == ValidationLevel::Error).count();
-        let warnings = self.errors.iter().filter(|e| e.level == ValidationLevel::Warning).count();
-        let info = self.errors.iter().filter(|e| e.level == ValidationLevel::Info).count();
+        let errors = self
+            .errors
+            .iter()
+            .filter(|e| e.level == ValidationLevel::Error)
+            .count();
+        let warnings = self
+            .errors
+            .iter()
+            .filter(|e| e.level == ValidationLevel::Warning)
+            .count();
+        let info = self
+            .errors
+            .iter()
+            .filter(|e| e.level == ValidationLevel::Info)
+            .count();
         (errors, warnings, info)
     }
 }
@@ -241,29 +267,43 @@ fn validate_files(
         }
 
         // For local files, check if embedded content exists
-        if file.type_attr != "url" && !file.id.is_empty() {
-            if !embedded_files.contains_key(&file.id) {
-                result.add(ValidationError::warning(
-                    format!("{}", path),
-                    "FILE_004",
-                    format!("Embedded file '{}' not found for file definition '{}'", file.file_name, file.id),
-                ));
-            }
+        if file.type_attr != "url" && !file.id.is_empty() && !embedded_files.contains_key(&file.id)
+        {
+            result.add(ValidationError::warning(
+                path.to_string(),
+                "FILE_004",
+                format!(
+                    "Embedded file '{}' not found for file definition '{}'",
+                    file.file_name, file.id
+                ),
+            ));
         }
 
         // Validate content type format
         let valid_content_types = [
-            "ldc/eulumdat", "ldc/ies",
-            "geo/l3d", "geo/m3d", "geo/r3d",
-            "image/png", "image/jpg", "image/jpeg", "image/svg",
+            "ldc/eulumdat",
+            "ldc/ies",
+            "geo/l3d",
+            "geo/m3d",
+            "geo/r3d",
+            "image/png",
+            "image/jpg",
+            "image/jpeg",
+            "image/svg",
             "document/pdf",
             "spectrum/txt",
             "sensor/sens-ldt",
-            "symbol/dxf", "symbol/svg",
+            "symbol/dxf",
+            "symbol/svg",
             "other",
         ];
 
-        if !file.content_type.is_empty() && !valid_content_types.iter().any(|ct| file.content_type.starts_with(ct.split('/').next().unwrap_or(""))) {
+        if !file.content_type.is_empty()
+            && !valid_content_types.iter().any(|ct| {
+                file.content_type
+                    .starts_with(ct.split('/').next().unwrap_or(""))
+            })
+        {
             result.add(ValidationError::warning(
                 format!("{}.contentType", path),
                 "FILE_005",
@@ -297,7 +337,10 @@ fn validate_photometries(
                     result.add(ValidationError::error(
                         format!("{}.photometryFileReference.fileId", path),
                         "PHOT_002",
-                        format!("Referenced file '{}' not found in file definitions", file_ref.file_id),
+                        format!(
+                            "Referenced file '{}' not found in file definitions",
+                            file_ref.file_id
+                        ),
                     ));
                 }
             }
@@ -367,7 +410,10 @@ fn validate_light_sources(product: &GldfProduct, result: &mut ValidationResult) 
 
         // Validate changeable light sources
         for (i, source) in light_sources.changeable_light_source.iter().enumerate() {
-            let path = format!("generalDefinitions.lightSources.changeableLightSource[{}]", i);
+            let path = format!(
+                "generalDefinitions.lightSources.changeableLightSource[{}]",
+                i
+            );
 
             if source.id.is_empty() {
                 result.add(ValidationError::error(

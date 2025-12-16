@@ -9,6 +9,7 @@ use gloo::console::log;
 use yew::prelude::*;
 
 /// Value source indicator for styling
+#[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum ValueSource {
     /// Value from GLDF file
@@ -70,6 +71,7 @@ fn parse_photometry_file(content: &[u8]) -> Option<Eulumdat> {
 }
 
 /// Render a single photometry field with both GLDF and calculated values
+#[allow(clippy::too_many_arguments)]
 fn render_dual_field(
     label: &str,
     gldf_value: Option<String>,
@@ -182,28 +184,42 @@ pub fn photometry_editor(props: &PhotometryEditorProps) -> Html {
         .map(|f| f.file_id.clone());
 
     // Find and parse the LDT/IES file
-    let calculated = use_memo((file_id.clone(), props.photometry_files.clone()), |(file_id, files)| {
-        log!(format!("PhotometryEditor: Looking for file_id={:?}, available files: {:?}",
-            file_id, files.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>()));
+    let calculated = use_memo(
+        (file_id.clone(), props.photometry_files.clone()),
+        |(file_id, files)| {
+            log!(format!(
+                "PhotometryEditor: Looking for file_id={:?}, available files: {:?}",
+                file_id,
+                files.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>()
+            ));
 
-        if let Some(ref fid) = file_id {
-            // Find file in the container - try exact match first, then partial match
-            for (id, content) in files {
-                let matches = id == fid || id.contains(fid) || fid.contains(id);
-                if matches {
-                    log!(format!("PhotometryEditor: Found matching file id={} for fid={}", id, fid));
-                    if let Some(ldt) = parse_photometry_file(content) {
-                        log!(format!("PhotometryEditor: Successfully parsed LDT, calculating values..."));
-                        return CalculatedPhotometry::from_eulumdat(&ldt);
-                    } else {
-                        log!(format!("PhotometryEditor: Failed to parse file as LDT/IES"));
+            if let Some(ref fid) = file_id {
+                // Find file in the container - try exact match first, then partial match
+                for (id, content) in files {
+                    let matches = id == fid || id.contains(fid) || fid.contains(id);
+                    if matches {
+                        log!(format!(
+                            "PhotometryEditor: Found matching file id={} for fid={}",
+                            id, fid
+                        ));
+                        if let Some(ldt) = parse_photometry_file(content) {
+                            log!(format!(
+                                "PhotometryEditor: Successfully parsed LDT, calculating values..."
+                            ));
+                            return CalculatedPhotometry::from_eulumdat(&ldt);
+                        } else {
+                            log!(format!("PhotometryEditor: Failed to parse file as LDT/IES"));
+                        }
                     }
                 }
+                log!(format!(
+                    "PhotometryEditor: No matching file found for fid={}",
+                    fid
+                ));
             }
-            log!(format!("PhotometryEditor: No matching file found for fid={}", fid));
-        }
-        CalculatedPhotometry::default()
-    });
+            CalculatedPhotometry::default()
+        },
+    );
 
     // Extract GLDF values
     let cie_flux_code = desc.and_then(|d| d.cie_flux_code.clone());

@@ -128,8 +128,7 @@ impl EditableGldf {
         xmlfile
             .read_to_string(&mut xml_str)
             .context("Failed to read product.xml")?;
-        let product =
-            GldfProduct::from_xml(&xml_str).context("Failed to parse product.xml")?;
+        let product = GldfProduct::from_xml(&xml_str).context("Failed to parse product.xml")?;
         drop(xmlfile);
 
         // Load all embedded files
@@ -140,7 +139,8 @@ impl EditableGldf {
         for file_def in &product.general_definitions.files.file {
             if file_def.type_attr != "url" {
                 // Build the expected path in the ZIP
-                let zip_path = Self::get_zip_path_for_file(&file_def.content_type, &file_def.file_name);
+                let zip_path =
+                    Self::get_zip_path_for_file(&file_def.content_type, &file_def.file_name);
                 filename_to_id.insert(zip_path, file_def.id.clone());
             }
         }
@@ -366,7 +366,10 @@ impl EditableGldf {
             .unix_permissions(0o644);
 
         // Write product.xml
-        let xml = self.product.to_xml().context("Failed to serialize product to XML")?;
+        let xml = self
+            .product
+            .to_xml()
+            .context("Failed to serialize product to XML")?;
         zip.start_file("product.xml", options)
             .context("Failed to start product.xml in ZIP")?;
         zip.write_all(xml.as_bytes())
@@ -381,7 +384,8 @@ impl EditableGldf {
 
             // Get the embedded content
             if let Some(content) = self.embedded_files.get(&file_def.id) {
-                let zip_path = Self::get_zip_path_for_file(&file_def.content_type, &file_def.file_name);
+                let zip_path =
+                    Self::get_zip_path_for_file(&file_def.content_type, &file_def.file_name);
                 zip.start_file(&zip_path, options)
                     .with_context(|| format!("Failed to start {} in ZIP", zip_path))?;
                 zip.write_all(content)
@@ -429,9 +433,7 @@ impl EditableGldf {
             .general_definitions
             .light_sources
             .as_ref()
-            .map(|ls| {
-                ls.fixed_light_source.len() + ls.changeable_light_source.len()
-            })
+            .map(|ls| ls.fixed_light_source.len() + ls.changeable_light_source.len())
             .unwrap_or(0);
 
         EditableGldfStats {
@@ -485,7 +487,10 @@ mod tests {
         // Add a file
         editable.add_embedded_file("test_file", vec![1, 2, 3, 4]);
         assert!(editable.has_embedded_file("test_file"));
-        assert_eq!(editable.get_embedded_file("test_file"), Some(&[1, 2, 3, 4][..]));
+        assert_eq!(
+            editable.get_embedded_file("test_file"),
+            Some(&[1, 2, 3, 4][..])
+        );
         assert!(editable.is_modified());
 
         // Remove the file

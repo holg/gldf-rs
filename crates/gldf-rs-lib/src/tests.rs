@@ -252,12 +252,11 @@ async fn test_gldf_get_pic_files() {
 /// Test round-trip: Load -> Modify -> Save -> Reload -> Verify
 #[test]
 fn test_editable_gldf_round_trip() {
-    use crate::EditableGldf;
     use crate::gldf::general_definitions::files::File;
+    use crate::EditableGldf;
 
     // Load GLDF into EditableGldf
-    let mut editable = EditableGldf::from_gldf(GLDF_FILE_NAME)
-        .expect("Failed to load GLDF");
+    let mut editable = EditableGldf::from_gldf(GLDF_FILE_NAME).expect("Failed to load GLDF");
 
     // Verify initial state
     let original_author = editable.product.header.author.clone();
@@ -276,7 +275,10 @@ fn test_editable_gldf_round_trip() {
         file_name: "test_roundtrip.txt".to_string(),
         language: String::new(),
     };
-    editable.product.add_file(new_file.clone()).expect("Failed to add file");
+    editable
+        .product
+        .add_file(new_file.clone())
+        .expect("Failed to add file");
 
     // Add embedded content for the file
     let test_content = b"This is test content for round-trip verification".to_vec();
@@ -290,8 +292,7 @@ fn test_editable_gldf_round_trip() {
     println!("Saved GLDF size: {} bytes", saved_buf.len());
 
     // Reload from buffer
-    let reloaded = EditableGldf::from_buf(saved_buf)
-        .expect("Failed to reload GLDF from buffer");
+    let reloaded = EditableGldf::from_buf(saved_buf).expect("Failed to reload GLDF from buffer");
 
     // Verify modifications were preserved
     assert_eq!(reloaded.product.header.author, "Test Author - Round Trip");
@@ -319,9 +320,9 @@ fn test_editable_gldf_round_trip() {
 /// Test creating a new GLDF from scratch and saving it
 #[test]
 fn test_create_new_gldf() {
-    use crate::EditableGldf;
     use crate::gldf::general_definitions::files::File;
     use crate::gldf::product_definitions::Variant;
+    use crate::EditableGldf;
 
     // Create new EditableGldf
     let mut editable = EditableGldf::new();
@@ -350,7 +351,10 @@ fn test_create_new_gldf() {
         id: "variant_1".to_string(),
         ..Default::default()
     };
-    editable.product.add_variant(variant).expect("Failed to add variant");
+    editable
+        .product
+        .add_variant(variant)
+        .expect("Failed to add variant");
 
     // Validate the product
     let validation = editable.product.validate_structure();
@@ -364,8 +368,7 @@ fn test_create_new_gldf() {
     println!("New GLDF size: {} bytes", saved_buf.len());
 
     // Verify it can be reloaded
-    let reloaded = EditableGldf::from_buf(saved_buf)
-        .expect("Failed to reload new GLDF");
+    let reloaded = EditableGldf::from_buf(saved_buf).expect("Failed to reload new GLDF");
 
     assert_eq!(reloaded.product.header.author, "New Product Author");
     assert_eq!(reloaded.product.header.manufacturer, "Test Manufacturer");

@@ -50,11 +50,9 @@ pub fn electrical_editor() -> Html {
         Callback::from(move |e: Event| {
             let input: web_sys::HtmlInputElement = e.target_unchecked_into();
             let value = input.value();
-            gldf.dispatch(GldfAction::SetIngressProtectionIPCode(if value.is_empty() {
-                None
-            } else {
-                Some(value)
-            }));
+            gldf.dispatch(GldfAction::SetIngressProtectionIPCode(
+                if value.is_empty() { None } else { Some(value) },
+            ));
         })
     };
 
