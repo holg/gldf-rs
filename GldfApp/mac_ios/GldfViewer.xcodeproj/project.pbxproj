@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		21162C872EDDE94200F5BDED /* GldfKit in Frameworks */ = {isa = PBXBuildFile; productRef = 21162C862EDDE94200F5BDED /* GldfKit */; };
+		21B2CD382EF1B912000B4DF7 /* ApplicationsEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B2CD362EF1B912000B4DF7 /* ApplicationsEditView.swift */; };
+		21B2CD392EF1B912000B4DF7 /* ElectricalEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B2CD372EF1B912000B4DF7 /* ElectricalEditView.swift */; };
 		A10000010000000000000001 /* GldfViewerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001 /* GldfViewerApp.swift */; };
 		A10000010000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000002 /* AppState.swift */; };
 		A10000010000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000003 /* ContentView.swift */; };
@@ -28,6 +30,8 @@
 /* Begin PBXFileReference section */
 		21162C982EDE0B9700F5BDED /* GLDF ViewerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "GLDF ViewerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		21162CA22EDE0B9700F5BDED /* GLDF ViewerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "GLDF ViewerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		21B2CD362EF1B912000B4DF7 /* ApplicationsEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationsEditView.swift; sourceTree = "<group>"; };
+		21B2CD372EF1B912000B4DF7 /* ElectricalEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElectricalEditView.swift; sourceTree = "<group>"; };
 		A20000010000000000000001 /* GldfViewerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GldfViewerApp.swift; sourceTree = "<group>"; };
 		A20000010000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		A20000010000000000000003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -87,6 +91,8 @@
 		A60000010000000000000002 /* GldfViewer */ = {
 			isa = PBXGroup;
 			children = (
+				21B2CD362EF1B912000B4DF7 /* ApplicationsEditView.swift */,
+				21B2CD372EF1B912000B4DF7 /* ElectricalEditView.swift */,
 				A20000010000000000000001 /* GldfViewerApp.swift */,
 				A20000010000000000000002 /* AppState.swift */,
 				A60000010000000000000003 /* Views */,
@@ -297,6 +303,8 @@
 				A10000010000000000000001 /* GldfViewerApp.swift in Sources */,
 				A10000010000000000000002 /* AppState.swift in Sources */,
 				A10000010000000000000003 /* ContentView.swift in Sources */,
+				21B2CD382EF1B912000B4DF7 /* ApplicationsEditView.swift in Sources */,
+				21B2CD392EF1B912000B4DF7 /* ElectricalEditView.swift in Sources */,
 				A10000010000000000000012 /* OverviewView.swift in Sources */,
 				A10000010000000000000013 /* RawDataView.swift in Sources */,
 				A10000010000000000000014 /* FileViewerView.swift in Sources */,

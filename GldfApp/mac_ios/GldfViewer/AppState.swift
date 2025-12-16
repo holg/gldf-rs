@@ -10,6 +10,8 @@ import GldfKit
 enum NavigationItem: Hashable {
     case overview
     case header
+    case electrical
+    case applications
     case files
     case lightSources
     case variants
@@ -350,7 +352,7 @@ class AppState: ObservableObject {
 
     // MARK: - Helper Methods
 
-    private func markModified() {
+    func markModified() {
         isModified = engine?.isModified() ?? false
     }
 

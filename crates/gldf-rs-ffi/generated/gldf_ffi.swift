@@ -399,6 +399,22 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
+    typealias FfiType = UInt32
+    typealias SwiftType = UInt32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
     typealias FfiType = Int32
     typealias SwiftType = Int32
@@ -536,14 +552,29 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 public protocol GldfEngineProtocol : AnyObject {
     
     /**
+     * Add an application
+     */
+    func addApplication(application: String) 
+    
+    /**
      * Add a file definition
      */
     func addFile(id: String, fileName: String, contentType: String, fileType: String) 
     
     /**
+     * Get current applications list
+     */
+    func getApplications()  -> [String]
+    
+    /**
      * Extract raw file from archive by path
      */
     func getArchiveFile(path: String) throws  -> Data
+    
+    /**
+     * Get electrical attributes
+     */
+    func getElectrical()  -> GldfElectrical
     
     /**
      * Get emitter data for 3D rendering (photometry info, luminous flux)
@@ -633,14 +664,29 @@ public protocol GldfEngineProtocol : AnyObject {
     func markSaved() 
     
     /**
+     * Remove an application by index
+     */
+    func removeApplication(index: UInt32) 
+    
+    /**
      * Remove a file by ID
      */
     func removeFile(id: String) 
     
     /**
+     * Set all applications
+     */
+    func setApplications(applications: [String]) 
+    
+    /**
      * Set the author
      */
     func setAuthor(author: String) 
+    
+    /**
+     * Set constant light output (CLO)
+     */
+    func setConstantLightOutput(value: Bool?) 
     
     /**
      * Set the created with application
@@ -658,14 +704,39 @@ public protocol GldfEngineProtocol : AnyObject {
     func setDefaultLanguage(language: String?) 
     
     /**
+     * Set electrical safety class (I, II, III or None)
+     */
+    func setElectricalSafetyClass(value: String?) 
+    
+    /**
      * Set the format version (e.g., "1.0.0-rc.3")
      */
     func setFormatVersion(version: String) 
     
     /**
+     * Set IP code (ingress protection)
+     */
+    func setIpCode(value: String?) 
+    
+    /**
+     * Set light distribution type
+     */
+    func setLightDistribution(value: String?) 
+    
+    /**
      * Set the manufacturer
      */
     func setManufacturer(manufacturer: String) 
+    
+    /**
+     * Set power factor (0.0 - 1.0)
+     */
+    func setPowerFactor(value: Double?) 
+    
+    /**
+     * Set switching capacity
+     */
+    func setSwitchingCapacity(value: String?) 
     
     /**
      * Export to JSON string
@@ -775,6 +846,16 @@ public static func newEmpty() -> GldfEngine {
 
     
     /**
+     * Add an application
+     */
+open func addApplication(application: String) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_add_application(self.uniffiClonePointer(),
+        FfiConverterString.lower(application),$0
+    )
+}
+}
+    
+    /**
      * Add a file definition
      */
 open func addFile(id: String, fileName: String, contentType: String, fileType: String) {try! rustCall() {
@@ -788,12 +869,32 @@ open func addFile(id: String, fileName: String, contentType: String, fileType: S
 }
     
     /**
+     * Get current applications list
+     */
+open func getApplications() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_applications(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * Extract raw file from archive by path
      */
 open func getArchiveFile(path: String)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
     uniffi_gldf_ffi_fn_method_gldfengine_get_archive_file(self.uniffiClonePointer(),
         FfiConverterString.lower(path),$0
+    )
+})
+}
+    
+    /**
+     * Get electrical attributes
+     */
+open func getElectrical() -> GldfElectrical {
+    return try!  FfiConverterTypeGldfElectrical.lift(try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_get_electrical(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -975,6 +1076,16 @@ open func markSaved() {try! rustCall() {
 }
     
     /**
+     * Remove an application by index
+     */
+open func removeApplication(index: UInt32) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_remove_application(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(index),$0
+    )
+}
+}
+    
+    /**
      * Remove a file by ID
      */
 open func removeFile(id: String) {try! rustCall() {
@@ -985,11 +1096,31 @@ open func removeFile(id: String) {try! rustCall() {
 }
     
     /**
+     * Set all applications
+     */
+open func setApplications(applications: [String]) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_applications(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(applications),$0
+    )
+}
+}
+    
+    /**
      * Set the author
      */
 open func setAuthor(author: String) {try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_set_author(self.uniffiClonePointer(),
         FfiConverterString.lower(author),$0
+    )
+}
+}
+    
+    /**
+     * Set constant light output (CLO)
+     */
+open func setConstantLightOutput(value: Bool?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_constant_light_output(self.uniffiClonePointer(),
+        FfiConverterOptionBool.lower(value),$0
     )
 }
 }
@@ -1025,6 +1156,16 @@ open func setDefaultLanguage(language: String?) {try! rustCall() {
 }
     
     /**
+     * Set electrical safety class (I, II, III or None)
+     */
+open func setElectricalSafetyClass(value: String?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_electrical_safety_class(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(value),$0
+    )
+}
+}
+    
+    /**
      * Set the format version (e.g., "1.0.0-rc.3")
      */
 open func setFormatVersion(version: String) {try! rustCall() {
@@ -1035,11 +1176,51 @@ open func setFormatVersion(version: String) {try! rustCall() {
 }
     
     /**
+     * Set IP code (ingress protection)
+     */
+open func setIpCode(value: String?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_ip_code(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(value),$0
+    )
+}
+}
+    
+    /**
+     * Set light distribution type
+     */
+open func setLightDistribution(value: String?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_light_distribution(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(value),$0
+    )
+}
+}
+    
+    /**
      * Set the manufacturer
      */
 open func setManufacturer(manufacturer: String) {try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_set_manufacturer(self.uniffiClonePointer(),
         FfiConverterString.lower(manufacturer),$0
+    )
+}
+}
+    
+    /**
+     * Set power factor (0.0 - 1.0)
+     */
+open func setPowerFactor(value: Double?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_power_factor(self.uniffiClonePointer(),
+        FfiConverterOptionDouble.lower(value),$0
+    )
+}
+}
+    
+    /**
+     * Set switching capacity
+     */
+open func setSwitchingCapacity(value: String?) {try! rustCall() {
+    uniffi_gldf_ffi_fn_method_gldfengine_set_switching_capacity(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(value),$0
     )
 }
 }
@@ -1460,6 +1641,107 @@ public func FfiConverterTypeEulumdatData_lift(_ buf: RustBuffer) throws -> Eulum
 #endif
 public func FfiConverterTypeEulumdatData_lower(_ value: EulumdatData) -> RustBuffer {
     return FfiConverterTypeEulumdatData.lower(value)
+}
+
+
+/**
+ * Electrical attributes from GLDF
+ */
+public struct GldfElectrical {
+    public var safetyClass: String?
+    public var ipCode: String?
+    public var powerFactor: Double?
+    public var constantLightOutput: Bool?
+    public var lightDistribution: String?
+    public var switchingCapacity: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(safetyClass: String?, ipCode: String?, powerFactor: Double?, constantLightOutput: Bool?, lightDistribution: String?, switchingCapacity: String?) {
+        self.safetyClass = safetyClass
+        self.ipCode = ipCode
+        self.powerFactor = powerFactor
+        self.constantLightOutput = constantLightOutput
+        self.lightDistribution = lightDistribution
+        self.switchingCapacity = switchingCapacity
+    }
+}
+
+
+
+extension GldfElectrical: Equatable, Hashable {
+    public static func ==(lhs: GldfElectrical, rhs: GldfElectrical) -> Bool {
+        if lhs.safetyClass != rhs.safetyClass {
+            return false
+        }
+        if lhs.ipCode != rhs.ipCode {
+            return false
+        }
+        if lhs.powerFactor != rhs.powerFactor {
+            return false
+        }
+        if lhs.constantLightOutput != rhs.constantLightOutput {
+            return false
+        }
+        if lhs.lightDistribution != rhs.lightDistribution {
+            return false
+        }
+        if lhs.switchingCapacity != rhs.switchingCapacity {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(safetyClass)
+        hasher.combine(ipCode)
+        hasher.combine(powerFactor)
+        hasher.combine(constantLightOutput)
+        hasher.combine(lightDistribution)
+        hasher.combine(switchingCapacity)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGldfElectrical: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GldfElectrical {
+        return
+            try GldfElectrical(
+                safetyClass: FfiConverterOptionString.read(from: &buf), 
+                ipCode: FfiConverterOptionString.read(from: &buf), 
+                powerFactor: FfiConverterOptionDouble.read(from: &buf), 
+                constantLightOutput: FfiConverterOptionBool.read(from: &buf), 
+                lightDistribution: FfiConverterOptionString.read(from: &buf), 
+                switchingCapacity: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GldfElectrical, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.safetyClass, into: &buf)
+        FfiConverterOptionString.write(value.ipCode, into: &buf)
+        FfiConverterOptionDouble.write(value.powerFactor, into: &buf)
+        FfiConverterOptionBool.write(value.constantLightOutput, into: &buf)
+        FfiConverterOptionString.write(value.lightDistribution, into: &buf)
+        FfiConverterOptionString.write(value.switchingCapacity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfElectrical_lift(_ buf: RustBuffer) throws -> GldfElectrical {
+    return try FfiConverterTypeGldfElectrical.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGldfElectrical_lower(_ value: GldfElectrical) -> RustBuffer {
+    return FfiConverterTypeGldfElectrical.lower(value)
 }
 
 
@@ -3467,6 +3749,54 @@ fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
+    typealias SwiftType = Double?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDouble.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDouble.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -3990,10 +4320,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_func_parse_l3d_structure() != 18908) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_add_application() != 63938) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_add_file() != 48678) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_applications() != 63895) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file() != 13214) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_get_electrical() != 61209) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_emitter_data() != 58923) {
@@ -4047,10 +4386,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_method_gldfengine_mark_saved() != 7540) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_remove_application() != 46093) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_remove_file() != 14551) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_applications() != 30013) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_author() != 1512) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_constant_light_output() != 9786) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_created_with_application() != 57764) {
@@ -4062,10 +4410,25 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_default_language() != 17385) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_electrical_safety_class() != 550) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version() != 21660) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_ip_code() != 20368) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_light_distribution() != 35178) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_set_manufacturer() != 5472) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_power_factor() != 18230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_set_switching_capacity() != 28884) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_to_json() != 53297) {

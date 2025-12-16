@@ -217,6 +217,14 @@ struct SidebarView: View {
                     Label("Header", systemImage: "doc.text")
                 }
 
+                NavigationLink(value: NavigationItem.electrical) {
+                    Label("Electrical", systemImage: "bolt.circle")
+                }
+
+                NavigationLink(value: NavigationItem.applications) {
+                    Label("Applications", systemImage: "tag")
+                }
+
                 NavigationLink(value: NavigationItem.statistics) {
                     Label("Statistics", systemImage: "chart.bar")
                 }
@@ -257,6 +265,10 @@ struct DetailView: View {
                 FileViewerView()
             case .header:
                 HeaderEditView()
+            case .electrical:
+                ElectricalEditView()
+            case .applications:
+                ApplicationsEditView()
             case .files:
                 FilesListView()
             case .lightSources:
