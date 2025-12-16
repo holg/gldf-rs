@@ -17,6 +17,11 @@ wasm-opt = false
 name = "gldf_rs_wasm"
 path = "src/main.rs"
 
+[features]
+default = []
+# Enable ULD/ROLF file conversion (requires unpublished light-convert crate)
+light-convert = ["dep:light-convert"]
+
 [dependencies]
 # Core library - enable eulumdat feature for LDT/IES to GLDF conversion
 gldf-rs = { workspace = true, features = ["eulumdat"] }
@@ -42,8 +47,8 @@ yew.workspace = true
 zip.workspace = true
 serde_json.workspace = true
 
-# ULD file support (convert ULD to GLDF)
-uld-rs = { workspace = true, features = ["gldf"] }
+# Unified lighting file conversion (ULD, ROLF -> GLDF) - optional, not published
+light-convert = { workspace = true, optional = true }
 
 [dependencies.web-sys]
 workspace = true

@@ -50,6 +50,9 @@ pub enum NavItem {
     RawData,
     FileViewer,
     Header,
+    Electrical,
+    Applications,
+    Photometry,
     Statistics,
     Files,
     LightSources,
@@ -71,6 +74,20 @@ pub enum Msg {
     DemoLoaded(Result<Vec<u8>, String>),
     Select3dVariant(Option<String>),
     SelectFile(Option<String>),
+    // Mounting updates
+    ToggleCeilingMount(String, bool),
+    ToggleWallMount(String, bool),
+    ToggleGroundMount(String, bool),
+    ToggleWorkingPlaneMount(String, bool),
+    SetCeilingRecessed(String, bool, i32),
+    SetCeilingSurfaceMounted(String, bool),
+    SetCeilingPendant(String, bool, f64),
+    SetWallMountingHeight(String, i32),
+    SetGroundPoleTop(String, bool, Option<i32>),
+    SetGroundPoleIntegrated(String, bool, Option<i32>),
+    // App actions
+    ClearAll,
+    ToggleHelp,
 }
 
 /// Mode of the application
@@ -90,6 +107,7 @@ pub struct App {
     is_dragging: bool,
     selected_3d_variant: Option<String>,
     selected_file: Option<String>,
+    show_help: bool,
 }
 
 impl Component for App {
@@ -106,6 +124,7 @@ impl Component for App {
             is_dragging: false,
             selected_3d_variant: None,
             selected_file: None,
+            show_help: false,
         }
     }
 
@@ -122,28 +141,53 @@ impl Component for App {
                         self.loaded_gldf = Some(gldf);
                     }
                 }
-                // Handle ULD files - convert to GLDF
-                else if file_name_lower.ends_with(".uld") {
-                    console::log!("Converting ULD to GLDF...");
-                    match uld_rs::uld_to_gldf(&data) {
-                        Ok(gldf_bytes) => {
-                            console::log!("ULD converted to GLDF:", gldf_bytes.len(), "bytes");
-                            // Parse GLDF and load it
-                            if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(gldf_bytes.clone()) {
-                                self.loaded_gldf = Some(gldf);
+                // Handle ULD (DIALux) and ROLF (Relux) files - convert to GLDF
+                else if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
+                    #[cfg(feature = "light-convert")]
+                    {
+                        let format_name = if file_name_lower.ends_with(".uld") { "ULD" } else { "ROLF" };
+                        console::log!(format!("Converting {} to GLDF...", format_name).as_str());
+
+                        match light_convert::convert_to_gldf_full(&data, Some(&file_name), None) {
+                            Ok(result) => {
+                                console::log!(format!(
+                                    "{} converted to GLDF: {} bytes, product: {}, geometry: {}, photometry: {}",
+                                    format_name,
+                                    result.gldf_bytes.len(),
+                                    result.product_name,
+                                    result.has_geometry,
+                                    result.has_photometry
+                                ).as_str());
+
+                                // Parse GLDF and load it
+                                if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(result.gldf_bytes.clone()) {
+                                    self.loaded_gldf = Some(gldf);
+                                }
+
+                                // Generate output filename
+                                let output_name = file_name
+                                    .replace(".uld", ".gldf")
+                                    .replace(".ULD", ".gldf")
+                                    .replace(".rolf", ".gldf")
+                                    .replace(".ROLF", ".gldf");
+
+                                // Store GLDF for viewing
+                                self.files.push(FileDetails {
+                                    data: result.gldf_bytes,
+                                    file_type: "application/gldf".to_string(),
+                                    name: output_name,
+                                });
+                                self.readers.remove(&file_name);
+                                return true;
                             }
-                            // Store GLDF for viewing
-                            self.files.push(FileDetails {
-                                data: gldf_bytes,
-                                file_type: "application/gldf".to_string(),
-                                name: file_name.replace(".uld", ".gldf").replace(".ULD", ".gldf"),
-                            });
-                            self.readers.remove(&file_name);
-                            return true;
+                            Err(e) => {
+                                console::log!(format!("Failed to convert {}: {}", format_name, e).as_str());
+                            }
                         }
-                        Err(e) => {
-                            console::log!("Failed to convert ULD:", format!("{}", e).as_str());
-                        }
+                    }
+                    #[cfg(not(feature = "light-convert"))]
+                    {
+                        console::log!("ULD/ROLF support not enabled. Build with 'light-convert' feature.");
                     }
                 }
                 // Handle LDT/IES files - convert to minimal GLDF
@@ -365,6 +409,146 @@ impl Component for App {
                 self.selected_file = file_id;
                 true
             }
+            // Mounting handlers
+            Msg::ToggleCeilingMount(variant_id, enabled) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    if enabled {
+                        let mountings = variant.mountings.get_or_insert_with(Default::default);
+                        mountings.ceiling = Some(gldf_rs::gldf::product_definitions::Ceiling::default());
+                    } else if let Some(ref mut mountings) = variant.mountings {
+                        mountings.ceiling = None;
+                    }
+                }
+                true
+            }
+            Msg::ToggleWallMount(variant_id, enabled) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    if enabled {
+                        let mountings = variant.mountings.get_or_insert_with(Default::default);
+                        mountings.wall = Some(gldf_rs::gldf::product_definitions::Wall::default());
+                    } else if let Some(ref mut mountings) = variant.mountings {
+                        mountings.wall = None;
+                    }
+                }
+                true
+            }
+            Msg::ToggleGroundMount(variant_id, enabled) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    if enabled {
+                        let mountings = variant.mountings.get_or_insert_with(Default::default);
+                        mountings.ground = Some(gldf_rs::gldf::product_definitions::Ground::default());
+                    } else if let Some(ref mut mountings) = variant.mountings {
+                        mountings.ground = None;
+                    }
+                }
+                true
+            }
+            Msg::ToggleWorkingPlaneMount(variant_id, enabled) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    if enabled {
+                        let mountings = variant.mountings.get_or_insert_with(Default::default);
+                        mountings.working_plane = Some(gldf_rs::gldf::product_definitions::WorkingPlane::default());
+                    } else if let Some(ref mut mountings) = variant.mountings {
+                        mountings.working_plane = None;
+                    }
+                }
+                true
+            }
+            Msg::SetCeilingRecessed(variant_id, enabled, depth) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let ceiling = mountings.ceiling.get_or_insert_with(Default::default);
+                    if enabled {
+                        ceiling.recessed = Some(gldf_rs::gldf::product_definitions::Recessed {
+                            recessed_depth: depth,
+                            ..Default::default()
+                        });
+                    } else {
+                        ceiling.recessed = None;
+                    }
+                }
+                true
+            }
+            Msg::SetCeilingSurfaceMounted(variant_id, enabled) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let ceiling = mountings.ceiling.get_or_insert_with(Default::default);
+                    ceiling.surface_mounted = if enabled {
+                        Some(gldf_rs::gldf::product_definitions::SurfaceMounted {})
+                    } else {
+                        None
+                    };
+                }
+                true
+            }
+            Msg::SetCeilingPendant(variant_id, enabled, length) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let ceiling = mountings.ceiling.get_or_insert_with(Default::default);
+                    if enabled {
+                        ceiling.pendant = Some(gldf_rs::gldf::product_definitions::Pendant {
+                            pendant_length: length,
+                        });
+                    } else {
+                        ceiling.pendant = None;
+                    }
+                }
+                true
+            }
+            Msg::SetWallMountingHeight(variant_id, height) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let wall = mountings.wall.get_or_insert_with(Default::default);
+                    wall.mounting_height = height;
+                }
+                true
+            }
+            Msg::SetGroundPoleTop(variant_id, enabled, height) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let ground = mountings.ground.get_or_insert_with(Default::default);
+                    if enabled {
+                        ground.pole_top = Some(gldf_rs::gldf::product_definitions::PoleTop {
+                            pole_height: height,
+                            pole_height_element: None,
+                        });
+                    } else {
+                        ground.pole_top = None;
+                    }
+                }
+                true
+            }
+            Msg::SetGroundPoleIntegrated(variant_id, enabled, height) => {
+                if let Some(variant) = self.get_variant_mut(&variant_id) {
+                    let mountings = variant.mountings.get_or_insert_with(Default::default);
+                    let ground = mountings.ground.get_or_insert_with(Default::default);
+                    if enabled {
+                        ground.pole_integrated = Some(gldf_rs::gldf::product_definitions::PoleIntegrated {
+                            pole_height: height,
+                            pole_height_element: None,
+                        });
+                    } else {
+                        ground.pole_integrated = None;
+                    }
+                }
+                true
+            }
+            Msg::ClearAll => {
+                console::log!("Clearing all data...");
+                self.loaded_gldf = None;
+                self.files.clear();
+                self.readers.clear();
+                self.mode = AppMode::Viewer;
+                self.nav_item = NavItem::Overview;
+                self.selected_3d_variant = None;
+                self.selected_file = None;
+                self.show_help = false;
+                true
+            }
+            Msg::ToggleHelp => {
+                self.show_help = !self.show_help;
+                true
+            }
         }
     }
 
@@ -384,6 +568,11 @@ impl Component for App {
                         }
                     }
                 </div>
+
+                // Help overlay
+                if self.show_help {
+                    { self.view_help_overlay(ctx) }
+                }
             </div>
         }
     }
@@ -406,6 +595,361 @@ pub fn get_blob(buf_file: &BufFile) -> String {
 }
 
 impl App {
+    /// Helper to get mutable reference to a variant by ID
+    fn get_variant_mut(&mut self, variant_id: &str) -> Option<&mut gldf_rs::gldf::product_definitions::Variant> {
+        self.loaded_gldf.as_mut().and_then(|gldf| {
+            gldf.gldf
+                .product_definitions
+                .variants
+                .as_mut()
+                .and_then(|variants| {
+                    variants.variant.iter_mut().find(|v| v.id == variant_id)
+                })
+        })
+    }
+
+    /// Render mountings editor for a variant
+    fn render_mountings_editor(&self, ctx: &Context<Self>, variant: &gldf_rs::gldf::product_definitions::Variant) -> Html {
+        let mountings = variant.mountings.as_ref();
+        let variant_id = variant.id.clone();
+        let has_ceiling = mountings.map(|m| m.ceiling.is_some()).unwrap_or(false);
+        let has_wall = mountings.map(|m| m.wall.is_some()).unwrap_or(false);
+        let has_ground = mountings.map(|m| m.ground.is_some()).unwrap_or(false);
+        let has_working_plane = mountings.map(|m| m.working_plane.is_some()).unwrap_or(false);
+
+        // Callbacks for toggling
+        let vid = variant_id.clone();
+        let on_toggle_ceiling = ctx.link().callback(move |e: Event| {
+            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+            Msg::ToggleCeilingMount(vid.clone(), input.checked())
+        });
+        let vid = variant_id.clone();
+        let on_toggle_wall = ctx.link().callback(move |e: Event| {
+            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+            Msg::ToggleWallMount(vid.clone(), input.checked())
+        });
+        let vid = variant_id.clone();
+        let on_toggle_ground = ctx.link().callback(move |e: Event| {
+            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+            Msg::ToggleGroundMount(vid.clone(), input.checked())
+        });
+        let vid = variant_id.clone();
+        let on_toggle_wp = ctx.link().callback(move |e: Event| {
+            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+            Msg::ToggleWorkingPlaneMount(vid.clone(), input.checked())
+        });
+
+        // Build details strings
+        let ceiling_details = mountings.and_then(|m| m.ceiling.as_ref()).map(|c| {
+            let mut parts = Vec::new();
+            if let Some(ref r) = c.recessed {
+                parts.push(format!("Recessed ({}mm)", r.recessed_depth));
+            }
+            if c.surface_mounted.is_some() {
+                parts.push("Surface mounted".to_string());
+            }
+            if let Some(ref p) = c.pendant {
+                parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
+            }
+            parts
+        }).unwrap_or_default();
+
+        let wall_details = mountings.and_then(|m| m.wall.as_ref()).map(|w| {
+            let mut parts = Vec::new();
+            if w.mounting_height > 0 {
+                parts.push(format!("Height: {}mm", w.mounting_height));
+            }
+            if w.recessed.is_some() {
+                parts.push("Recessed".to_string());
+            }
+            if w.surface_mounted.is_some() {
+                parts.push("Surface mounted".to_string());
+            }
+            parts
+        }).unwrap_or_default();
+
+        let ground_details = mountings.and_then(|m| m.ground.as_ref()).map(|g| {
+            let mut parts = Vec::new();
+            if let Some(ref pt) = g.pole_top {
+                parts.push(format!("Pole top{}", pt.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
+            }
+            if let Some(ref pi) = g.pole_integrated {
+                parts.push(format!("Pole integrated{}", pi.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
+            }
+            if g.free_standing.is_some() {
+                parts.push("Free standing".to_string());
+            }
+            parts
+        }).unwrap_or_default();
+
+        html! {
+            <div class="mountings-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <div style="font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px;">
+                    { "Mountings" }
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    // Ceiling
+                    <div class="mounting-edit-card" style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--accent-blue); min-width: 160px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="checkbox" checked={has_ceiling} onchange={on_toggle_ceiling}
+                                style="width: 16px; height: 16px; accent-color: var(--accent-blue);" />
+                            <span style="font-size: 12px; font-weight: 600; color: var(--accent-blue);">{ "Ceiling" }</span>
+                        </label>
+                        if !ceiling_details.is_empty() {
+                            <div style="font-size: 10px; color: var(--text-secondary); padding-left: 24px;">
+                                { for ceiling_details.iter().map(|d| html! { <div>{ d }</div> }) }
+                            </div>
+                        }
+                    </div>
+
+                    // Wall
+                    <div class="mounting-edit-card" style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--accent-green); min-width: 160px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="checkbox" checked={has_wall} onchange={on_toggle_wall}
+                                style="width: 16px; height: 16px; accent-color: var(--accent-green);" />
+                            <span style="font-size: 12px; font-weight: 600; color: var(--accent-green);">{ "Wall" }</span>
+                        </label>
+                        if !wall_details.is_empty() {
+                            <div style="font-size: 10px; color: var(--text-secondary); padding-left: 24px;">
+                                { for wall_details.iter().map(|d| html! { <div>{ d }</div> }) }
+                            </div>
+                        }
+                    </div>
+
+                    // Ground
+                    <div class="mounting-edit-card" style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--accent-orange); min-width: 160px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="checkbox" checked={has_ground} onchange={on_toggle_ground}
+                                style="width: 16px; height: 16px; accent-color: var(--accent-orange);" />
+                            <span style="font-size: 12px; font-weight: 600; color: var(--accent-orange);">{ "Ground" }</span>
+                        </label>
+                        if !ground_details.is_empty() {
+                            <div style="font-size: 10px; color: var(--text-secondary); padding-left: 24px;">
+                                { for ground_details.iter().map(|d| html! { <div>{ d }</div> }) }
+                            </div>
+                        }
+                    </div>
+
+                    // Working Plane
+                    <div class="mounting-edit-card" style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--accent-purple); min-width: 160px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px;">
+                            <input type="checkbox" checked={has_working_plane} onchange={on_toggle_wp}
+                                style="width: 16px; height: 16px; accent-color: var(--accent-purple);" />
+                            <span style="font-size: 12px; font-weight: 600; color: var(--accent-purple);">{ "Working Plane" }</span>
+                        </label>
+                        if has_working_plane {
+                            <div style="font-size: 10px; color: var(--text-secondary); padding-left: 24px;">
+                                <div>{ "Free standing" }</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    /// Render mountings as read-only badges (for viewer mode)
+    fn render_mountings_readonly(&self, variant: &gldf_rs::gldf::product_definitions::Variant) -> Html {
+        let mountings = variant.mountings.as_ref();
+        let has_ceiling = mountings.map(|m| m.ceiling.is_some()).unwrap_or(false);
+        let has_wall = mountings.map(|m| m.wall.is_some()).unwrap_or(false);
+        let has_ground = mountings.map(|m| m.ground.is_some()).unwrap_or(false);
+        let has_working_plane = mountings.map(|m| m.working_plane.is_some()).unwrap_or(false);
+
+        // Build details strings
+        let ceiling_details = mountings.and_then(|m| m.ceiling.as_ref()).map(|c| {
+            let mut parts = Vec::new();
+            if let Some(ref r) = c.recessed {
+                parts.push(format!("Recessed ({}mm)", r.recessed_depth));
+            }
+            if c.surface_mounted.is_some() {
+                parts.push("Surface mounted".to_string());
+            }
+            if let Some(ref p) = c.pendant {
+                parts.push(format!("Pendant ({:.0}mm)", p.pendant_length));
+            }
+            parts
+        }).unwrap_or_default();
+
+        let wall_details = mountings.and_then(|m| m.wall.as_ref()).map(|w| {
+            let mut parts = Vec::new();
+            if w.mounting_height > 0 {
+                parts.push(format!("Height: {}mm", w.mounting_height));
+            }
+            if w.recessed.is_some() {
+                parts.push("Recessed".to_string());
+            }
+            if w.surface_mounted.is_some() {
+                parts.push("Surface mounted".to_string());
+            }
+            parts
+        }).unwrap_or_default();
+
+        let ground_details = mountings.and_then(|m| m.ground.as_ref()).map(|g| {
+            let mut parts = Vec::new();
+            if let Some(ref pt) = g.pole_top {
+                parts.push(format!("Pole top{}", pt.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
+            }
+            if let Some(ref pi) = g.pole_integrated {
+                parts.push(format!("Pole integrated{}", pi.get_pole_height().map(|h| format!(" ({}mm)", h)).unwrap_or_default()));
+            }
+            if g.free_standing.is_some() {
+                parts.push("Free standing".to_string());
+            }
+            parts
+        }).unwrap_or_default();
+
+        // Only show if there are any mountings
+        if !has_ceiling && !has_wall && !has_ground && !has_working_plane {
+            return html! {};
+        }
+
+        html! {
+            <div class="mountings-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <div style="font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px;">
+                    { "Mountings" }
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    if has_ceiling {
+                        <div class="mounting-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(10, 132, 255, 0.15); color: var(--accent-blue); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;">
+                            <span>{ "Ceiling" }</span>
+                            if !ceiling_details.is_empty() {
+                                <span style="opacity: 0.7;">{ format!("({})", ceiling_details.join(", ")) }</span>
+                            }
+                        </div>
+                    }
+                    if has_wall {
+                        <div class="mounting-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(48, 209, 88, 0.15); color: var(--accent-green); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;">
+                            <span>{ "Wall" }</span>
+                            if !wall_details.is_empty() {
+                                <span style="opacity: 0.7;">{ format!("({})", wall_details.join(", ")) }</span>
+                            }
+                        </div>
+                    }
+                    if has_ground {
+                        <div class="mounting-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 159, 10, 0.15); color: var(--accent-orange); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;">
+                            <span>{ "Ground" }</span>
+                            if !ground_details.is_empty() {
+                                <span style="opacity: 0.7;">{ format!("({})", ground_details.join(", ")) }</span>
+                            }
+                        </div>
+                    }
+                    if has_working_plane {
+                        <div class="mounting-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(191, 90, 242, 0.15); color: var(--accent-purple); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;">
+                            <span>{ "Working Plane" }</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    /// Render help overlay with context-sensitive help
+    fn view_help_overlay(&self, ctx: &Context<Self>) -> Html {
+        let on_close = ctx.link().callback(|_| Msg::ToggleHelp);
+        let on_overlay_click = on_close.clone();
+
+        // Context-sensitive help based on current view
+        let (section_title, section_help) = match self.nav_item {
+            NavItem::Overview => ("Overview", vec![
+                ("File Loading", "Drop GLDF, LDT, IES, ULD, or ROLF files onto the window to load them."),
+                ("Product Info", "Shows basic product information like manufacturer and product name."),
+                ("Quick Stats", "Displays counts of light sources, variants, files, etc."),
+            ]),
+            NavItem::Header => ("Header Editor", vec![
+                ("Format Version", "GLDF format version (e.g., 1.0.0)."),
+                ("Manufacturer", "Company name of the luminaire manufacturer."),
+                ("Author", "Person or system that created the file."),
+                ("License Key", "Optional license key for the product data."),
+            ]),
+            NavItem::Electrical => ("Electrical Editor", vec![
+                ("Safety Class", "Electrical safety classification (I, II, or III)."),
+                ("IP Code", "Ingress Protection rating (e.g., IP65)."),
+                ("Power Factor", "Ratio of real to apparent power (0-1)."),
+                ("CLO", "Constant Light Output - maintains brightness over time."),
+            ]),
+            NavItem::Photometry => ("Photometry Editor", vec![
+                ("GLDF Values", "Values stored in the GLDF file (editable, shown in blue)."),
+                ("Calculated Values", "Values calculated from LDT/IES files (shown in orange)."),
+                ("CIE Flux Code", "5-digit code describing light distribution."),
+                ("LOR/DLOR/ULOR", "Light Output Ratios - efficiency metrics."),
+            ]),
+            NavItem::Variants => ("Variants", vec![
+                ("Product Variants", "Different configurations of the luminaire."),
+                ("Mountings", "Installation options: Ceiling, Wall, Ground, Working Plane."),
+                ("Geometry", "Reference to 3D model geometry."),
+                ("3D View", "Click 'View 3D Scene' to see the luminaire in 3D."),
+            ]),
+            NavItem::Files => ("Files", vec![
+                ("Embedded Files", "Files contained within the GLDF package."),
+                ("LDT/IES", "Photometry files with light distribution data."),
+                ("L3D", "3D geometry files for the luminaire model."),
+                ("Images", "Product photos and thumbnails."),
+            ]),
+            NavItem::LightSources => ("Light Sources", vec![
+                ("Fixed Sources", "Light sources permanently installed in the luminaire."),
+                ("Changeable Sources", "Replaceable light sources (lamps)."),
+                ("Luminous Flux", "Light output in lumens."),
+                ("Color Temperature", "CCT in Kelvin (e.g., 3000K warm, 4000K neutral)."),
+            ]),
+            _ => ("General Help", vec![
+                ("Navigation", "Use the sidebar to navigate between sections."),
+                ("Edit Mode", "Click 'Edit Mode' to enable editing features."),
+                ("Export", "Use export buttons to save as GLDF, JSON, or XML."),
+                ("Clear", "Click Clear to reset and load a new file."),
+            ]),
+        };
+
+        html! {
+            <div class="help-overlay" onclick={on_overlay_click}>
+                <div class="help-modal" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
+                    <div class="help-header">
+                        <h2>{ "Help" }</h2>
+                        <button class="help-close" onclick={on_close.clone()}>{ "✕" }</button>
+                    </div>
+                    <div class="help-content">
+                        // Current section help
+                        <div class="help-section">
+                            <h3>{ section_title }</h3>
+                            <dl class="help-list">
+                                { for section_help.iter().map(|(term, desc)| html! {
+                                    <>
+                                        <dt>{ *term }</dt>
+                                        <dd>{ *desc }</dd>
+                                    </>
+                                })}
+                            </dl>
+                        </div>
+
+                        // General shortcuts
+                        <div class="help-section">
+                            <h3>{ "Supported File Formats" }</h3>
+                            <ul class="help-formats">
+                                <li><strong>{ ".gldf" }</strong>{ " - Global Lighting Data Format" }</li>
+                                <li><strong>{ ".ldt" }</strong>{ " - EULUMDAT photometry" }</li>
+                                <li><strong>{ ".ies" }</strong>{ " - IES photometry" }</li>
+                            </ul>
+                        </div>
+
+                        <div class="help-section">
+                            <h3>{ "Tips" }</h3>
+                            <ul class="help-tips">
+                                <li>{ "Drag & drop files anywhere on the page to load them" }</li>
+                                <li>{ "Click on LDT diagrams to zoom in" }</li>
+                                <li>{ "Use 'View 3D Scene' to see luminaire geometry" }</li>
+                                <li>{ "Orange values in Photometry are calculated from LDT files" }</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="help-footer">
+                        <span class="help-version">{ "GLDF Viewer v0.3" }</span>
+                        <a href="https://github.com/holg/gldf-rs" target="_blank" class="help-link">{ "GitHub" }</a>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
     fn view_sidebar(&self, ctx: &Context<Self>) -> Html {
         let has_file = self.loaded_gldf.is_some() || !self.files.is_empty();
         let files_count = self
@@ -472,6 +1016,9 @@ impl App {
                     <div class="sidebar-section-title">{ "Document" }</div>
                     <ul class="sidebar-nav">
                         { self.nav_item(ctx, NavItem::Header, "📄", "Header", None, has_file) }
+                        { self.nav_item(ctx, NavItem::Electrical, "⚡", "Electrical", None, has_file) }
+                        { self.nav_item(ctx, NavItem::Applications, "🏢", "Applications", None, has_file) }
+                        { self.nav_item(ctx, NavItem::Photometry, "🔬", "Photometry", None, has_file) }
                         { self.nav_item(ctx, NavItem::Statistics, "📈", "Statistics", None, has_file) }
                     </ul>
                 </div>
@@ -569,7 +1116,7 @@ impl App {
                 <input
                     id="file-upload"
                     type="file"
-                    accept=".gldf,.ldt,.ies,.uld"
+                    accept=".gldf,.ldt,.ies,.uld,.rolf"
                     multiple={false}
                     onchange={ctx.link().callback(move |e: Event| {
                         let input: HtmlInputElement = e.target_unchecked_into();
@@ -592,6 +1139,9 @@ impl App {
             NavItem::RawData => "Raw Data",
             NavItem::FileViewer => "File Viewer",
             NavItem::Header => "Header",
+            NavItem::Electrical => "Electrical",
+            NavItem::Applications => "Applications",
+            NavItem::Photometry => "Photometry",
             NavItem::Statistics => "Statistics",
             NavItem::Files => "Files",
             NavItem::LightSources => "Light Sources",
@@ -605,8 +1155,8 @@ impl App {
                 <div class="content-header">
                     <h1 class="content-title">{ title }</h1>
 
-                    if self.loaded_gldf.is_some() {
-                        <div class="toolbar-actions">
+                    <div class="toolbar-actions">
+                        if self.loaded_gldf.is_some() {
                             <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::ToggleEditor)}>
                                 { if self.mode == AppMode::Viewer { "Edit Mode" } else { "View Mode" } }
                             </button>
@@ -619,8 +1169,15 @@ impl App {
                             <button class="btn btn-success" onclick={ctx.link().callback(|_| Msg::ExportXml)}>
                                 { "Export XML" }
                             </button>
-                        </div>
-                    }
+                        }
+                        // Always show Clear and Help buttons
+                        <button class="btn btn-outline" onclick={ctx.link().callback(|_| Msg::ClearAll)} title="Clear all and start over">
+                            { "Clear" }
+                        </button>
+                        <button class="btn btn-outline" onclick={ctx.link().callback(|_| Msg::ToggleHelp)} title="Show help">
+                            { "?" }
+                        </button>
+                    </div>
                 </div>
 
                 // Content Body
@@ -631,6 +1188,9 @@ impl App {
                             NavItem::RawData => self.view_raw_data(),
                             NavItem::FileViewer => self.view_file_viewer(ctx),
                             NavItem::Header => self.view_header_editor(),
+                            NavItem::Electrical => self.view_electrical_editor(),
+                            NavItem::Applications => self.view_applications_editor(),
+                            NavItem::Photometry => self.view_photometry_editor(),
                             NavItem::Statistics => self.view_statistics(),
                             NavItem::Files => self.view_files_list(ctx),
                             NavItem::LightSources => self.view_light_sources(),
@@ -1090,6 +1650,261 @@ impl App {
                     <div class="icon">{ "📄" }</div>
                     <h3>{ "No Header Data" }</h3>
                     <p>{ "Load a GLDF file to view header information" }</p>
+                </div>
+            }
+        }
+    }
+
+    fn view_electrical_editor(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            if self.mode == AppMode::Editor {
+                html! {
+                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                        <components::ElectricalEditor />
+                    </GldfProviderWithData>
+                }
+            } else {
+                // Read-only view
+                let electrical = gldf
+                    .gldf
+                    .product_definitions
+                    .product_meta_data
+                    .as_ref()
+                    .and_then(|m| m.descriptive_attributes.as_ref())
+                    .and_then(|d| d.electrical.as_ref());
+
+                html! {
+                    <div class="card">
+                        <div class="card-body">
+                            if let Some(elec) = electrical {
+                                <div class="properties-grid">
+                                    if let Some(ref class) = elec.electrical_safety_class {
+                                        <div class="property">
+                                            <span class="property-label">{ "Safety Class" }</span>
+                                            <span class="property-value">{ format!("Class {}", class) }</span>
+                                        </div>
+                                    }
+                                    if let Some(ref ip) = elec.ingress_protection_ip_code {
+                                        <div class="property">
+                                            <span class="property-label">{ "IP Code" }</span>
+                                            <span class="property-value">{ ip }</span>
+                                        </div>
+                                    }
+                                    if let Some(pf) = elec.power_factor {
+                                        <div class="property">
+                                            <span class="property-label">{ "Power Factor" }</span>
+                                            <span class="property-value">{ format!("{:.2}", pf) }</span>
+                                        </div>
+                                    }
+                                    if let Some(clo) = elec.constant_light_output {
+                                        <div class="property">
+                                            <span class="property-label">{ "Constant Light Output" }</span>
+                                            <span class="property-value">{ if clo { "Yes" } else { "No" } }</span>
+                                        </div>
+                                    }
+                                    if let Some(ref dist) = elec.light_distribution {
+                                        <div class="property">
+                                            <span class="property-label">{ "Light Distribution" }</span>
+                                            <span class="property-value">{ dist }</span>
+                                        </div>
+                                    }
+                                </div>
+                            } else {
+                                <p class="empty-message">{ "No electrical data available" }</p>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "⚡" }</div>
+                    <h3>{ "No Electrical Data" }</h3>
+                    <p>{ "Load a GLDF file to view electrical attributes" }</p>
+                </div>
+            }
+        }
+    }
+
+    fn view_applications_editor(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            if self.mode == AppMode::Editor {
+                html! {
+                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                        <components::ApplicationsEditor />
+                    </GldfProviderWithData>
+                }
+            } else {
+                // Read-only view
+                let applications: Vec<String> = gldf
+                    .gldf
+                    .product_definitions
+                    .product_meta_data
+                    .as_ref()
+                    .and_then(|m| m.descriptive_attributes.as_ref())
+                    .and_then(|d| d.marketing.as_ref())
+                    .and_then(|m| m.applications.as_ref())
+                    .map(|a| a.application.clone())
+                    .unwrap_or_default();
+
+                html! {
+                    <div class="card">
+                        <div class="card-body">
+                            if !applications.is_empty() {
+                                <div class="tags-container">
+                                    { for applications.iter().map(|app| html! {
+                                        <span class="tag application-tag">{ app }</span>
+                                    })}
+                                </div>
+                            } else {
+                                <p class="empty-message">{ "No applications defined" }</p>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🏢" }</div>
+                    <h3>{ "No Applications Data" }</h3>
+                    <p>{ "Load a GLDF file to view application areas" }</p>
+                </div>
+            }
+        }
+    }
+
+    fn view_photometry_editor(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            if self.mode == AppMode::Editor {
+                // Build a map from GLDF file definition id -> filename
+                // The photometry references file by id (e.g., "ldtnarrow")
+                // The file definition maps id to filename (e.g., "ldc/narrow.ldt")
+                let file_id_to_filename: std::collections::HashMap<String, String> = gldf.gldf
+                    .general_definitions
+                    .files
+                    .file
+                    .iter()
+                    .map(|f| (f.id.clone(), f.file_name.clone()))
+                    .collect();
+
+                console::log!(format!("File ID to filename map: {:?}", file_id_to_filename));
+
+                // Extract photometry files as (file_definition_id, content) pairs
+                let photometry_files: Vec<(String, Vec<u8>)> = gldf.files.iter()
+                    .filter_map(|f| {
+                        let content = f.content.clone()?;
+                        let file_path = f.name.clone().or_else(|| f.path.clone())?;
+
+                        // Check if this looks like LDT or IES content
+                        let path_lower = file_path.to_lowercase();
+                        let is_photometry = path_lower.ends_with(".ldt") || path_lower.ends_with(".ies");
+
+                        if is_photometry {
+                            // Find the file definition ID that maps to this filename
+                            let file_def_id = file_id_to_filename.iter()
+                                .find(|(_, filename)| {
+                                    filename.to_lowercase() == path_lower
+                                        || file_path.to_lowercase().ends_with(&filename.to_lowercase())
+                                })
+                                .map(|(id, _)| id.clone());
+
+                            if let Some(id) = file_def_id {
+                                console::log!(format!("Found photometry file: def_id={}, path={}, content_len={}",
+                                    id, file_path, content.len()));
+                                Some((id, content))
+                            } else {
+                                // Fallback: use the path as id
+                                console::log!(format!("No file def found for: path={}, using path as id", file_path));
+                                Some((file_path, content))
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                console::log!(format!("Total photometry files found: {}", photometry_files.len()));
+
+                html! {
+                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                        <components::PhotometryEditor photometry_files={photometry_files} />
+                    </GldfProviderWithData>
+                }
+            } else {
+                // Read-only view
+                let photometries = gldf
+                    .gldf
+                    .general_definitions
+                    .photometries
+                    .as_ref()
+                    .map(|p| &p.photometry)
+                    .cloned()
+                    .unwrap_or_default();
+
+                html! {
+                    <div class="card">
+                        <div class="card-body">
+                            if photometries.is_empty() {
+                                <p class="empty-message">{ "No photometry definitions" }</p>
+                            } else {
+                                { for photometries.iter().map(|phot| {
+                                    let desc = phot.descriptive_photometry.as_ref();
+                                    html! {
+                                        <div class="photometry-card">
+                                            <h3>{ &phot.id }</h3>
+                                            if let Some(ref file_ref) = phot.photometry_file_reference {
+                                                <p class="file-ref">{ format!("File: {}", file_ref.file_id) }</p>
+                                            }
+                                            if let Some(d) = desc {
+                                                <div class="properties-grid">
+                                                    if let Some(ref code) = d.cie_flux_code {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "CIE Flux Code" }</span>
+                                                            <span class="property-value">{ code }</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(lor) = d.light_output_ratio {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "LOR" }</span>
+                                                            <span class="property-value">{ format!("{:.1}%", lor * 100.0) }</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(eff) = d.luminous_efficacy {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "Efficacy" }</span>
+                                                            <span class="property-value">{ format!("{:.1} lm/W", eff) }</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(dlor) = d.downward_light_output_ratio {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "DLOR" }</span>
+                                                            <span class="property-value">{ format!("{:.1}%", dlor * 100.0) }</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(ulor) = d.upward_light_output_ratio {
+                                                        <div class="property">
+                                                            <span class="property-label">{ "ULOR" }</span>
+                                                            <span class="property-value">{ format!("{:.1}%", ulor * 100.0) }</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                })}
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🔬" }</div>
+                    <h3>{ "No Photometry Data" }</h3>
+                    <p>{ "Load a GLDF file to view photometric data" }</p>
                 </div>
             }
         }
@@ -1875,6 +2690,13 @@ impl App {
                                                     })}
                                                 </div>
                                             </div>
+                                        }
+
+                                        // Mountings section - edit controls only in Editor mode
+                                        if self.mode == AppMode::Editor {
+                                            { self.render_mountings_editor(ctx, v) }
+                                        } else {
+                                            { self.render_mountings_readonly(v) }
                                         }
                                     </div>
                                 </div>
