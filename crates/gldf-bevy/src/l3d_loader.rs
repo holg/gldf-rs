@@ -464,10 +464,10 @@ fn extract_light_emitters(
 
             // Get size from rectangle or circle
             let size = if let Some(rect) = obj.rectangle() {
-                let (w, h): (f32, f32) = rect.size();
-                (w, h)
+                let (w, h) = rect.size();
+                (w as f32, h as f32)
             } else if let Some(circle) = obj.circle() {
-                let d: f32 = circle.diameter();
+                let d = circle.diameter() as f32;
                 (d, d)
             } else {
                 (0.1, 0.1) // Default small size

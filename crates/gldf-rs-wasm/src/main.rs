@@ -141,64 +141,9 @@ impl Component for App {
                         self.loaded_gldf = Some(gldf);
                     }
                 }
-                // Handle ULD (DIALux) and ROLF (Relux) files - convert to GLDF
+                // Handle ULD (DIALux) and ROLF (Relux) files - not supported yet
                 else if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
-                    #[cfg(feature = "light-convert")]
-                    {
-                        let format_name = if file_name_lower.ends_with(".uld") {
-                            "ULD"
-                        } else {
-                            "ROLF"
-                        };
-                        console::log!(format!("Converting {} to GLDF...", format_name).as_str());
-
-                        match light_convert::convert_to_gldf_full(&data, Some(&file_name), None) {
-                            Ok(result) => {
-                                console::log!(format!(
-                                    "{} converted to GLDF: {} bytes, product: {}, geometry: {}, photometry: {}",
-                                    format_name,
-                                    result.gldf_bytes.len(),
-                                    result.product_name,
-                                    result.has_geometry,
-                                    result.has_photometry
-                                ).as_str());
-
-                                // Parse GLDF and load it
-                                if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(
-                                    result.gldf_bytes.clone(),
-                                ) {
-                                    self.loaded_gldf = Some(gldf);
-                                }
-
-                                // Generate output filename
-                                let output_name = file_name
-                                    .replace(".uld", ".gldf")
-                                    .replace(".ULD", ".gldf")
-                                    .replace(".rolf", ".gldf")
-                                    .replace(".ROLF", ".gldf");
-
-                                // Store GLDF for viewing
-                                self.files.push(FileDetails {
-                                    data: result.gldf_bytes,
-                                    file_type: "application/gldf".to_string(),
-                                    name: output_name,
-                                });
-                                self.readers.remove(&file_name);
-                                return true;
-                            }
-                            Err(e) => {
-                                console::log!(
-                                    format!("Failed to convert {}: {}", format_name, e).as_str()
-                                );
-                            }
-                        }
-                    }
-                    #[cfg(not(feature = "light-convert"))]
-                    {
-                        console::log!(
-                            "ULD/ROLF support not enabled. Build with 'light-convert' feature."
-                        );
-                    }
+                    console::log!("ULD/ROLF file conversion is not yet available in this version.");
                 }
                 // Handle LDT/IES files - convert to minimal GLDF
                 else if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
