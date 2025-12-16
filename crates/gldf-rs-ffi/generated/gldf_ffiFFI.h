@@ -287,6 +287,11 @@ void uniffi_gldf_ffi_fn_method_gldfengine_add_file(void*_Nonnull ptr, RustBuffer
 RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_archive_file(void*_Nonnull ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_EMITTER_DATA
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_EMITTER_DATA
+RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_emitter_data(void*_Nonnull ptr, RustBuffer emitter_id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_FILE_CONTENT
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_FILE_CONTENT
 RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_file_content(void*_Nonnull ptr, RustBuffer file_id, RustCallStatus *_Nonnull out_status
@@ -384,7 +389,7 @@ void uniffi_gldf_ffi_fn_method_gldfengine_set_default_language(void*_Nonnull ptr
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_FORMAT_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_FORMAT_VERSION
-void uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(void*_Nonnull ptr, int32_t major, int32_t minor, int32_t pre_release, RustCallStatus *_Nonnull out_status
+void uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(void*_Nonnull ptr, RustBuffer version, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_SET_MANUFACTURER
@@ -779,6 +784,12 @@ uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_add_file(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_ARCHIVE_FILE
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_EMITTER_DATA
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_GET_EMITTER_DATA
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_emitter_data(void
     
 );
 #endif
