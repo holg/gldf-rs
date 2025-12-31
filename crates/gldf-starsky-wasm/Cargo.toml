@@ -1,0 +1,31 @@
+[package]
+name = "gldf-starsky-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lightweight 2D star sky visualization for GLDF - Tribute to Astrophysics"
+keywords = ["gldf", "stars", "astrophysics", "wasm", "canvas"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "Window",
+    "Document",
+    "Element",
+    "DomRect",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "CanvasGradient",
+    "Storage",
+    "console",
+]
