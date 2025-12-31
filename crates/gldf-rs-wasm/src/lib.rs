@@ -4,5 +4,7 @@
 
 pub mod components;
 pub mod draw_l3d;
+pub mod js_bindings;
+pub mod plugins;
 pub mod state;
 pub mod utils;

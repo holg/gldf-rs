@@ -1,5 +1,6 @@
 //! Light source editor component for GLDF files
 
+use crate::components::spectrum_viewer::SpectrumViewer;
 use crate::state::use_gldf;
 use yew::prelude::*;
 
@@ -76,6 +77,18 @@ fn fixed_light_sources_panel() -> Html {
         .map(|ls| ls.fixed_light_source.as_slice())
         .unwrap_or(&[]);
 
+    // Get spectrums for lookup
+    let spectrums = gldf
+        .product
+        .general_definitions
+        .spectrums
+        .as_ref()
+        .map(|s| &s.spectrum[..])
+        .unwrap_or(&[]);
+
+    // State for expanded spectrum view
+    let expanded_spectrum = use_state(|| None::<String>);
+
     html! {
         <div class="light-sources-panel">
             if fixed_sources.is_empty() {
@@ -90,6 +103,38 @@ fn fixed_light_sources_panel() -> Html {
                             .and_then(|d| d.locale.first())
                             .map(|l| l.value.clone())
                             .unwrap_or_default();
+
+                        // Get TM-30 values from color information
+                        let tm30 = source.color_information.as_ref()
+                            .and_then(|ci| ci.iestm3015.as_ref())
+                            .map(|tm| (tm.rf, tm.rg));
+
+                        // Get spectrum reference
+                        let spectrum_ref = source.spectrum_reference.as_ref()
+                            .map(|sr| sr.spectrum_id.clone());
+
+                        // Find the actual spectrum data
+                        let spectrum_data = spectrum_ref.as_ref()
+                            .and_then(|id| spectrums.iter().find(|s| &s.id == id));
+
+                        // Check if this spectrum is expanded
+                        let is_expanded = spectrum_ref.as_ref()
+                            .map(|id| expanded_spectrum.as_ref() == Some(id))
+                            .unwrap_or(false);
+
+                        let on_toggle_spectrum = {
+                            let expanded_spectrum = expanded_spectrum.clone();
+                            let spectrum_id = spectrum_ref.clone();
+                            Callback::from(move |_: MouseEvent| {
+                                if let Some(id) = &spectrum_id {
+                                    if expanded_spectrum.as_ref() == Some(id) {
+                                        expanded_spectrum.set(None);
+                                    } else {
+                                        expanded_spectrum.set(Some(id.clone()));
+                                    }
+                                }
+                            })
+                        };
 
                         html! {
                             <div class="light-source-card" key={source.id.clone()}>
@@ -131,6 +176,60 @@ fn fixed_light_sources_panel() -> Html {
                                             <div class="detail">
                                                 <span class="label">{ "CCT:" }</span>
                                                 <span class="value">{ format!("{} K", cct) }</span>
+                                            </div>
+                                        }
+                                        // TM-30 values
+                                        if let Some((rf, rg)) = tm30 {
+                                            <div class="detail tm30-values">
+                                                <span class="label">{ "TM-30:" }</span>
+                                                <span class="value tm30">
+                                                    <span class="rf" title="Fidelity Index">{ format!("Rf {}", rf) }</span>
+                                                    <span class="rg" title="Gamut Index">{ format!("Rg {}", rg) }</span>
+                                                </span>
+                                            </div>
+                                        }
+                                        // CIE chromaticity
+                                        if let Some(coords) = &color_info.rated_chromacity_coordinate_values {
+                                            <div class="detail">
+                                                <span class="label">{ "CIE 1931:" }</span>
+                                                <span class="value">{ format!("x={:.4}, y={:.4}", coords.x, coords.y) }</span>
+                                            </div>
+                                        }
+                                        // Melanopic factor
+                                        if let Some(melanopic) = &color_info.melanopic_factor {
+                                            <div class="detail">
+                                                <span class="label">{ "Melanopic:" }</span>
+                                                <span class="value">{ format!("{:.2}", melanopic) }</span>
+                                            </div>
+                                        }
+                                    }
+                                    // Spectrum reference with toggle button
+                                    if let Some(ref spec_id) = spectrum_ref {
+                                        <div class="detail spectrum-ref">
+                                            <span class="label">{ "Spectrum:" }</span>
+                                            <button
+                                                class={classes!("spectrum-toggle", is_expanded.then_some("expanded"))}
+                                                onclick={on_toggle_spectrum}
+                                                title="Click to view spectral power distribution"
+                                            >
+                                                { spec_id }
+                                                <span class="toggle-icon">{ if is_expanded { "▼" } else { "▶" } }</span>
+                                            </button>
+                                        </div>
+                                    }
+                                    // Expanded spectrum viewer
+                                    if is_expanded {
+                                        if let Some(spectrum) = spectrum_data {
+                                            <div class="spectrum-viewer-container">
+                                                <SpectrumViewer
+                                                    spectrum={spectrum.clone()}
+                                                    width={400.0}
+                                                    height={250.0}
+                                                    rf={tm30.map(|(rf, _)| rf)}
+                                                    rg={tm30.map(|(_, rg)| rg)}
+                                                    cct={source.color_information.as_ref().and_then(|ci| ci.correlated_color_temperature)}
+                                                    cri={source.color_information.as_ref().and_then(|ci| ci.color_rendering_index)}
+                                                />
                                             </div>
                                         }
                                     }

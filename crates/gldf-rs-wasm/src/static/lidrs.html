@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GLDF Star Sky - Tribute to Astrophysics</title>
+    <meta name="description" content="Real-time 3D star sky visualization using HYG star catalogue data. A tribute to Astrophysics.">
+    <script>
+        // Redirect to main app with demo parameter
+        window.location.href = "index.html?demo=lidrs";
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0a0a1a;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .loading {
+            text-align: center;
+        }
+        .stars {
+            font-size: 2em;
+            animation: twinkle 1s ease-in-out infinite alternate;
+        }
+        @keyframes twinkle {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading">
+        <div class="stars">⭐ ✨ 🌟</div>
+        <p>Loading Star Sky Demo...</p>
+        <p><small>HYG Star Catalogue • 119,626 stars</small></p>
+    </div>
+</body>
+</html>

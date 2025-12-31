@@ -1,6 +1,13 @@
 [trunk]
 dist_dir = "dist"
 
+# Note: wasm-opt is disabled via data-wasm-opt="0" in index.html
+
 [[trunk.copy]]
 source = "src/static/"
 destination = "dist"
+
+# Copy Bevy 3D viewer files (pre-built)
+[[trunk.copy]]
+source = "bevy-pkg/"
+destination = "dist/bevy"

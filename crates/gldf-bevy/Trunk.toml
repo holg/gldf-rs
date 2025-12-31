@@ -1,0 +1,10 @@
+[build]
+# Disable subresource integrity hashes (causes issues when embedded in iframe)
+no_sri = true
+# Use relative paths so it works in /bevy/ subfolder
+public_url = "./"
+# Enable standalone feature for WASM builds (enables localStorage sync)
+features = ["standalone"]
+
+[watch]
+ignore = ["./dist"]

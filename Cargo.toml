@@ -8,10 +8,12 @@ members = [
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
+    "crates/gldf-rs-wasm-minimal",
+    "crates/gldf-starsky-wasm",
 ]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.4.0"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "GPL-3.0-or-later"
@@ -20,7 +22,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.3.3", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }
@@ -78,12 +80,13 @@ bevy = { version = "0.15", default-features = false, features = [
     "x11",
 ] }
 
-# eulumdat-bevy for lighting plugins
-eulumdat-bevy = "0.3.0"
+# eulumdat-bevy for lighting plugins (disable wasm-sync for WASM compatibility)
+eulumdat-bevy = { version = "0.4.0", path = "../eulumdat-rs/crates/eulumdat-bevy", default-features = false, features = ["viewer"] }
 
 # Photometric data
-eulumdat = "0.3.0"
-l3d_rs = "0.2.3"
+atla = { version = "0.4.0", path = "../eulumdat-rs/crates/atla", features = ["eulumdat"] }
+eulumdat = { version = "0.4.0", path = "../eulumdat-rs/crates/eulumdat" }
+l3d_rs = { version = "0.2.3", path = "../l3d-rs/crates/l3d_rs" }
 # Unified lighting file conversion (ULD, ROLF -> GLDF) - not published yet
 # light-convert = { path = "../light-other-rs/crates/light-convert" }
 

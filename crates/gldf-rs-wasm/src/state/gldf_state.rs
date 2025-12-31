@@ -5,7 +5,8 @@ use gldf_rs::gldf::{
         DescriptivePhotometry, Photometries, Photometry, UGR4H8H705020LQ,
     },
     product_definitions::{
-        Applications, DescriptiveAttributes, Electrical, Marketing, ProductMetaData,
+        Applications, CustomProperties, DescriptiveAttributes, Electrical, Marketing,
+        ProductMetaData, Property,
     },
     FormatVersion, GldfProduct,
 };
@@ -117,6 +118,10 @@ pub enum GldfAction {
         index: usize,
         value: Option<String>,
     },
+    // --- Custom Properties ---
+    /// Set a custom property in ProductMetaData
+    /// If value is None or empty, removes the property
+    SetCustomProperty { id: String, value: Option<String> },
     /// Reset state to default
     #[allow(dead_code)]
     Reset,
@@ -276,6 +281,33 @@ impl Reducible for GldfState {
                 ensure_descriptive_photometry(&mut new_state, index)
                     .light_distribution_bug_rating = value;
             }
+            // --- Custom Properties ---
+            GldfAction::SetCustomProperty { id, value } => {
+                let props = ensure_custom_properties(&mut new_state);
+                // Find existing property or add new one
+                if let Some(existing) = props.property.iter_mut().find(|p| p.id == id) {
+                    if let Some(v) = value {
+                        if v.is_empty() {
+                            // Remove if empty
+                            props.property.retain(|p| p.id != id);
+                        } else {
+                            existing.value = v;
+                        }
+                    } else {
+                        // Remove if None
+                        props.property.retain(|p| p.id != id);
+                    }
+                } else if let Some(v) = value {
+                    if !v.is_empty() {
+                        // Add new property
+                        props.property.push(Property {
+                            id,
+                            value: v,
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
             GldfAction::Reset => {
                 new_state = GldfState::default();
             }
@@ -366,6 +398,15 @@ fn ensure_applications(state: &mut GldfState) -> &mut Applications {
         marketing.applications = Some(Applications::default());
     }
     marketing.applications.as_mut().unwrap()
+}
+
+/// Helper to ensure CustomProperties exists and return mutable reference
+fn ensure_custom_properties(state: &mut GldfState) -> &mut CustomProperties {
+    let attrs = ensure_descriptive_attributes(state);
+    if attrs.custom_properties.is_none() {
+        attrs.custom_properties = Some(CustomProperties::default());
+    }
+    attrs.custom_properties.as_mut().unwrap()
 }
 
 /// Helper to ensure Photometries exists and return mutable reference

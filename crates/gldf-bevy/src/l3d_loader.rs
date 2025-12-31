@@ -27,14 +27,25 @@ pub struct L3dModel;
 #[derive(Component)]
 pub struct L3dLight;
 
+/// Shape of the light emitting surface
+#[derive(Debug, Clone)]
+enum EmitterShape {
+    /// Rectangle with (width, height) in meters
+    Rectangle { width: f32, height: f32 },
+    /// Circle with diameter in meters
+    Circle { diameter: f32 },
+    /// Unknown/default - small circle
+    Unknown,
+}
+
 /// Extracted light emitting object info with accumulated world transform
 struct LightEmitter {
     /// World position (accumulated from parent joints)
     world_position: Vec3,
     /// World rotation (accumulated from parent joints)
     world_rotation: Vec3,
-    /// Size of the emitting area (width, height) for rectangles, or (diameter, diameter) for circles
-    size: (f32, f32),
+    /// Shape of the emitting surface
+    shape: EmitterShape,
     /// Name for debugging
     name: String,
 }
@@ -296,16 +307,31 @@ fn spawn_l3d_model(
         perceptual_roughness: 0.5,
         ..default()
     });
+    log(&format!(
+        "[L3D] Luminaire will be placed at: ({:.2}, {:.2}, {:.2})",
+        settings.room_width / 2.0,
+        settings.attachment_height(),
+        settings.room_length / 2.0
+    ));
 
     // Rotation matrix: L3D uses Z-up, Bevy uses Y-up
     let z_to_y_rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
 
-    // Position luminaire at mounting height
+    // Position luminaire at proper height based on scene type
+    // For Room scenes, place luminaire below the ceiling
+    // The L3D model coordinates have Z=0 at the mounting surface (ceiling)
+    // Use a larger offset to ensure visibility
+    let effective_height = settings.attachment_height() - 0.1; // 10cm below ceiling
     let mounting_offset = Vec3::new(
         settings.room_width / 2.0,
-        settings.mounting_height,
+        effective_height,
         settings.room_length / 2.0,
     );
+    log(&format!(
+        "[L3D] Mounting offset: ({:.2}, {:.2}, {:.2}), attachment_height: {:.2}",
+        mounting_offset.x, mounting_offset.y, mounting_offset.z,
+        settings.attachment_height()
+    ));
 
     // Parse the structure XML to get light emitting objects
     let mut light_emitters: Vec<LightEmitter> = Vec::new();
@@ -462,31 +488,34 @@ fn extract_light_emitters(
             // Extract rotation (simplified - just use the LEO rotation for now)
             let world_rot = Vec3::new(rx, ry, rz);
 
-            // Get size from rectangle or circle
-            let size = if let Some(rect) = obj.rectangle() {
+            // Get shape from rectangle or circle
+            let shape = if let Some(rect) = obj.rectangle() {
                 let (w, h) = rect.size();
-                (w as f32, h as f32)
+                EmitterShape::Rectangle {
+                    width: w as f32,
+                    height: h as f32,
+                }
             } else if let Some(circle) = obj.circle() {
-                let d = circle.diameter() as f32;
-                (d, d)
+                EmitterShape::Circle {
+                    diameter: circle.diameter() as f32,
+                }
             } else {
-                (0.1, 0.1) // Default small size
+                EmitterShape::Unknown
             };
 
             log(&format!(
-                "[L3D] *** EMITTER '{}': world({:.3},{:.3},{:.3}), size({:.3},{:.3})",
+                "[L3D] *** EMITTER '{}': world({:.3},{:.3},{:.3}), shape={:?}",
                 obj.part_name(),
                 world_pos.x,
                 world_pos.y,
                 world_pos.z,
-                size.0,
-                size.1
+                shape
             ));
 
             emitters.push(LightEmitter {
                 world_position: world_pos,
                 world_rotation: world_rot,
-                size,
+                shape,
                 name: obj.part_name().to_string(),
             });
         }
@@ -628,11 +657,23 @@ fn spawn_lights_from_emitters(
         // Calculate a target point for the spotlight to look at
         let target = world_pos + bevy_dir * 10.0;
 
-        log(&format!("[L3D] *** SPAWN '{}': {:.0} lm, {}K, emerg={}, pos({:.3},{:.3},{:.3}), dir({:.2},{:.2},{:.2})",
+        // Get size info from shape for light radius
+        let (light_radius, shape_desc) = match &emitter.shape {
+            EmitterShape::Rectangle { width, height } => {
+                (width.max(*height) / 2.0, format!("rect {:.0}x{:.0}mm", width * 1000.0, height * 1000.0))
+            }
+            EmitterShape::Circle { diameter } => {
+                (diameter / 2.0, format!("circle ø{:.0}mm", diameter * 1000.0))
+            }
+            EmitterShape::Unknown => (0.05, "unknown".to_string()),
+        };
+
+        log(&format!("[L3D] *** SPAWN '{}': {:.0} lm, {}K, emerg={}, {}, pos({:.3},{:.3},{:.3}), dir({:.2},{:.2},{:.2})",
             emitter.name,
             final_flux,
             config.and_then(|c| c.color_temperature).unwrap_or(0),
             is_emergency_only,
+            shape_desc,
             world_pos.x, world_pos.y, world_pos.z,
             bevy_dir.x, bevy_dir.y, bevy_dir.z));
 
@@ -642,7 +683,7 @@ fn spawn_lights_from_emitters(
                 color,
                 intensity,
                 range: 20.0,
-                radius: emitter.size.0.max(emitter.size.1) / 2.0,
+                radius: light_radius,
                 inner_angle: 0.5, // ~30 degrees
                 outer_angle: 1.2, // ~70 degrees
                 shadows_enabled: false,
@@ -666,9 +707,7 @@ fn spawn_lights_from_emitters(
             L3dLight,
         ));
 
-        // Add emissive mesh to make the light source visible
-        let emitter_size = emitter.size.0.max(emitter.size.1) / 2.0;
-        let emitter_size = emitter_size.max(0.03); // Minimum 3cm radius
+        // Add emissive mesh to make the light source visible - shape matches LEO definition
         let linear_color = color.to_linear();
         let emissive_material = materials.add(StandardMaterial {
             base_color: color,
@@ -685,10 +724,35 @@ fn spawn_lights_from_emitters(
         // Position slightly in light direction to be visible from below
         let glow_pos = world_pos + bevy_dir * 0.02;
 
+        // Create mesh based on shape - Rectangle or Circle
+        let emissive_mesh: Mesh = match &emitter.shape {
+            EmitterShape::Rectangle { width, height } => {
+                // Use half-extents for Rectangle mesh, with minimum size
+                let half_w = (width / 2.0).max(0.015);
+                let half_h = (height / 2.0).max(0.015);
+                Rectangle::new(half_w * 2.0, half_h * 2.0).into()
+            }
+            EmitterShape::Circle { diameter } => {
+                let radius = (diameter / 2.0).max(0.03);
+                Circle::new(radius).into()
+            }
+            EmitterShape::Unknown => {
+                // Default to small circle
+                Circle::new(0.03).into()
+            }
+        };
+
+        // Orient the emissive mesh to face downward while staying aligned with luminaire
+        // For ceiling-mounted luminaires, we use the same Z-to-Y rotation as the body
+        // This keeps the emissive rectangle aligned with the luminaire body
         commands.spawn((
-            Mesh3d(meshes.add(Circle::new(emitter_size))),
+            Mesh3d(meshes.add(emissive_mesh)),
             MeshMaterial3d(emissive_material),
-            Transform::from_translation(glow_pos).looking_at(glow_pos + bevy_dir, Vec3::X),
+            Transform {
+                translation: glow_pos,
+                rotation: *z_to_y_rotation, // Same rotation as luminaire body
+                scale: Vec3::ONE,
+            },
             L3dLight,
         ));
     }

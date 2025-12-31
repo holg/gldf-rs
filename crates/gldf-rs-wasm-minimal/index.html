@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GLDF Viewer (Minimal)</title>
+    <link data-trunk rel="css" href="src/static/styles.css">
+    <link data-trunk rel="copy-file" href="src/static/wasm-plugin-loader.js" />
+    <link data-trunk rel="copy-file" href="src/static/aec_ga15_with_plugin.gldf" />
+    <link data-trunk rel="rust" data-bin="gldf_minimal" data-wasm-opt="0" />
+</head>
+<body>
+    <!-- Plugin system loader - must be first -->
+    <script src="wasm-plugin-loader.js"></script>
+</body>
+</html>

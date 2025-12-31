@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GLDF Viewer (Minimal)</title>
+    <link rel="stylesheet" href="/styles-f470bb8e3700973f.css" integrity="sha384-6IKEIQNOH99rXTDPuPBcpFBbjnoRp4qaZ8PnPJGZGTIeLpSpnvkXgr0Y1gjVPutE"/>
+    
+    
+    
+<script type="module">
+import init, * as bindings from '/gldf_minimal-adb62f82182122d.js';
+const wasm = await init({ module_or_path: '/gldf_minimal-adb62f82182122d_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+<link rel="modulepreload" href="/gldf_minimal-adb62f82182122d.js" crossorigin="anonymous" integrity="sha384-PB7dIJWCjQ8U+ErCqhv2cM7+n6bdkVAEpB4gCgguj0B87WmDXkC2qM5aBL38gF/M"><link rel="preload" href="/gldf_minimal-adb62f82182122d_bg.wasm" crossorigin="anonymous" integrity="sha384-WU1nV4h0MbTeDibzUGlnk+Um+yZ5gVTHISH+iDdm77XN5kUsBGrNvor+/dLo9oW9" as="fetch" type="application/wasm"></head>
+<body>
+    <!-- Plugin system loader - must be first -->
+    <script src="wasm-plugin-loader.js"></script>
+</body>
+</html>

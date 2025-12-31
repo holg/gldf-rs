@@ -1,0 +1,12 @@
+[build]
+target = "index.html"
+dist = "dist"
+# Disable wasm-opt due to parsing issues
+no_optimize = true
+
+[watch]
+watch = ["src", "index.html"]
+ignore = ["dist"]
+
+[serve]
+port = 8053

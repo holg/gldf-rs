@@ -8,22 +8,621 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use gldf_rs::convert::ldt_to_gldf;
 use gldf_rs::gldf::GldfProduct;
+use gldf_rs::version::{BuildVersion, VersionStatus};
 use gldf_rs::{BufFile, FileBufGldf};
 use gloo::console;
 use gloo::file::callbacks::FileReader;
 use gloo::file::File;
 use std::collections::HashMap;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{Blob, FileList, HtmlInputElement};
 use yew::prelude::*;
 
-mod components;
-mod draw_l3d;
-mod state;
-mod utils;
+// Use centralized JS bindings from lib to avoid duplicate symbols
+use gldf_rs_wasm::js_bindings::{
+    compile_typst_to_pdf_js, has_embedded_viewer, register_embedded_viewer, save_star_sky_for_bevy,
+};
 
-use components::{BevySceneViewer, EditorTabs, EmitterConfig, L3dViewer, LdtViewer, UrlFileViewer};
+/// Secret URL path/parameter that enables PDF export feature
+const PDF_EXPORT_PATH: &str = "gldf_pdf_export";
+
+/// Extract and register embedded WASM viewers from a GLDF file
+fn extract_embedded_viewers(gldf: &FileBufGldf) {
+    // Helper to find file content by path
+    fn find_file_content(gldf: &FileBufGldf, path: &str) -> Option<Vec<u8>> {
+        gldf.files.iter()
+            .find(|f| f.path.as_ref().map(|p| p == path).unwrap_or(false))
+            .and_then(|f| f.content.clone())
+    }
+
+    fn find_file_string(gldf: &FileBufGldf, path: &str) -> Option<String> {
+        find_file_content(gldf, path).and_then(|c| String::from_utf8(c).ok())
+    }
+
+    // Extract Bevy 3D viewer
+    if let Some(manifest_json) = find_file_string(gldf, "other/viewer/bevy/manifest.json") {
+        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&manifest_json) {
+            let js_name = manifest.get("js").and_then(|v| v.as_str()).unwrap_or("");
+            let wasm_name = manifest.get("wasm").and_then(|v| v.as_str()).unwrap_or("");
+
+            let js_path = format!("other/viewer/bevy/{}", js_name);
+            let wasm_path = format!("other/viewer/bevy/{}", wasm_name);
+
+            if let (Some(js), Some(wasm)) = (find_file_string(gldf, &js_path), find_file_content(gldf, &wasm_path)) {
+                console::log!("Registering embedded Bevy viewer:", js.len(), "JS bytes,", wasm.len(), "WASM bytes");
+                register_embedded_viewer("bevy", &manifest_json, &js, &wasm);
+            }
+        }
+    }
+
+    // Extract AcadLISP viewer
+    if let Some(manifest_json) = find_file_string(gldf, "other/viewer/acadlisp/manifest.json") {
+        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&manifest_json) {
+            let js_name = manifest.get("js").and_then(|v| v.as_str()).unwrap_or("");
+            let wasm_name = manifest.get("wasm").and_then(|v| v.as_str()).unwrap_or("");
+
+            let js_path = format!("other/viewer/acadlisp/{}", js_name);
+            let wasm_path = format!("other/viewer/acadlisp/{}", wasm_name);
+
+            if let (Some(js), Some(wasm)) = (find_file_string(gldf, &js_path), find_file_content(gldf, &wasm_path)) {
+                console::log!("Registering embedded AcadLISP viewer:", js.len(), "JS bytes,", wasm.len(), "WASM bytes");
+                register_embedded_viewer("acadlisp", &manifest_json, &js, &wasm);
+
+                // Also register xlisp core if present
+                if let (Some(xjs), Some(xwasm)) = (
+                    find_file_string(gldf, "other/viewer/acadlisp/xlisp.js"),
+                    find_file_content(gldf, "other/viewer/acadlisp/xlisp.wasm")
+                ) {
+                    console::log!("Registering embedded XLisp core:", xjs.len(), "JS bytes,", xwasm.len(), "WASM bytes");
+                    register_embedded_viewer("xlisp", "{}", &xjs, &xwasm);
+                }
+            }
+        }
+    }
+
+    // Extract Star Sky 2D viewer (lightweight canvas-based star visualization)
+    if let Some(manifest_json) = find_file_string(gldf, "other/viewer/starsky/manifest.json") {
+        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&manifest_json) {
+            let js_name = manifest.get("js").and_then(|v| v.as_str()).unwrap_or("gldf_starsky_wasm.js");
+            let wasm_name = manifest.get("wasm").and_then(|v| v.as_str()).unwrap_or("gldf_starsky_wasm_bg.wasm");
+
+            let js_path = format!("other/viewer/starsky/{}", js_name);
+            let wasm_path = format!("other/viewer/starsky/{}", wasm_name);
+
+            if let (Some(js), Some(wasm)) = (find_file_string(gldf, &js_path), find_file_content(gldf, &wasm_path)) {
+                console::log!("Registering embedded Star Sky viewer:", js.len(), "JS bytes,", wasm.len(), "WASM bytes");
+                register_embedded_viewer("starsky", &manifest_json, &js, &wasm);
+            }
+        }
+    }
+}
+
+/// Check if PDF export should be enabled based on URL
+/// Returns true if:
+/// - URL contains "gldf_pdf_export" (e.g., gldf_pdf_export.html)
+/// - URL has ?pdf=1 parameter
+/// - typst-loader.js is already loaded (window.compileTypstToPdf exists)
+fn is_pdf_export_enabled() -> bool {
+    if let Some(window) = web_sys::window() {
+        // Check if typst-loader is already loaded
+        if js_sys::Reflect::has(&window, &JsValue::from_str("compileTypstToPdf")).unwrap_or(false) {
+            return true;
+        }
+
+        // Check URL path
+        if let Ok(href) = window.location().href() {
+            if href.contains(PDF_EXPORT_PATH) {
+                return true;
+            }
+        }
+
+        // Check query parameter ?pdf=1
+        if let Ok(search) = window.location().search() {
+            if search.contains("pdf=1") || search.contains("pdf=true") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Dynamically load typst-loader.js if not already loaded
+async fn load_typst_if_needed() -> Result<(), String> {
+    let window = web_sys::window().ok_or("No window object")?;
+
+    // Check if already loaded
+    if js_sys::Reflect::has(&window, &JsValue::from_str("compileTypstToPdf")).unwrap_or(false) {
+        // Call preloadTypst to ensure the WASM module is ready
+        if let Ok(preload_fn) = js_sys::Reflect::get(&window, &JsValue::from_str("preloadTypst")) {
+            if preload_fn.is_function() {
+                let func = js_sys::Function::from(preload_fn);
+                if let Ok(promise) = func.call0(&window) {
+                    let _ = wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise))
+                        .await
+                        .map_err(|e| format!("Typst preload failed: {:?}", e))?;
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    // Need to load typst-loader.js first
+    let document = window.document().ok_or("No document object")?;
+
+    // Create script element
+    let script = document
+        .create_element("script")
+        .map_err(|_| "Failed to create script element")?;
+    script
+        .set_attribute("src", "typst-loader.js")
+        .map_err(|_| "Failed to set src attribute")?;
+
+    // Create a promise that resolves when script loads
+    let (tx, rx) = futures::channel::oneshot::channel::<Result<(), String>>();
+    let tx = std::rc::Rc::new(std::cell::RefCell::new(Some(tx)));
+
+    // Set up load handler
+    let tx_clone = tx.clone();
+    let onload = Closure::once(Box::new(move || {
+        if let Some(tx) = tx_clone.borrow_mut().take() {
+            let _ = tx.send(Ok(()));
+        }
+    }) as Box<dyn FnOnce()>);
+    script
+        .add_event_listener_with_callback("load", onload.as_ref().unchecked_ref())
+        .map_err(|_| "Failed to add load listener")?;
+    onload.forget();
+
+    // Set up error handler
+    let tx_clone = tx;
+    let onerror = Closure::once(Box::new(move || {
+        if let Some(tx) = tx_clone.borrow_mut().take() {
+            let _ = tx.send(Err("Failed to load typst-loader.js".to_string()));
+        }
+    }) as Box<dyn FnOnce()>);
+    script
+        .add_event_listener_with_callback("error", onerror.as_ref().unchecked_ref())
+        .map_err(|_| "Failed to add error listener")?;
+    onerror.forget();
+
+    // Append to document
+    document
+        .head()
+        .ok_or("No head element")?
+        .append_child(&script)
+        .map_err(|_| "Failed to append script")?;
+
+    // Wait for script to load
+    rx.await.map_err(|_| "Script load cancelled")??;
+
+    // Now call preloadTypst to load the WASM module
+    gloo::console::log!("typst-loader.js loaded, loading WASM module...");
+    if let Ok(preload_fn) = js_sys::Reflect::get(&window, &JsValue::from_str("preloadTypst")) {
+        if preload_fn.is_function() {
+            let func = js_sys::Function::from(preload_fn);
+            if let Ok(promise) = func.call0(&window) {
+                wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise))
+                    .await
+                    .map_err(|e| format!("Typst WASM load failed: {:?}", e))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Generate a Typst report for GLDF product data
+/// Generate spectral SVG for a photometry file (TM-33/IESXML)
+fn generate_spectral_svg_for_photometry(data: &[u8]) -> Option<String> {
+    // Try to parse as TM-33/ATLA
+    let content = std::str::from_utf8(data).ok()?;
+    if !content.contains("IES") && !content.contains("LuminaireOpticalData") {
+        return None;
+    }
+
+    let doc = atla::parse(content).ok()?;
+
+    // Find spectral data from emitters
+    let spd = doc.emitters.iter()
+        .find_map(|e| e.spectral_distribution.as_ref())?;
+
+    if spd.wavelengths.is_empty() || spd.values.is_empty() {
+        return None;
+    }
+
+    // Generate SVG using atla's SpectralDiagram with light theme for PDF
+    let theme = atla::SpectralTheme::light();
+    let diagram = atla::SpectralDiagram::from_spectral(spd);
+    Some(diagram.to_svg(400.0, 200.0, &theme))
+}
+
+fn generate_gldf_typst_report(gldf: &GldfProduct, files: &[BufFile]) -> String {
+    let manufacturer = &gldf.header.manufacturer;
+    let product_name = gldf
+        .product_definitions
+        .product_meta_data
+        .as_ref()
+        .and_then(|pm| pm.name.as_ref())
+        .and_then(|n| n.locale.first())
+        .map(|l| l.value.as_str())
+        .unwrap_or("Unknown Product");
+
+    let description = gldf
+        .product_definitions
+        .product_meta_data
+        .as_ref()
+        .and_then(|pm| pm.description.as_ref())
+        .and_then(|d| d.locale.first())
+        .map(|l| l.value.as_str())
+        .unwrap_or("");
+
+    let variant_count = gldf
+        .product_definitions
+        .variants
+        .as_ref()
+        .map(|v| v.variant.len())
+        .unwrap_or(0);
+
+    let light_source_count = gldf
+        .general_definitions
+        .light_sources
+        .as_ref()
+        .map(|ls| ls.fixed_light_source.len() + ls.changeable_light_source.len())
+        .unwrap_or(0);
+
+    // Generate variant table rows
+    let variant_rows = gldf
+        .product_definitions
+        .variants
+        .as_ref()
+        .map(|variants| {
+            variants
+                .variant
+                .iter()
+                .take(20) // Limit to first 20 variants for the report
+                .map(|v| {
+                    let name = v
+                        .name
+                        .as_ref()
+                        .and_then(|n| n.locale.first())
+                        .map(|l| l.value.as_str())
+                        .unwrap_or(&v.id);
+                    let product_number = v
+                        .product_number
+                        .as_ref()
+                        .and_then(|pn| pn.locale.first())
+                        .map(|l| l.value.as_str())
+                        .unwrap_or("-");
+                    format!("  [{}], [{}],", name, product_number)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default();
+
+    // Generate emitters section with spectral diagrams
+    let emitters_section = generate_emitters_typst_section(gldf, files);
+
+    format!(
+        r##"#set page(paper: "a4", margin: 2cm)
+#set text(font: "Arial", size: 11pt)
+
+#align(center)[
+  #text(size: 24pt, weight: "bold")[GLDF Product Report]
+
+  #v(1em)
+
+  #text(size: 14pt)[{manufacturer}]
+
+  #v(0.5em)
+
+  #text(size: 16pt, weight: "bold")[{product_name}]
+]
+
+#v(2em)
+
+= Product Overview
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt,
+  inset: 8pt,
+  [*Manufacturer*], [{manufacturer}],
+  [*Product Name*], [{product_name}],
+  [*Variants*], [{variant_count}],
+  [*Light Sources*], [{light_source_count}],
+)
+
+#v(1em)
+
+== Description
+
+{description}
+
+#v(1em)
+
+#if {variant_count} > 0 [
+  = Product Variants
+
+  #table(
+    columns: (1fr, 1fr),
+    stroke: 0.5pt,
+    inset: 6pt,
+    [*Variant Name*], [*Product Number*],
+{variant_rows}
+  )
+
+  #if {variant_count} > 20 [
+    _... and {remaining} more variants_
+  ]
+]
+
+{emitters_section}
+
+#v(2em)
+
+#align(center)[
+  #text(size: 9pt, fill: gray)[
+    Generated by GLDF Viewer (gldf.icu) using Typst
+  ]
+]
+"##,
+        manufacturer = manufacturer,
+        product_name = product_name,
+        description = description,
+        variant_count = variant_count,
+        light_source_count = light_source_count,
+        variant_rows = variant_rows,
+        remaining = variant_count.saturating_sub(20),
+        emitters_section = emitters_section,
+    )
+}
+
+/// Generate Typst section for emitters with spectral diagrams
+fn generate_emitters_typst_section(gldf: &GldfProduct, files: &[BufFile]) -> String {
+    let emitters = match &gldf.general_definitions.emitters {
+        Some(e) => &e.emitter,
+        None => return String::new(),
+    };
+
+    if emitters.is_empty() {
+        return String::new();
+    }
+
+    let mut sections = Vec::new();
+    sections.push("\n#pagebreak()\n\n= Emitters\n".to_string());
+
+    for emitter in emitters.iter().take(50) {
+        // Take first 50 emitters max
+        let emitter_id = &emitter.id;
+
+        // Get emitter name from fixed light emitters
+        let emitter_name = emitter
+            .fixed_light_emitter
+            .first()
+            .and_then(|fle| fle.name.as_ref())
+            .and_then(|n| n.locale.first())
+            .map(|l| l.value.as_str())
+            .unwrap_or(emitter_id);
+
+        // Get photometry reference
+        let photo_id = emitter
+            .fixed_light_emitter
+            .first()
+            .map(|fle| fle.photometry_reference.photometry_id.as_str());
+
+        // Get luminous flux
+        let flux = emitter
+            .fixed_light_emitter
+            .first()
+            .and_then(|fle| fle.rated_luminous_flux);
+
+        // Get light source reference for color temperature
+        let light_source_id = emitter
+            .fixed_light_emitter
+            .first()
+            .and_then(|fle| fle.light_source_reference.fixed_light_source_id.as_ref())
+            .map(|s| s.as_str());
+
+        // Look up color temperature from light source
+        let color_temp = light_source_id.and_then(|ls_id| {
+            gldf.general_definitions
+                .light_sources
+                .as_ref()
+                .and_then(|ls| {
+                    ls.fixed_light_source
+                        .iter()
+                        .find(|fls| fls.id == ls_id)
+                        .and_then(|fls| {
+                            fls.color_information
+                                .as_ref()
+                                .and_then(|ci| ci.correlated_color_temperature)
+                        })
+                })
+        });
+
+        // Build emitter entry
+        let mut entry = format!(
+            r#"
+== {}
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt,
+  inset: 6pt,
+  [*Emitter ID*], [{}],
+"#,
+            emitter_name, emitter_id
+        );
+
+        if let Some(flux_val) = flux {
+            entry.push_str(&format!("  [*Luminous Flux*], [{} lm],\n", flux_val));
+        }
+
+        if let Some(temp) = color_temp {
+            entry.push_str(&format!("  [*Color Temperature*], [{} K],\n", temp));
+        }
+
+        if let Some(pid) = photo_id {
+            entry.push_str(&format!("  [*Photometry*], [{}],\n", pid));
+
+            // Try to find and generate spectral SVG
+            if let Some(svg) = find_and_generate_spectral_svg(gldf, pid, files) {
+                entry.push_str(")\n\n");
+                entry.push_str("=== Spectral Distribution\n\n");
+                // Embed SVG as raw content (Typst supports SVG)
+                let svg_escaped = svg
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("#", "\\#");
+                entry.push_str(&format!(
+                    "#image.decode(\"{}\", width: 100%)\n",
+                    svg_escaped
+                ));
+            } else {
+                entry.push_str(")\n");
+            }
+        } else {
+            entry.push_str(")\n");
+        }
+
+        sections.push(entry);
+    }
+
+    sections.join("\n")
+}
+
+/// Find photometry file and generate spectral SVG
+fn find_and_generate_spectral_svg(
+    gldf: &GldfProduct,
+    photometry_id: &str,
+    files: &[BufFile],
+) -> Option<String> {
+    // Find photometry definition to get file reference
+    let photometry = gldf
+        .general_definitions
+        .photometries
+        .as_ref()?
+        .photometry
+        .iter()
+        .find(|p| p.id == photometry_id)?;
+
+    let file_id = photometry.photometry_file_reference.as_ref()?.file_id.as_str();
+
+    // Find the actual file content
+    let file_content = files.iter().find(|f| {
+        f.file_id.as_deref() == Some(file_id)
+            || f.name.as_deref().map(|n| n.contains(file_id)).unwrap_or(false)
+    })?;
+
+    let content = file_content.content.as_ref()?;
+    generate_spectral_svg_for_photometry(content)
+}
+
+// Use library modules
+use gldf_rs_wasm::components;
+use gldf_rs_wasm::state;
+use gldf_rs_wasm::utils;
+
+use components::{BevySceneViewer, EditorTabs, EmitterConfig, L3dViewer, LdtViewer, LispViewer, StarSkyViewer, UrlFileViewer, ViewType};
 use state::{use_gldf, GldfAction, GldfProvider};
+use utils::{check_version_status, is_localhost};
+
+/// Fetch WASM viewer files from URLs
+/// Returns a list of (filename, content) tuples
+async fn fetch_wasm_viewer_files(viewer_id: &str) -> Result<Vec<(String, Vec<u8>)>, String> {
+    use gloo::net::http::Request;
+
+    // Define which files to fetch for each viewer type
+    let base_path = match viewer_id {
+        "bevy" => "/bevy",
+        "acadlisp" => "/acadlisp",
+        "typst" => "/typst",
+        "starsky" => "/starsky",
+        _ => return Err(format!("Unknown viewer: {}", viewer_id)),
+    };
+
+    // First, try to fetch the manifest.json to get the list of files
+    let manifest_url = format!("{}/manifest.json", base_path);
+    let manifest_response = Request::get(&manifest_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
+
+    if !manifest_response.ok() {
+        return Err(format!("Manifest not found at {}", manifest_url));
+    }
+
+    let manifest_text = manifest_response.text().await
+        .map_err(|e| format!("Failed to read manifest: {}", e))?;
+
+    // Parse manifest to get file list
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_text)
+        .map_err(|e| format!("Failed to parse manifest: {}", e))?;
+
+    let mut files = Vec::new();
+
+    // Add the manifest itself
+    files.push(("manifest.json".to_string(), manifest_text.into_bytes()));
+
+    // Get files from manifest - try different formats
+    let mut files_to_fetch: Vec<String> = Vec::new();
+
+    // Format 1: "files" array
+    if let Some(file_list) = manifest.get("files").and_then(|f| f.as_array()) {
+        for file_entry in file_list {
+            if let Some(filename) = file_entry.as_str()
+                .or_else(|| file_entry.get("name").and_then(|n| n.as_str()))
+            {
+                files_to_fetch.push(filename.to_string());
+            }
+        }
+    }
+    // Format 2: "js" and "wasm" keys (e.g., bevy manifest)
+    if let Some(js_file) = manifest.get("js").and_then(|f| f.as_str()) {
+        files_to_fetch.push(js_file.to_string());
+    }
+    if let Some(wasm_file) = manifest.get("wasm").and_then(|f| f.as_str()) {
+        files_to_fetch.push(wasm_file.to_string());
+    }
+    // Format 3: "js_file" and "wasm_file" keys
+    if let Some(js_file) = manifest.get("js_file").and_then(|f| f.as_str()) {
+        files_to_fetch.push(js_file.to_string());
+    }
+    if let Some(wasm_file) = manifest.get("wasm_file").and_then(|f| f.as_str()) {
+        files_to_fetch.push(wasm_file.to_string());
+    }
+
+    // Fetch all files
+    for filename in files_to_fetch {
+        let file_url = format!("{}/{}", base_path, filename);
+        gloo::console::log!("[WasmViewer] Fetching:", &file_url);
+
+        let response = Request::get(&file_url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch {}: {}", filename, e))?;
+
+        if !response.ok() {
+            gloo::console::log!("[WasmViewer] Warning: Failed to fetch", &filename);
+            continue;
+        }
+
+        let content = response.binary().await
+            .map_err(|e| format!("Failed to read {}: {}", filename, e))?;
+
+        gloo::console::log!("[WasmViewer] Fetched:", &filename, content.len(), "bytes");
+        files.push((filename, content));
+    }
+
+    if files.len() <= 1 {
+        return Err("No files found in manifest".to_string());
+    }
+
+    Ok(files)
+}
 
 /// Wrapper for GLDF product operations
 #[allow(dead_code)]
@@ -58,6 +657,30 @@ pub enum NavItem {
     LightSources,
     Emitters,
     Variants,
+    /// AutoLISP code viewer (for CAD export)
+    Lisp,
+    /// Star Sky 2D viewer (for Astral Sky demo - Tribute to Astrophysics)
+    StarSky,
+}
+
+/// Demo file options
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum DemoFile {
+    AecGa15,
+    #[default]
+    SlvTria2,
+    /// Astral Sky demo (star catalogue visualization) - tribute to lidrs/astronomy community
+    AstralSky,
+}
+
+impl DemoFile {
+    fn filename(&self) -> &'static str {
+        match self {
+            DemoFile::AecGa15 => "aec_ga15.gldf",
+            DemoFile::SlvTria2 => "slv_tria_2.gldf",
+            DemoFile::AstralSky => "astral_sky_lüdinghausen.gldf",
+        }
+    }
 }
 
 /// Application messages
@@ -69,9 +692,13 @@ pub enum Msg {
     ExportJson,
     ExportXml,
     ExportGldf,
+    ExportPdf,
+    PdfExported(Result<Vec<u8>, String>),
     SetDragging(bool),
-    LoadDemo,
-    DemoLoaded(Result<Vec<u8>, String>),
+    LoadDemo(DemoFile),
+    DemoLoaded(DemoFile, Result<Vec<u8>, String>),
+    LoadUrl(String),
+    UrlLoaded(String, Result<Vec<u8>, String>),
     Select3dVariant(Option<String>),
     SelectFile(Option<String>),
     // Mounting updates
@@ -88,6 +715,17 @@ pub enum Msg {
     // App actions
     ClearAll,
     ToggleHelp,
+    // Sync edited product back to loaded_gldf
+    SyncProduct(GldfProduct),
+    // Version check
+    VersionChecked(Result<(BuildVersion, VersionStatus), String>),
+    // Star sky data
+    LoadStarSky(String),
+    StarSkyLoaded(Result<String, String>),
+    // WASM viewer embedding
+    EmbedWasmViewer(String), // viewer_id: bevy, acadlisp, typst, starsky
+    WasmViewerFetched(String, Result<Vec<(String, Vec<u8>)>, String>), // viewer_id, files (path, content)
+    RemoveWasmViewer(String), // viewer_id
 }
 
 /// Mode of the application
@@ -95,6 +733,13 @@ pub enum Msg {
 enum AppMode {
     Viewer,
     Editor,
+}
+
+/// Version check result
+#[derive(Clone)]
+pub struct VersionInfo {
+    pub local: BuildVersion,
+    pub status: VersionStatus,
 }
 
 /// Main application state
@@ -108,13 +753,57 @@ pub struct App {
     selected_3d_variant: Option<String>,
     selected_file: Option<String>,
     show_help: bool,
+    version_info: Option<VersionInfo>,
+    pdf_exporting: bool,
+    /// Star sky JSON data for astral sky visualization
+    star_sky_json: Option<String>,
+    /// Sky location from URL parameters (city, lat, lng)
+    sky_location: Option<(String, f64, f64)>,
+    /// Default view type for LDT diagrams (from URL ?view= parameter)
+    default_ldt_view: ViewType,
+    /// Initial nav item from URL ?view= parameter (applied after file load)
+    initial_nav_item: Option<NavItem>,
+    /// Currently loading WASM viewer (for embedding)
+    loading_wasm_viewer: Option<String>,
 }
 
 impl Component for App {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        // Check URL for auto-load parameter
+        // ?url=/path/to/file.gldf -> load from URL
+        // aec.html or ?demo=aec -> AEC GA15
+        // index.html or default -> no auto-load (user clicks button)
+        if let Some(url) = Self::get_url_param() {
+            let link = ctx.link().clone();
+            // Defer the load to after component is mounted
+            gloo::timers::callback::Timeout::new(100, move || {
+                link.send_message(Msg::LoadUrl(url));
+            })
+            .forget();
+        } else if let Some(demo) = Self::get_auto_demo() {
+            let link = ctx.link().clone();
+            // Defer the load to after component is mounted
+            gloo::timers::callback::Timeout::new(100, move || {
+                link.send_message(Msg::LoadDemo(demo));
+            })
+            .forget();
+        }
+
+        // Check version in the background
+        {
+            let link = ctx.link().clone();
+            spawn_local(async move {
+                let result = check_version_status().await;
+                link.send_message(Msg::VersionChecked(result));
+            });
+        }
+
+        // Parse ?view= parameter for initial navigation and view type
+        let (initial_nav_item, default_ldt_view) = Self::get_view_param();
+
         Self {
             readers: HashMap::default(),
             files: Vec::default(),
@@ -125,6 +814,13 @@ impl Component for App {
             selected_3d_variant: None,
             selected_file: None,
             show_help: false,
+            version_info: None,
+            pdf_exporting: false,
+            star_sky_json: None,
+            sky_location: Self::get_sky_location_params(),
+            default_ldt_view,
+            initial_nav_item,
+            loading_wasm_viewer: None,
         }
     }
 
@@ -137,8 +833,54 @@ impl Component for App {
 
                 // Try to parse GLDF
                 if file_name_lower.ends_with(".gldf") {
-                    if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
-                        self.loaded_gldf = Some(gldf);
+                    match WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
+                        Ok(gldf) => {
+                            console::log!("GLDF parsed successfully");
+                            // Check if this is an astral sky GLDF (by unique_id or filename)
+                            let is_astral_sky = file_name_lower.contains("astral_sky")
+                                || gldf.gldf.header.unique_gldf_id.as_ref().map(|id| id.contains("astral-sky")).unwrap_or(false);
+                            if is_astral_sky {
+                                // Look for embedded sky_data.json in other/ folder
+                                let sky_json = gldf.files.iter()
+                                    .find(|f| f.path.as_ref().map(|p| p == "other/sky_data.json").unwrap_or(false))
+                                    .and_then(|f| f.content.as_ref())
+                                    .and_then(|content| String::from_utf8(content.clone()).ok());
+
+                                if let Some(json) = sky_json {
+                                    console::log!("Found embedded sky_data.json:", json.len(), "chars");
+                                    // Save to localStorage immediately for Bevy 3D viewer
+                                    save_star_sky_for_bevy(&json);
+                                    self.star_sky_json = Some(json);
+                                } else {
+                                    // Fallback: try to load external JSON file
+                                    let json_filename = file_name.replace(".gldf", ".json");
+                                    console::log!("No embedded sky_data.json, trying external:", json_filename.as_str());
+                                    ctx.link().send_message(Msg::LoadStarSky(json_filename));
+                                }
+                            } else {
+                                // Clear star sky data for non-astral GLDFs
+                                self.star_sky_json = None;
+                            }
+                            // Extract embedded WASM viewers before storing
+                            extract_embedded_viewers(&gldf);
+                            self.loaded_gldf = Some(gldf);
+                            // Apply initial nav item from ?view= parameter
+                            if let Some(nav) = self.initial_nav_item.take() {
+                                console::log!("Applying initial nav item:", format!("{:?}", nav).as_str());
+                                self.nav_item = nav;
+                            } else {
+                                // Auto-navigate to Star Sky if this is an astral sky file
+                                if self.has_sky_data() && file_name_lower.contains("astral_sky") {
+                                    console::log!("Auto-navigating to Star Sky view for astral sky file");
+                                    self.nav_item = NavItem::StarSky;
+                                } else {
+                                    console::log!("No initial nav item to apply");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            console::log!("GLDF parse error:", format!("{:?}", e).as_str());
+                        }
                     }
                 }
                 // Handle ULD (DIALux) and ROLF (Relux) files - not supported yet
@@ -151,6 +893,7 @@ impl Component for App {
                     match ldt_to_gldf(&data, &file_name) {
                         Ok(gldf) => {
                             console::log!("LDT/IES converted to GLDF structure");
+                            extract_embedded_viewers(&gldf);
                             self.loaded_gldf = Some(gldf);
                             // Also store the original file for viewing
                             self.files.push(FileDetails {
@@ -314,14 +1057,88 @@ impl Component for App {
                 }
                 false
             }
+            Msg::ExportPdf => {
+                if let Some(ref gldf) = self.loaded_gldf {
+                    self.pdf_exporting = true;
+
+                    // Generate Typst source for GLDF report with embedded files
+                    let typst_source = generate_gldf_typst_report(&gldf.gldf, &gldf.files);
+
+                    let link = ctx.link().clone();
+                    spawn_local(async move {
+                        // First, ensure typst-loader.js is loaded
+                        let load_result = load_typst_if_needed().await;
+                        if let Err(e) = load_result {
+                            link.send_message(Msg::PdfExported(Err(e)));
+                            return;
+                        }
+
+                        let result = match compile_typst_to_pdf_js(&typst_source).await {
+                            Ok(js_val) => {
+                                let array = js_sys::Uint8Array::new(&js_val);
+                                Ok(array.to_vec())
+                            }
+                            Err(e) => {
+                                let msg = e
+                                    .as_string()
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                Err(msg)
+                            }
+                        };
+                        link.send_message(Msg::PdfExported(result));
+                    });
+                }
+                true
+            }
+            Msg::PdfExported(result) => {
+                self.pdf_exporting = false;
+                match result {
+                    Ok(pdf_bytes) => {
+                        console::log!("PDF generated:", pdf_bytes.len(), "bytes");
+
+                        // Create blob and trigger download
+                        let uint8arr = js_sys::Uint8Array::new(
+                            &unsafe { js_sys::Uint8Array::view(&pdf_bytes) }.into(),
+                        );
+                        let array = js_sys::Array::new();
+                        array.push(&uint8arr.buffer());
+                        let opts = web_sys::BlobPropertyBag::new();
+                        opts.set_type("application/pdf");
+                        if let Ok(blob) =
+                            web_sys::Blob::new_with_u8_array_sequence_and_options(&array, &opts)
+                        {
+                            if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                                let window = web_sys::window().unwrap();
+                                let document = window.document().unwrap();
+                                if let Ok(a) = document.create_element("a") {
+                                    let _ = a.set_attribute("href", &url);
+                                    let _ = a.set_attribute("download", "gldf_report.pdf");
+                                    let _ = a.set_attribute("style", "display: none");
+                                    let _ = document.body().unwrap().append_child(&a);
+                                    if let Some(html_a) = a.dyn_ref::<web_sys::HtmlElement>() {
+                                        html_a.click();
+                                    }
+                                    let _ = document.body().unwrap().remove_child(&a);
+                                    let _ = web_sys::Url::revoke_object_url(&url);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        console::log!("PDF generation failed:", e.as_str());
+                    }
+                }
+                true
+            }
             Msg::SetDragging(dragging) => {
                 self.is_dragging = dragging;
                 true
             }
-            Msg::LoadDemo => {
+            Msg::LoadDemo(demo) => {
                 let link = ctx.link().clone();
+                let url = format!("/{}", demo.filename());
                 wasm_bindgen_futures::spawn_local(async move {
-                    let result = gloo::net::http::Request::get("/slv_tria_2.gldf")
+                    let result = gloo::net::http::Request::get(&url)
                         .send()
                         .await
                         .map_err(|e| format!("Network error: {}", e))
@@ -341,25 +1158,114 @@ impl Component for App {
                         Err(e) => Err(e),
                     };
 
-                    link.send_message(Msg::DemoLoaded(data));
+                    link.send_message(Msg::DemoLoaded(demo, data));
                 });
                 false
             }
-            Msg::DemoLoaded(result) => {
+            Msg::DemoLoaded(demo, result) => {
                 match result {
                     Ok(data) => {
-                        console::log!("Demo loaded:", data.len(), "bytes");
+                        console::log!("Demo loaded:", demo.filename(), data.len(), "bytes");
+                        let file_name = demo.filename().to_string();
+                        let file_name_lower = file_name.to_lowercase();
+
                         if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
+                            // Check if this is an astral sky GLDF
+                            let is_astral_sky = file_name_lower.contains("astral_sky")
+                                || gldf.gldf.header.unique_gldf_id.as_ref().map(|id| id.contains("astral-sky")).unwrap_or(false);
+                            if is_astral_sky {
+                                // Look for embedded sky_data.json in other/ folder
+                                let sky_json = gldf.files.iter()
+                                    .find(|f| f.path.as_ref().map(|p| p == "other/sky_data.json").unwrap_or(false))
+                                    .and_then(|f| f.content.as_ref())
+                                    .and_then(|content| String::from_utf8(content.clone()).ok());
+
+                                if let Some(json) = sky_json {
+                                    console::log!("Found embedded sky_data.json in demo:", json.len(), "chars");
+                                    // Save to localStorage immediately for Bevy 3D viewer
+                                    save_star_sky_for_bevy(&json);
+                                    self.star_sky_json = Some(json);
+                                } else {
+                                    // Fallback: try to load external JSON file
+                                    let json_filename = file_name.replace(".gldf", ".json");
+                                    console::log!("No embedded sky_data.json, trying external:", json_filename.as_str());
+                                    ctx.link().send_message(Msg::LoadStarSky(json_filename));
+                                }
+                            }
+                            // Extract embedded WASM viewers
+                            extract_embedded_viewers(&gldf);
+                            self.loaded_gldf = Some(gldf);
+
+                            // Apply initial nav item from ?view= parameter
+                            if let Some(nav) = self.initial_nav_item.take() {
+                                console::log!("Applying initial nav item from demo load:", format!("{:?}", nav).as_str());
+                                self.nav_item = nav;
+                            }
+                        }
+                        self.files.push(FileDetails {
+                            data,
+                            file_type: "application/gldf".to_string(),
+                            name: file_name,
+                        });
+                    }
+                    Err(e) => {
+                        console::log!("Failed to load demo:", e.as_str());
+                    }
+                }
+                true
+            }
+            Msg::LoadUrl(url) => {
+                let link = ctx.link().clone();
+                let url_clone = url.clone();
+                console::log!("Loading GLDF from URL:", &url);
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = gloo::net::http::Request::get(&url)
+                        .send()
+                        .await
+                        .map_err(|e| format!("Network error: {}", e))
+                        .and_then(|resp| {
+                            if resp.ok() {
+                                Ok(resp)
+                            } else {
+                                Err(format!("HTTP error: {}", resp.status()))
+                            }
+                        });
+
+                    let data = match result {
+                        Ok(resp) => resp
+                            .binary()
+                            .await
+                            .map_err(|e| format!("Read error: {}", e)),
+                        Err(e) => Err(e),
+                    };
+
+                    link.send_message(Msg::UrlLoaded(url_clone, data));
+                });
+                false
+            }
+            Msg::UrlLoaded(url, result) => {
+                // Extract filename from URL for display
+                let filename = url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&url)
+                    .to_string();
+
+                match result {
+                    Ok(data) => {
+                        console::log!("URL loaded:", &filename, data.len(), "bytes");
+                        if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
+                            extract_embedded_viewers(&gldf);
                             self.loaded_gldf = Some(gldf);
                         }
                         self.files.push(FileDetails {
                             data,
                             file_type: "application/gldf".to_string(),
-                            name: "slv_tria_2.gldf".to_string(),
+                            name: filename,
                         });
                     }
                     Err(e) => {
-                        console::log!("Failed to load demo:", e.as_str());
+                        console::log!("Failed to load URL:", &url, e.as_str());
                     }
                 }
                 true
@@ -516,6 +1422,102 @@ impl Component for App {
                 self.show_help = !self.show_help;
                 true
             }
+            Msg::SyncProduct(product) => {
+                if let Some(ref mut gldf) = self.loaded_gldf {
+                    gldf.gldf = product;
+                }
+                false // No re-render needed, just sync the data
+            }
+            Msg::VersionChecked(result) => {
+                match result {
+                    Ok((local, status)) => {
+                        console::log!("Version check:", status.message().as_str());
+                        self.version_info = Some(VersionInfo { local, status });
+                    }
+                    Err(e) => {
+                        console::log!("Version check failed:", e.as_str());
+                    }
+                }
+                true
+            }
+            Msg::LoadStarSky(json_url) => {
+                console::log!("Loading star sky JSON from:", json_url.as_str());
+                let link = ctx.link().clone();
+                spawn_local(async move {
+                    let result = utils::fetch_text_data(&json_url).await;
+                    link.send_message(Msg::StarSkyLoaded(result));
+                });
+                false
+            }
+            Msg::StarSkyLoaded(result) => {
+                match result {
+                    Ok(json) => {
+                        console::log!("Star sky JSON loaded:", json.len(), "chars");
+                        self.star_sky_json = Some(json);
+                    }
+                    Err(e) => {
+                        console::log!("Star sky JSON load failed:", e.as_str());
+                    }
+                }
+                true
+            }
+            Msg::EmbedWasmViewer(viewer_id) => {
+                console::log!("Embedding WASM viewer:", viewer_id.as_str());
+                self.loading_wasm_viewer = Some(viewer_id.clone());
+                let link = ctx.link().clone();
+                let vid = viewer_id.clone();
+                spawn_local(async move {
+                    let result = fetch_wasm_viewer_files(&vid).await;
+                    link.send_message(Msg::WasmViewerFetched(vid, result));
+                });
+                true // Show loading state
+            }
+            Msg::WasmViewerFetched(viewer_id, result) => {
+                self.loading_wasm_viewer = None;
+                match result {
+                    Ok(files) => {
+                        console::log!("WASM viewer files fetched:", viewer_id.as_str(), files.len(), "files");
+                        if let Some(ref mut gldf) = self.loaded_gldf {
+                            // Add each file to the GLDF
+                            for (path, content) in files {
+                                let full_path = format!("other/viewer/{}/{}", viewer_id, path);
+                                console::log!("Adding file:", full_path.as_str(), content.len(), "bytes");
+
+                                // Check if file already exists, if so update it
+                                if let Some(existing) = gldf.files.iter_mut().find(|f| {
+                                    f.name.as_ref().map(|n| n == &full_path).unwrap_or(false)
+                                }) {
+                                    existing.content = Some(content);
+                                } else {
+                                    // Add new file
+                                    gldf.files.push(BufFile {
+                                        name: Some(full_path),
+                                        content: Some(content),
+                                        file_id: None,
+                                        path: None,
+                                    });
+                                }
+                            }
+                            console::log!("WASM viewer embedded successfully:", viewer_id.as_str());
+                        }
+                    }
+                    Err(e) => {
+                        console::log!("WASM viewer fetch failed:", e.as_str());
+                    }
+                }
+                true
+            }
+            Msg::RemoveWasmViewer(viewer_id) => {
+                console::log!("Removing WASM viewer:", viewer_id.as_str());
+                if let Some(ref mut gldf) = self.loaded_gldf {
+                    let prefix = format!("other/viewer/{}/", viewer_id);
+                    gldf.files.retain(|f| {
+                        !f.name.as_ref().map(|n| n.starts_with(&prefix)).unwrap_or(false)
+                    });
+                    console::log!("WASM viewer removed:", viewer_id.as_str());
+                }
+                true
+            }
         }
     }
 
@@ -562,6 +1564,181 @@ pub fn get_blob(buf_file: &BufFile) -> String {
 }
 
 impl App {
+    /// Check URL for auto-load demo parameter
+    /// Returns Some(DemoFile) if auto-load is requested
+    fn get_auto_demo() -> Option<DemoFile> {
+        let window = web_sys::window()?;
+        let location = window.location();
+
+        // Check pathname for special pages
+        if let Ok(pathname) = location.pathname() {
+            if pathname.contains("aec") {
+                return Some(DemoFile::AecGa15);
+            }
+            if pathname.contains("lidrs") || pathname.contains("stars") || pathname.contains("astral") {
+                return Some(DemoFile::AstralSky);
+            }
+        }
+
+        // Check query string for ?demo=aec, ?demo=slv, ?demo=lidrs/stars
+        if let Ok(search) = location.search() {
+            if search.contains("demo=aec") {
+                return Some(DemoFile::AecGa15);
+            }
+            if search.contains("demo=slv") {
+                return Some(DemoFile::SlvTria2);
+            }
+            if search.contains("demo=lidrs") || search.contains("demo=stars") || search.contains("demo=astral") {
+                return Some(DemoFile::AstralSky);
+            }
+        }
+
+        None
+    }
+
+    /// Check URL for ?url= parameter to load GLDF from a URL
+    /// Returns Some(url_string) if ?url= parameter is present
+    /// Example: ?url=/aec_ga15_enriched.gldf or ?url=demo/my_file.gldf
+    fn get_url_param() -> Option<String> {
+        let window = web_sys::window()?;
+        let location = window.location();
+
+        if let Ok(search) = location.search() {
+            // Parse query string to find url= parameter
+            // Handle both ?url=... and &url=...
+            if let Some(url_start) = search.find("url=") {
+                let url_value = &search[url_start + 4..]; // Skip "url="
+                // Find the end of the value (next & or end of string)
+                let url_end = url_value.find('&').unwrap_or(url_value.len());
+                let url = &url_value[..url_end];
+
+                // URL decode the value (handle %20, etc.)
+                if let Ok(decoded) = js_sys::decode_uri_component(url) {
+                    let decoded_str: String = decoded.into();
+                    if !decoded_str.is_empty() {
+                        return Some(decoded_str);
+                    }
+                } else if !url.is_empty() {
+                    // Fallback if decode fails
+                    return Some(url.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Parse ?view= parameter to get initial nav item and view type
+    /// Format: view=<nav_item>__<view_type>
+    /// Examples: view=emitters__spectral, view=files, view=photometry__polar
+    fn get_view_param() -> (Option<NavItem>, ViewType) {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return (None, ViewType::Polar),
+        };
+        let location = window.location();
+
+        if let Ok(search) = location.search() {
+            if let Some(view_start) = search.find("view=") {
+                let view_value = &search[view_start + 5..]; // Skip "view="
+                let view_end = view_value.find('&').unwrap_or(view_value.len());
+                let view_str = &view_value[..view_end].to_lowercase();
+
+                // Split by __ to get nav_item and optional view_type
+                let parts: Vec<&str> = view_str.split("__").collect();
+
+                // Parse nav item
+                let nav_item = match parts.first().map(|s| *s) {
+                    Some("overview") => Some(NavItem::Overview),
+                    Some("rawdata") | Some("raw") => Some(NavItem::RawData),
+                    Some("fileviewer") | Some("viewer") => Some(NavItem::FileViewer),
+                    Some("header") => Some(NavItem::Header),
+                    Some("electrical") => Some(NavItem::Electrical),
+                    Some("applications") => Some(NavItem::Applications),
+                    Some("photometry") => Some(NavItem::Photometry),
+                    Some("statistics") | Some("stats") => Some(NavItem::Statistics),
+                    Some("files") => Some(NavItem::Files),
+                    Some("lightsources") | Some("sources") => Some(NavItem::LightSources),
+                    Some("emitters") => Some(NavItem::Emitters),
+                    Some("variants") => Some(NavItem::Variants),
+                    Some("lisp") | Some("autolisp") | Some("cad") => Some(NavItem::Lisp),
+                    Some("starsky") | Some("stars") | Some("sky") | Some("astral") => Some(NavItem::StarSky),
+                    _ => None,
+                };
+
+                // Parse view type (for LDT diagrams)
+                let view_type = match parts.get(1).map(|s| *s) {
+                    Some("spectral") | Some("spectrum") | Some("spd") => ViewType::Spectrum,
+                    Some("polar") => ViewType::Polar,
+                    Some("cartesian") | Some("cart") => ViewType::Cartesian,
+                    Some("heatmap") | Some("heat") => ViewType::Heatmap,
+                    Some("butterfly") | Some("3d") => ViewType::Butterfly,
+                    Some("bug") => ViewType::Bug,
+                    Some("lcs") => ViewType::Lcs,
+                    _ => ViewType::Polar,
+                };
+
+                console::log!("Parsed view param:", format!("nav={:?}, view_type={:?}", nav_item, view_type).as_str());
+                return (nav_item, view_type);
+            }
+        }
+
+        (None, ViewType::Polar)
+    }
+
+    /// Parse URL parameters for sky location
+    /// Supports both query string (?city=...) and hash (#city=...)
+    /// Format: city=CityName&lat=51.77&lng=7.44
+    /// Returns (city_name, latitude, longitude) if all present
+    fn get_sky_location_params() -> Option<(String, f64, f64)> {
+        let window = web_sys::window()?;
+        let location = window.location();
+
+        // Try hash first (#city=...), then query string (?city=...)
+        let params_str = location.hash().ok()
+            .filter(|h| h.len() > 1)
+            .map(|h| h[1..].to_string()) // Remove leading #
+            .or_else(|| location.search().ok().map(|s| s.trim_start_matches('?').to_string()))?;
+
+        // Parse parameters
+        let mut city: Option<String> = None;
+        let mut lat: Option<f64> = None;
+        let mut lng: Option<f64> = None;
+
+        for param in params_str.split('&') {
+            let parts: Vec<&str> = param.splitn(2, '=').collect();
+            if parts.len() != 2 {
+                continue;
+            }
+            let key = parts[0].to_lowercase();
+            let value = parts[1];
+
+            match key.as_str() {
+                "city" | "location" | "name" => {
+                    // URL decode the city name
+                    city = js_sys::decode_uri_component(value).ok().map(|s| s.into());
+                }
+                "lat" | "latitude" => {
+                    lat = value.parse().ok();
+                }
+                "lng" | "lon" | "longitude" => {
+                    lng = value.parse().ok();
+                }
+                _ => {}
+            }
+        }
+
+        // Return only if we have at least lat/lng (city can default)
+        match (lat, lng) {
+            (Some(latitude), Some(longitude)) => {
+                let city_name = city.unwrap_or_else(|| format!("{:.2}°N, {:.2}°E", latitude, longitude));
+                console::log!("Sky location from URL:", format!("{} ({}, {})", city_name, latitude, longitude).as_str());
+                Some((city_name, latitude, longitude))
+            }
+            _ => None
+        }
+    }
+
     /// Helper to get mutable reference to a variant by ID
     fn get_variant_mut(
         &mut self,
@@ -1031,11 +2208,48 @@ impl App {
                         </div>
                     </div>
                     <div class="help-footer">
-                        <span class="help-version">{ "GLDF Viewer v0.3" }</span>
+                        { self.view_version_info() }
                         <a href="https://github.com/holg/gldf-rs" target="_blank" class="help-link">{ "GitHub" }</a>
                     </div>
                 </div>
             </div>
+        }
+    }
+
+    fn view_version_info(&self) -> Html {
+        match &self.version_info {
+            Some(info) => {
+                let version_text = format!("GLDF Viewer v{}", info.local.version);
+                let (status_class, status_icon) = match &info.status {
+                    VersionStatus::Current => ("version-current", ""),
+                    VersionStatus::Outdated { .. } => ("version-outdated", " (update available)"),
+                    VersionStatus::Newer { .. } => ("version-dev", " (dev)"),
+                    VersionStatus::Unknown => ("version-unknown", " (?)"),
+                };
+
+                // Only show localhost indicator when on localhost
+                let localhost_indicator = if is_localhost() {
+                    html! { <span class="localhost-badge">{ "localhost" }</span> }
+                } else {
+                    html! {}
+                };
+
+                html! {
+                    <span class={classes!("help-version", status_class)}>
+                        { localhost_indicator }
+                        { version_text }
+                        { status_icon }
+                    </span>
+                }
+            }
+            None => {
+                html! {
+                    <span class="help-version version-loading">
+                        { "GLDF Viewer" }
+                        { " (loading...)" }
+                    </span>
+                }
+            }
         }
     }
 
@@ -1122,6 +2336,9 @@ impl App {
                     </ul>
                 </div>
 
+                // Only show Tools section when a GLDF with relevant content is loaded
+                { self.render_tools_section(ctx, has_file) }
+
                 // Links section at bottom
                 <div style="margin-top: auto; padding: 16px;">
                     <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px;">{ "Resources" }</div>
@@ -1162,6 +2379,26 @@ impl App {
         }
     }
 
+    /// Render the Tools section (AutoLISP, Star Sky) only when relevant content exists
+    fn render_tools_section(&self, ctx: &Context<Self>, has_file: bool) -> Html {
+        let show_lisp = has_file && (self.has_lisp_code() || has_embedded_viewer("acadlisp"));
+        let show_starsky = has_file && (has_embedded_viewer("starsky") || self.has_sky_data());
+
+        if !show_lisp && !show_starsky {
+            return html! {};
+        }
+
+        html! {
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">{ "Tools" }</div>
+                <ul class="sidebar-nav">
+                    { self.nav_item(ctx, NavItem::Lisp, "λ", "AutoLISP", None, show_lisp) }
+                    { self.nav_item(ctx, NavItem::StarSky, "★", "Star Sky", None, show_starsky) }
+                </ul>
+            </div>
+        }
+    }
+
     fn view_welcome(&self, ctx: &Context<Self>) -> Html {
         let ondrop = ctx.link().callback(|event: DragEvent| {
             event.prevent_default();
@@ -1197,8 +2434,8 @@ impl App {
 
                 <div class="welcome-buttons">
                     <label for="file-upload" class="btn btn-primary">{ "Open File..." }</label>
-                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo)}>
-                        { "Load SLV Tria 2" }
+                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo(DemoFile::SlvTria2))}>
+                        { "Load Demo" }
                     </button>
                 </div>
 
@@ -1236,6 +2473,8 @@ impl App {
             NavItem::LightSources => "Light Sources",
             NavItem::Emitters => "Emitters",
             NavItem::Variants => "Variants",
+            NavItem::Lisp => "AutoLISP",
+            NavItem::StarSky => "Star Sky",
         };
 
         html! {
@@ -1258,6 +2497,17 @@ impl App {
                             <button class="btn btn-success" onclick={ctx.link().callback(|_| Msg::ExportXml)}>
                                 { "Export XML" }
                             </button>
+                            // PDF export (hidden feature, requires typst-loader.js)
+                            if is_pdf_export_enabled() {
+                                <button
+                                    class="btn btn-primary"
+                                    onclick={ctx.link().callback(|_| Msg::ExportPdf)}
+                                    disabled={self.pdf_exporting}
+                                    title="Export as PDF report (compiles in browser)"
+                                >
+                                    { if self.pdf_exporting { "Generating PDF..." } else { "Export PDF" } }
+                                </button>
+                            }
                         }
                         // Always show Clear and Help buttons
                         <button class="btn btn-outline" onclick={ctx.link().callback(|_| Msg::ClearAll)} title="Clear all and start over">
@@ -1276,15 +2526,17 @@ impl App {
                             NavItem::Overview => self.view_overview(),
                             NavItem::RawData => self.view_raw_data(),
                             NavItem::FileViewer => self.view_file_viewer(ctx),
-                            NavItem::Header => self.view_header_editor(),
-                            NavItem::Electrical => self.view_electrical_editor(),
-                            NavItem::Applications => self.view_applications_editor(),
-                            NavItem::Photometry => self.view_photometry_editor(),
+                            NavItem::Header => self.view_header_editor(ctx),
+                            NavItem::Electrical => self.view_electrical_editor(ctx),
+                            NavItem::Applications => self.view_applications_editor(ctx),
+                            NavItem::Photometry => self.view_photometry_editor(ctx),
                             NavItem::Statistics => self.view_statistics(),
                             NavItem::Files => self.view_files_list(ctx),
                             NavItem::LightSources => self.view_light_sources(),
                             NavItem::Emitters => self.view_emitters(),
                             NavItem::Variants => self.view_variants(ctx),
+                            NavItem::Lisp => self.view_lisp(),
+                            NavItem::StarSky => self.view_star_sky(ctx),
                         }
                     }
                 </div>
@@ -1386,6 +2638,38 @@ impl App {
                             <div class="label">{ "Photometries" }</div>
                         </div>
                     </div>
+
+                    // Star Sky Viewer (for astral_sky GLDFs)
+                    {
+                        if let Some(ref star_json) = self.star_sky_json {
+                            // Use URL location if available, otherwise fall back to header manufacturer
+                            let location_name = self.sky_location.as_ref()
+                                .map(|(city, _, _)| city.clone())
+                                .unwrap_or_else(|| header.manufacturer.clone());
+                            let location_info = self.sky_location.as_ref()
+                                .map(|(city, lat, lng)| format!("{} ({:.2}°N, {:.2}°E)", city, lat, lng));
+                            html! {
+                                <div class="star-sky-section" style="margin: 20px 0;">
+                                    <h3 style="margin-bottom: 10px;">
+                                        { "⭐ Star Sky View" }
+                                        if let Some(ref info) = location_info {
+                                            <span style="font-size: 14px; font-weight: normal; color: var(--text-secondary); margin-left: 8px;">
+                                                { info }
+                                            </span>
+                                        }
+                                    </h3>
+                                    <StarSkyViewer
+                                        star_json={star_json.clone()}
+                                        location_name={location_name}
+                                        width={800}
+                                        height={500}
+                                    />
+                                </div>
+                            }
+                        } else {
+                            html! {}
+                        }
+                    }
 
                     // Content Columns
                     <div class="content-columns">
@@ -1692,11 +2976,12 @@ impl App {
         }
     }
 
-    fn view_header_editor(&self) -> Html {
+    fn view_header_editor(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             if self.mode == AppMode::Editor {
+                let on_change = ctx.link().callback(Msg::SyncProduct);
                 html! {
-                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                    <GldfProviderWithData gldf={gldf.gldf.clone()} on_change={on_change}>
                         <EditorTabs />
                     </GldfProviderWithData>
                 }
@@ -1744,11 +3029,12 @@ impl App {
         }
     }
 
-    fn view_electrical_editor(&self) -> Html {
+    fn view_electrical_editor(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             if self.mode == AppMode::Editor {
+                let on_change = ctx.link().callback(Msg::SyncProduct);
                 html! {
-                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                    <GldfProviderWithData gldf={gldf.gldf.clone()} on_change={on_change}>
                         <components::ElectricalEditor />
                     </GldfProviderWithData>
                 }
@@ -1816,11 +3102,12 @@ impl App {
         }
     }
 
-    fn view_applications_editor(&self) -> Html {
+    fn view_applications_editor(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             if self.mode == AppMode::Editor {
+                let on_change = ctx.link().callback(Msg::SyncProduct);
                 html! {
-                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                    <GldfProviderWithData gldf={gldf.gldf.clone()} on_change={on_change}>
                         <components::ApplicationsEditor />
                     </GldfProviderWithData>
                 }
@@ -1864,9 +3151,10 @@ impl App {
         }
     }
 
-    fn view_photometry_editor(&self) -> Html {
+    fn view_photometry_editor(&self, ctx: &Context<Self>) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             if self.mode == AppMode::Editor {
+                let on_change = ctx.link().callback(Msg::SyncProduct);
                 // Build a map from GLDF file definition id -> filename
                 // The photometry references file by id (e.g., "ldtnarrow")
                 // The file definition maps id to filename (e.g., "ldc/narrow.ldt")
@@ -1937,7 +3225,7 @@ impl App {
                 ));
 
                 html! {
-                    <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                    <GldfProviderWithData gldf={gldf.gldf.clone()} on_change={on_change}>
                         <components::PhotometryEditor photometry_files={photometry_files} />
                     </GldfProviderWithData>
                 }
@@ -1952,9 +3240,19 @@ impl App {
                     .cloned()
                     .unwrap_or_default();
 
+                // Get spectrums if available
+                let spectrums = gldf
+                    .gldf
+                    .general_definitions
+                    .spectrums
+                    .as_ref()
+                    .map(|s| &s.spectrum[..])
+                    .unwrap_or(&[]);
+
                 html! {
                     <div class="card">
                         <div class="card-body">
+                            <h2>{ "Photometries" }</h2>
                             if photometries.is_empty() {
                                 <p class="empty-message">{ "No photometry definitions" }</p>
                             } else {
@@ -2003,6 +3301,45 @@ impl App {
                                         </div>
                                     }
                                 })}
+                            }
+
+                            // Spectrums section
+                            if !spectrums.is_empty() {
+                                <h2 style="margin-top: 2rem;">{ "Spectrums (TM-30/TM-33)" }</h2>
+                                <p class="section-description">
+                                    { format!("{} spectrum definitions with spectral power distribution data", spectrums.len()) }
+                                </p>
+                                <div class="spectrum-grid">
+                                    { for spectrums.iter().map(|spectrum| {
+                                        let intensity_count = spectrum.intensity.len();
+                                        let file_id = &spectrum.spectrum_file_reference.file_id;
+                                        let has_file_ref = !file_id.is_empty();
+                                        html! {
+                                            <div class="spectrum-card">
+                                                <h4>{ &spectrum.id }</h4>
+                                                if has_file_ref {
+                                                    <p class="file-ref">{ format!("File: {}", file_id) }</p>
+                                                }
+                                                <div class="spectrum-info">
+                                                    <span class="info-item">
+                                                        { format!("{} wavelength bins", intensity_count) }
+                                                    </span>
+                                                    if has_file_ref {
+                                                        <span class="info-item tm33-badge">{ "TM-33" }</span>
+                                                    }
+                                                </div>
+                                                // Mini spectrum preview
+                                                <div class="spectrum-preview">
+                                                    <components::SpectrumViewer
+                                                        spectrum={spectrum.clone()}
+                                                        width={350.0}
+                                                        height={200.0}
+                                                    />
+                                                </div>
+                                            </div>
+                                        }
+                                    })}
+                                </div>
                             }
                         </div>
                     </div>
@@ -2111,7 +3448,10 @@ impl App {
                     <L3dViewer l3d_data={content} width={700} height={500} />
                 </div>
             }
-        } else if fname_lower.ends_with(".ldt") || fname_lower.ends_with(".ies") {
+        } else if fname_lower.ends_with(".ldt")
+            || fname_lower.ends_with(".ies")
+            || fname_lower.ends_with(".iesxml")
+        {
             html! {
                 <div class="ldt-viewer-container">
                     <LdtViewer ldt_data={content} width={500.0} height={500.0} />
@@ -2189,63 +3529,130 @@ impl App {
                 }
             };
 
+            // Group files by content type
+            let mut grouped: std::collections::BTreeMap<String, Vec<_>> = std::collections::BTreeMap::new();
+            for f in files.iter() {
+                // Extract category from content type (e.g., "ldc" from "ldc/iesxml")
+                let category = f.content_type.split('/').next().unwrap_or("other").to_string();
+                grouped.entry(category).or_default().push(f);
+            }
+
+            // Pretty names for categories
+            let category_name = |cat: &str| -> &'static str {
+                match cat {
+                    "ldc" => "Photometric Data (LDC)",
+                    "geo" => "Geometry Files",
+                    "image" => "Images",
+                    "document" => "Documents",
+                    "spectrum" => "Spectrum Files",
+                    "sensor" => "Sensor Data",
+                    "other" => "Other Files",
+                    _ => "Other Files",
+                }
+            };
+
+            let category_icon = |cat: &str| -> &'static str {
+                match cat {
+                    "ldc" => "💡",
+                    "geo" => "📐",
+                    "image" => "🖼️",
+                    "document" => "📄",
+                    "spectrum" => "🌈",
+                    "sensor" => "📡",
+                    _ => "📁",
+                }
+            };
+
             html! {
                 <div class="files-container">
-                    // Files table
-                    <div class="card">
-                        <table class="data-table files-table-clickable">
-                            <thead>
-                                <tr>
-                                    <th>{ "ID" }</th>
-                                    <th>{ "File Name" }</th>
-                                    <th>{ "Content Type" }</th>
-                                    <th>{ "Type" }</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                { for files.iter().map(|f| {
-                                    let file_id = f.id.clone();
-                                    let is_selected = self.selected_file.as_ref() == Some(&f.id);
-                                    let on_click = ctx.link().callback(move |_| Msg::SelectFile(Some(file_id.clone())));
-
-                                    // Check if file content exists
-                                    let has_content = gldf.files.iter().any(|bf| {
-                                        bf.name.as_ref().map(|n| {
-                                            let stored = n.rsplit('/').next().unwrap_or(n);
-                                            stored.eq_ignore_ascii_case(&f.file_name)
-                                        }).unwrap_or(false)
-                                    });
-
-                                    let row_class = classes!(
-                                        is_selected.then_some("selected"),
-                                        has_content.then_some("clickable")
-                                    );
-
-                                    html! {
-                                        <tr
-                                            class={row_class}
-                                            onclick={if has_content { Some(on_click) } else { None }}
-                                            style={if has_content { "cursor: pointer;" } else { "" }}
-                                        >
-                                            <td class="file-id">{ &f.id }</td>
-                                            <td class="file-name">{ &f.file_name }</td>
-                                            <td>
-                                                <span class={classes!("content-type-badge", content_type_class(&f.content_type))}>
-                                                    { &f.content_type }
-                                                </span>
-                                            </td>
-                                            <td class="file-type">{ &f.type_attr }</td>
-                                        </tr>
-                                    }
-                                })}
-                            </tbody>
-                        </table>
-                        if self.selected_file.is_none() {
-                            <p style="text-align: center; color: var(--text-tertiary); margin-top: 16px; font-size: 13px;">
-                                { "Click on a file above to preview" }
-                            </p>
-                        }
+                    // Summary bar
+                    <div class="card" style="margin-bottom: 16px; padding: 12px 16px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
+                            <span style="font-weight: 500;">{ format!("{} files total", files.len()) }</span>
+                            <span style="color: var(--text-tertiary);">{ "|" }</span>
+                            { for grouped.iter().map(|(cat, cat_files)| {
+                                html! {
+                                    <span style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                                        <span>{ category_icon(cat) }</span>
+                                        <span class={classes!("content-type-badge", content_type_class(cat))}>
+                                            { format!("{}: {}", category_name(cat), cat_files.len()) }
+                                        </span>
+                                    </span>
+                                }
+                            })}
+                        </div>
                     </div>
+
+                    // Grouped files
+                    { for grouped.iter().map(|(cat, cat_files)| {
+                        let is_expanded = cat_files.len() <= 10; // Auto-expand small groups
+                        html! {
+                            <details class="file-group card" style="margin-bottom: 12px;" open={is_expanded}>
+                                <summary style="cursor: pointer; padding: 12px 16px; background: var(--bg-sidebar); border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px; user-select: none;">
+                                    <span style="font-size: 16px;">{ category_icon(cat) }</span>
+                                    <span style="font-weight: 500;">{ category_name(cat) }</span>
+                                    <span class={classes!("content-type-badge", content_type_class(cat))} style="margin-left: auto;">
+                                        { format!("{} files", cat_files.len()) }
+                                    </span>
+                                </summary>
+                                <div style="max-height: 400px; overflow-y: auto;">
+                                    <table class="data-table files-table-clickable" style="margin: 0;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 25%;">{ "ID" }</th>
+                                                <th style="width: 40%;">{ "File Name" }</th>
+                                                <th style="width: 20%;">{ "Content Type" }</th>
+                                                <th style="width: 15%;">{ "Type" }</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            { for cat_files.iter().map(|f| {
+                                                let file_id = f.id.clone();
+                                                let is_selected = self.selected_file.as_ref() == Some(&f.id);
+                                                let on_click = ctx.link().callback(move |_| Msg::SelectFile(Some(file_id.clone())));
+
+                                                // Check if file content exists
+                                                let has_content = gldf.files.iter().any(|bf| {
+                                                    bf.name.as_ref().map(|n| {
+                                                        let stored = n.rsplit('/').next().unwrap_or(n);
+                                                        stored.eq_ignore_ascii_case(&f.file_name)
+                                                    }).unwrap_or(false)
+                                                });
+
+                                                let row_class = classes!(
+                                                    is_selected.then_some("selected"),
+                                                    has_content.then_some("clickable")
+                                                );
+
+                                                html! {
+                                                    <tr
+                                                        class={row_class}
+                                                        onclick={if has_content { Some(on_click) } else { None }}
+                                                        style={if has_content { "cursor: pointer;" } else { "" }}
+                                                    >
+                                                        <td class="file-id" style="font-size: 11px;">{ &f.id }</td>
+                                                        <td class="file-name">{ &f.file_name }</td>
+                                                        <td>
+                                                            <span class={classes!("content-type-badge", content_type_class(&f.content_type))} style="font-size: 10px;">
+                                                                { &f.content_type }
+                                                            </span>
+                                                        </td>
+                                                        <td class="file-type" style="font-size: 11px;">{ &f.type_attr }</td>
+                                                    </tr>
+                                                }
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        }
+                    })}
+
+                    if self.selected_file.is_none() && files.len() > 10 {
+                        <p style="text-align: center; color: var(--text-tertiary); margin-top: 16px; font-size: 13px;">
+                            { "Click on a file to preview its content" }
+                        </p>
+                    }
 
                     // File viewer at bottom (when file selected)
                     if let Some((file_name, content_len, content_viewer)) = viewer_html {
@@ -2269,6 +3676,16 @@ impl App {
                             </div>
                         </div>
                     }
+
+                    // Embedded WASM Viewers section
+                    <div class="card" style="margin-top: 20px;">
+                        <components::WasmViewersSection
+                            on_embed={ctx.link().callback(Msg::EmbedWasmViewer)}
+                            on_remove={ctx.link().callback(Msg::RemoveWasmViewer)}
+                            loading_viewer={self.loading_wasm_viewer.clone()}
+                            has_gldf={true}
+                        />
+                    </div>
                 </div>
             }
         } else {
@@ -2535,7 +3952,7 @@ impl App {
                                                     if let Some(data) = ldt_data {
                                                         <div style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
                                                             <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">{ "Photometric Distribution" }</div>
-                                                            <LdtViewer ldt_data={data} width={400.0} height={300.0} />
+                                                            <LdtViewer ldt_data={data} width={400.0} height={300.0} default_view={self.get_default_emitter_view()} />
                                                         </div>
                                                     }
                                                 </div>
@@ -2698,6 +4115,18 @@ impl App {
             // Close button callback
             let close_viewer = ctx.link().callback(|_| Msg::Select3dVariant(None));
 
+            // Check if we have star sky data (for astral sky GLDFs)
+            let star_sky_json = self.star_sky_json.clone();
+
+            // Get selected variant name for star sky viewer
+            let selected_variant_name = self.selected_3d_variant.as_ref().and_then(|vid| {
+                variants.iter().find(|v| &v.id == vid).and_then(|v| {
+                    v.name.as_ref()
+                        .and_then(|n| n.locale.first())
+                        .map(|l| l.value.clone())
+                })
+            });
+
             html! {
                 <div class="variants-container">
                     // 3D Scene Viewer (when variant selected)
@@ -2709,7 +4138,7 @@ impl App {
                                     <span style="color: var(--accent-blue);">{ &variant_id }</span>
                                 </div>
                                 <button
-                                    onclick={close_viewer}
+                                    onclick={close_viewer.clone()}
                                     style="background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-secondary);"
                                 >
                                     { "✕" }
@@ -2721,6 +4150,32 @@ impl App {
                                     ldt_data={ldt_data}
                                     emitter_config={emitter_config}
                                     variant_id={variant_id}
+                                    width={800}
+                                    height={500}
+                                />
+                            </div>
+                        </div>
+                    } else if let (Some(ref json), Some(ref variant_id)) = (&star_sky_json, &self.selected_3d_variant) {
+                        // Star Sky Viewer (for astral sky GLDFs without L3D)
+                        // The variant name is the star name to highlight
+                        <div class="variant-3d-viewer" style="margin-bottom: 20px; background: var(--bg-secondary); border-radius: 8px; overflow: hidden;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-color);">
+                                <div style="font-weight: 500;">
+                                    { "⭐ Star Sky: " }
+                                    <span style="color: var(--accent-purple);">{ selected_variant_name.as_deref().unwrap_or(variant_id) }</span>
+                                </div>
+                                <button
+                                    onclick={close_viewer}
+                                    style="background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-secondary);"
+                                >
+                                    { "✕" }
+                                </button>
+                            </div>
+                            <div style="padding: 0;">
+                                <StarSkyViewer
+                                    star_json={json.clone()}
+                                    location_name={selected_variant_name.clone().unwrap_or_else(|| variant_id.clone())}
+                                    highlight_star={selected_variant_name.clone()}
                                     width={800}
                                     height={500}
                                 />
@@ -2753,6 +4208,9 @@ impl App {
                             // Check if L3D data is available for this variant
                             let has_l3d = self.get_variant_l3d_ldt(&v.id).0.is_some();
 
+                            // Check if this is an astral sky GLDF (no L3D but has star sky data)
+                            let has_star_sky = self.star_sky_json.is_some();
+
                             // Check if this variant is selected
                             let is_selected = self.selected_3d_variant.as_ref() == Some(&v.id);
 
@@ -2773,7 +4231,7 @@ impl App {
                                         if has_l3d {
                                             <div style="margin-bottom: 12px;">
                                                 <button
-                                                    onclick={on_view_3d}
+                                                    onclick={on_view_3d.clone()}
                                                     class="btn-3d-scene"
                                                     style={format!(
                                                         "background: {}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;",
@@ -2782,6 +4240,21 @@ impl App {
                                                 >
                                                     <span>{ "🏠" }</span>
                                                     { if is_selected { "Viewing 3D Scene" } else { "View 3D Scene" } }
+                                                </button>
+                                            </div>
+                                        } else if has_star_sky {
+                                            // For star sky variants, show "View in Sky" button
+                                            <div style="margin-bottom: 12px;">
+                                                <button
+                                                    onclick={on_view_3d}
+                                                    class="btn-3d-scene"
+                                                    style={format!(
+                                                        "background: {}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;",
+                                                        if is_selected { "var(--accent-purple)" } else { "var(--accent-indigo, #6366f1)" }
+                                                    )}
+                                                >
+                                                    <span>{ "⭐" }</span>
+                                                    { if is_selected { "Viewing in Sky" } else { "View in Sky" } }
                                                 </button>
                                             </div>
                                         }
@@ -2859,6 +4332,228 @@ impl App {
                     <p>{ "Load a GLDF file to view variants" }</p>
                 </div>
             }
+        }
+    }
+
+    /// AutoLISP code viewer/editor with SVG/DXF output
+    fn view_lisp(&self) -> Html {
+        let lisp_code = self.get_lisp_code().unwrap_or_default();
+        let has_embedded_code = !lisp_code.is_empty();
+        let star_count = if has_embedded_code {
+            // Count draw-star calls in the code
+            lisp_code.matches("draw-star").count()
+        } else {
+            0
+        };
+
+        html! {
+            <div class="lisp-container" style="padding: 0 20px;">
+                <div class="info-callout" style="margin-bottom: 20px;">
+                    <div class="info-icon">{ "λ" }</div>
+                    <div class="info-content">
+                        <strong>{ "AutoLISP Interpreter" }</strong>
+                        <p style="margin: 4px 0 0; color: var(--text-secondary);">
+                            { "Run AutoLISP code and generate SVG/DXF output for CAD integration. " }
+                            { "Powered by " }
+                            <a href="https://acadlisp.de" target="_blank" style="color: var(--accent-purple);">{ "acadlisp" }</a>
+                            { " WASM engine." }
+                        </p>
+                        {
+                            if has_embedded_code {
+                                html! {
+                                    <p style="margin: 8px 0 0; color: var(--accent-purple);">
+                                        { format!("📄 Loaded star_sky.lsp from GLDF ({} stars, {} bytes)", star_count, lisp_code.len()) }
+                                    </p>
+                                }
+                            } else {
+                                html! {}
+                            }
+                        }
+                    </div>
+                </div>
+
+                <LispViewer
+                    initial_code={lisp_code}
+                    title="AutoLISP Editor"
+                    width={900}
+                    height={700}
+                />
+            </div>
+        }
+    }
+
+    /// Check if the current GLDF has sky_data.json embedded
+    fn has_sky_data(&self) -> bool {
+        if let Some(ref gldf) = self.loaded_gldf {
+            return gldf.files.iter().any(|f| {
+                f.path.as_ref().map(|p| p.contains("sky_data.json")).unwrap_or(false)
+            });
+        }
+        false
+    }
+
+    /// Get the sky_data.json content from the GLDF
+    fn get_sky_data_json(&self) -> Option<String> {
+        if let Some(ref gldf) = self.loaded_gldf {
+            return gldf.files.iter()
+                .find(|f| f.path.as_ref().map(|p| p.contains("sky_data.json")).unwrap_or(false))
+                .and_then(|f| f.content.clone())
+                .and_then(|c| String::from_utf8(c).ok());
+        }
+        None
+    }
+
+    /// Check if the current GLDF has AutoLISP code embedded
+    fn has_lisp_code(&self) -> bool {
+        if let Some(ref gldf) = self.loaded_gldf {
+            return gldf.files.iter().any(|f| {
+                f.path.as_ref().map(|p| p.ends_with(".lsp") || p.contains("autolisp")).unwrap_or(false)
+            });
+        }
+        false
+    }
+
+    /// Get the AutoLISP code from the GLDF (first .lsp file found)
+    fn get_lisp_code(&self) -> Option<String> {
+        if let Some(ref gldf) = self.loaded_gldf {
+            return gldf.files.iter()
+                .find(|f| f.path.as_ref().map(|p| p.ends_with(".lsp")).unwrap_or(false))
+                .and_then(|f| f.content.clone())
+                .and_then(|c| String::from_utf8(c).ok());
+        }
+        None
+    }
+
+    /// Get a custom property from the GLDF's ProductMetaData
+    fn get_custom_property(&self, property_id: &str) -> Option<String> {
+        self.loaded_gldf.as_ref().and_then(|gldf| {
+            gldf.gldf
+                .product_definitions
+                .product_meta_data
+                .as_ref()
+                .and_then(|m| m.descriptive_attributes.as_ref())
+                .and_then(|d| d.custom_properties.as_ref())
+                .and_then(|cp| {
+                    cp.property.iter()
+                        .find(|p| p.id == property_id)
+                        .map(|p| p.value.clone())
+                        .filter(|v| !v.is_empty())
+                })
+        })
+    }
+
+    /// Get the default emitter view type from GLDF custom properties
+    /// Priority: GLDF custom property > URL parameter > default (Polar)
+    fn get_default_emitter_view(&self) -> ViewType {
+        // First check GLDF custom property
+        if let Some(v) = self.get_custom_property("default_emitter_view") {
+            return match v.to_lowercase().as_str() {
+                "spectral" | "spectrum" | "spd" => ViewType::Spectrum,
+                "polar" => ViewType::Polar,
+                "cartesian" | "cart" => ViewType::Cartesian,
+                "heatmap" | "heat" => ViewType::Heatmap,
+                "butterfly" | "3d" => ViewType::Butterfly,
+                "bug" => ViewType::Bug,
+                "lcs" => ViewType::Lcs,
+                _ => ViewType::Polar,
+            };
+        }
+        // Fall back to URL parameter or default
+        self.default_ldt_view
+    }
+
+    /// View Star Sky - 2D polar projection of visible stars
+    /// Tribute to Astrophysics!
+    fn view_star_sky(&self, _ctx: &Context<Self>) -> Html {
+        let has_embedded = has_embedded_viewer("starsky");
+        let sky_data = self.get_sky_data_json();
+
+        // Parse star count from sky data
+        let star_info = sky_data.as_ref().and_then(|json| {
+            serde_json::from_str::<serde_json::Value>(json).ok().map(|data| {
+                let location = data.get("location")
+                    .and_then(|l| l.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("Unknown");
+                let star_count = data.get("stars")
+                    .and_then(|s| s.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                (location.to_string(), star_count)
+            })
+        });
+
+        html! {
+            <div class="star-sky-container" style="padding: 0 20px;">
+                <div class="info-callout" style="margin-bottom: 20px; background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 100%); border: 1px solid #4da6ff;">
+                    <div class="info-icon" style="font-size: 32px;">{ "★" }</div>
+                    <div class="info-content">
+                        <strong style="color: #ffd700;">{ "Star Sky Viewer" }</strong>
+                        <p style="margin: 4px 0 0; color: #ccc;">
+                            { "2D polar projection of the night sky. " }
+                            if let Some((location, count)) = &star_info {
+                                { format!("{} visible stars from {}. ", count, location) }
+                            }
+                            <br />
+                            <em style="color: #888;">{ "Tribute to Astrophysics!" }</em>
+                        </p>
+                    </div>
+                </div>
+
+                if has_embedded && sky_data.is_some() {
+                    <div class="star-sky-viewer" style="position: relative;">
+                        <canvas
+                            id="star-sky-canvas"
+                            style="width: 100%; height: 600px; background: #0a0a1a; border-radius: 8px;"
+                        />
+                        <script>
+                            { format!(r#"
+                                (async function() {{
+                                    if (window.hasEmbeddedViewer && window.hasEmbeddedViewer('starsky')) {{
+                                        const skyData = {};
+                                        await window.loadEmbeddedStarSky('star-sky-canvas', JSON.stringify(skyData));
+                                    }}
+                                }})();
+                            "#, sky_data.as_ref().unwrap()) }
+                        </script>
+                    </div>
+                } else if sky_data.is_some() {
+                    // Fallback: use the existing astral_sky.html approach
+                    <div class="star-sky-fallback" style="text-align: center; padding: 40px;">
+                        <p style="color: var(--text-secondary);">
+                            { "Star data is embedded in this GLDF. " }
+                            <a href="/astral_sky.html" target="_blank" style="color: var(--accent-blue);">
+                                { "Open in Astral Sky Demo" }
+                            </a>
+                        </p>
+                    </div>
+                } else {
+                    <div class="star-sky-empty" style="text-align: center; padding: 40px;">
+                        <p style="color: var(--text-secondary);">
+                            { "No star data found in this GLDF file." }
+                            <br />
+                            { "Load an Astral Sky GLDF to visualize the night sky." }
+                        </p>
+                    </div>
+                }
+
+                // Info panel with star list
+                if let Some(json) = &sky_data {
+                    <div class="star-list-panel" style="margin-top: 20px;">
+                        <details>
+                            <summary style="cursor: pointer; color: var(--accent-blue);">
+                                { "Show star data (JSON)" }
+                            </summary>
+                            <pre style="max-height: 400px; overflow: auto; background: #1a1a2e; padding: 12px; border-radius: 4px; font-size: 11px;">
+                                { json.chars().take(5000).collect::<String>() }
+                                if json.len() > 5000 {
+                                    { format!("\n... ({} more characters)", json.len() - 5000) }
+                                }
+                            </pre>
+                        </details>
+                    </div>
+                }
+            </div>
         }
     }
 
@@ -3063,13 +4758,15 @@ pub struct GldfProviderWithDataProps {
     pub gldf: GldfProduct,
     #[prop_or_default]
     pub children: Children,
+    #[prop_or_default]
+    pub on_change: Option<Callback<GldfProduct>>,
 }
 
 #[function_component(GldfProviderWithData)]
 pub fn gldf_provider_with_data(props: &GldfProviderWithDataProps) -> Html {
     html! {
         <GldfProvider>
-            <GldfInitializer gldf={props.gldf.clone()}>
+            <GldfInitializer gldf={props.gldf.clone()} on_change={props.on_change.clone()}>
                 { for props.children.iter() }
             </GldfInitializer>
         </GldfProvider>
@@ -3082,6 +4779,8 @@ pub struct GldfInitializerProps {
     pub gldf: GldfProduct,
     #[prop_or_default]
     pub children: Children,
+    #[prop_or_default]
+    pub on_change: Option<Callback<GldfProduct>>,
 }
 
 #[function_component(GldfInitializer)]
@@ -3089,6 +4788,7 @@ pub fn gldf_initializer(props: &GldfInitializerProps) -> Html {
     let state = use_gldf();
     let initialized = use_state(|| false);
 
+    // Initialize state on first render
     {
         let gldf = props.gldf.clone();
         let state = state.clone();
@@ -3097,6 +4797,21 @@ pub fn gldf_initializer(props: &GldfInitializerProps) -> Html {
             if !*initialized {
                 state.dispatch(GldfAction::Load(gldf));
                 initialized.set(true);
+            }
+            || ()
+        });
+    }
+
+    // Sync changes back to parent when state is modified
+    {
+        let on_change = props.on_change.clone();
+        let product = state.product.clone();
+        let is_modified = state.is_modified;
+        use_effect_with((product.clone(), is_modified), move |(product, is_modified)| {
+            if *is_modified {
+                if let Some(ref callback) = on_change {
+                    callback.emit(product.clone());
+                }
             }
             || ()
         });

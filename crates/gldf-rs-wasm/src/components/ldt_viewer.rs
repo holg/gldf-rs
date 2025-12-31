@@ -1,4 +1,9 @@
 //! LDT/Eulumdat diagram viewer component with multiple diagram types
+//!
+//! Supports:
+//! - EULUMDAT (.ldt) files
+//! - IES (.ies) files
+//! - TM-33/IESXML (.iesxml, .xml) files via atla crate
 
 use eulumdat::{
     diagram::{ButterflyDiagram, CartesianDiagram, HeatmapDiagram, PolarDiagram, SvgTheme},
@@ -10,7 +15,7 @@ use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 /// Available diagram view types
-#[derive(Clone, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Copy, Debug)]
 pub enum ViewType {
     Polar,
     Cartesian,
@@ -18,6 +23,7 @@ pub enum ViewType {
     Butterfly,
     Bug,
     Lcs,
+    Spectrum,
 }
 
 impl ViewType {
@@ -29,6 +35,7 @@ impl ViewType {
             ViewType::Butterfly => "3D",
             ViewType::Bug => "BUG",
             ViewType::Lcs => "LCS",
+            ViewType::Spectrum => "SPD",
         }
     }
 
@@ -40,10 +47,12 @@ impl ViewType {
             ViewType::Butterfly => "🦋",
             ViewType::Bug => "🔦",
             ViewType::Lcs => "📐",
+            ViewType::Spectrum => "🌈",
         }
     }
 
-    fn all() -> &'static [ViewType] {
+    /// All view types (without SPD - shown separately when available)
+    fn all_angular() -> &'static [ViewType] {
         &[
             ViewType::Polar,
             ViewType::Cartesian,
@@ -51,6 +60,19 @@ impl ViewType {
             ViewType::Butterfly,
             ViewType::Bug,
             ViewType::Lcs,
+        ]
+    }
+
+    /// All view types including SPD for TM-33 files
+    fn all_with_spectrum() -> &'static [ViewType] {
+        &[
+            ViewType::Polar,
+            ViewType::Cartesian,
+            ViewType::Heatmap,
+            ViewType::Butterfly,
+            ViewType::Bug,
+            ViewType::Lcs,
+            ViewType::Spectrum,
         ]
     }
 }
@@ -68,11 +90,14 @@ pub struct LdtViewerProps {
     /// Show compact tabs (icons only)
     #[prop_or(false)]
     pub compact: bool,
+    /// Default view type (Polar, Spectrum, etc.)
+    #[prop_or(ViewType::Polar)]
+    pub default_view: ViewType,
 }
 
 #[function_component(LdtViewer)]
 pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
-    let view_type = use_state(|| ViewType::Polar);
+    let view_type = use_state(|| props.default_view);
     let is_zoomed = use_state(|| false);
     let svg_container = use_node_ref();
     let zoomed_container = use_node_ref();
@@ -84,6 +109,16 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
         String::from_utf8_lossy(&props.ldt_data[..props.ldt_data.len().min(100)])
     ));
 
+    // Detect if this is a TM-33/ATLA XML file (has spectral data)
+    let is_tm33 = {
+        let content = String::from_utf8_lossy(&props.ldt_data);
+        let trimmed = content.trim_start();
+        trimmed.starts_with("<IESTM33")
+            || trimmed.starts_with("<LuminaireOpticalData")
+            || (trimmed.starts_with("<?xml")
+                && (trimmed.contains("<IESTM33") || trimmed.contains("<LuminaireOpticalData")))
+    };
+
     // Apply flux override if provided
     let ldt_data = if let Some(flux) = props.flux_override {
         apply_flux_override(&props.ldt_data, flux)
@@ -94,7 +129,7 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
     // Generate small SVG for inline view
     let svg_content = {
         let view_type = *view_type;
-        generate_ldt_svg(&ldt_data, props.width, props.height, view_type)
+        generate_ldt_svg(&ldt_data, props.width, props.height, view_type, is_tm33)
     };
 
     // Generate larger SVG for zoomed modal
@@ -103,7 +138,14 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
         // Use larger dimensions for zoomed view
         let zoomed_width = 800.0;
         let zoomed_height = 650.0;
-        generate_ldt_svg(&ldt_data, zoomed_width, zoomed_height, view_type)
+        generate_ldt_svg(&ldt_data, zoomed_width, zoomed_height, view_type, is_tm33)
+    };
+
+    // Choose available view types based on file type
+    let available_views: &[ViewType] = if is_tm33 {
+        ViewType::all_with_spectrum()
+    } else {
+        ViewType::all_angular()
     };
 
     // Use effect to set innerHTML for inline SVG rendering
@@ -170,7 +212,7 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
     html! {
         <div class="ldt-viewer">
             <div class="ldt-viewer-tabs">
-                { for ViewType::all().iter().map(|vt| {
+                { for available_views.iter().map(|vt| {
                     let is_active = *view_type == *vt;
                     let vt_clone = *vt;
                     let view_type = view_type.clone();
@@ -203,7 +245,7 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
                     <div class="ldt-zoom-modal" onclick={on_modal_click}>
                         <div class="ldt-zoom-header">
                             <div class="ldt-zoom-tabs">
-                                { for ViewType::all().iter().map(|vt| {
+                                { for available_views.iter().map(|vt| {
                                     let is_active = *view_type == *vt;
                                     let vt_clone = *vt;
                                     let view_type = view_type.clone();
@@ -235,7 +277,7 @@ pub fn ldt_viewer(props: &LdtViewerProps) -> Html {
     }
 }
 
-fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType) -> String {
+fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType, is_tm33: bool) -> String {
     // Try to parse as string first
     let content = match std::str::from_utf8(buffer) {
         Ok(s) => s,
@@ -245,8 +287,53 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType)
         }
     };
 
+    let trimmed = content.trim_start();
+
+    // Check if this is an XML-based photometry file (TM-33-23 or ATLA S001)
+    let is_xml_photometry = trimmed.starts_with("<IESTM33")
+        || trimmed.starts_with("<LuminaireOpticalData")
+        || (trimmed.starts_with("<?xml")
+            && (trimmed.contains("<IESTM33") || trimmed.contains("<LuminaireOpticalData")));
+
+    // For Spectrum view, we need the raw atla document to get spectral data
+    if view_type == ViewType::Spectrum && is_tm33 {
+        match atla::parse(content) {
+            Ok(doc) => {
+                return generate_spectrum_svg_from_atla(&doc, width, height);
+            }
+            Err(e) => {
+                log!(format!("Error parsing TM-33/ATLA file for spectrum: {:?}", e));
+                return error_svg(width, height, "No spectral data available");
+            }
+        }
+    }
+
     // Try to detect file type and parse accordingly
-    let ldt = if content.trim_start().starts_with("IESNA") {
+    let ldt: Eulumdat = if is_xml_photometry {
+        // TM-33-23 or ATLA S001 file - parse with atla crate
+        log!(format!("Detected TM-33/ATLA XML format"));
+        match atla::parse(content) {
+            Ok(doc) => {
+                log!(format!(
+                    "Parsed TM-33/ATLA: manufacturer={:?}, emitters={}",
+                    doc.header.manufacturer,
+                    doc.emitters.len()
+                ));
+                let eulumdat = doc.to_eulumdat();
+                log!(format!(
+                    "Converted to Eulumdat: c_angles={}, g_angles={}, intensities={}",
+                    eulumdat.c_angles.len(),
+                    eulumdat.g_angles.len(),
+                    eulumdat.intensities.len()
+                ));
+                eulumdat
+            }
+            Err(e) => {
+                log!(format!("Error parsing TM-33/ATLA file: {:?}", e));
+                return error_svg(width, height, "Error parsing TM-33/ATLA file");
+            }
+        }
+    } else if trimmed.starts_with("IESNA") {
         // IES file
         match IesParser::parse(content) {
             Ok(ldt) => ldt,
@@ -297,7 +384,31 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType)
             let bug = BugDiagram::from_eulumdat(&ldt);
             bug.to_lcs_svg(width.max(510.0), height, &theme)
         }
+        ViewType::Spectrum => {
+            // Spectrum view for non-TM33 files (shouldn't happen, but fallback)
+            error_svg(width, height, "No spectral data (LDT/IES)")
+        }
     }
+}
+
+/// Generate SPD (Spectral Power Distribution) SVG from ATLA/TM-33 document
+fn generate_spectrum_svg_from_atla(doc: &atla::LuminaireOpticalData, width: f64, height: f64) -> String {
+    // Try to find spectral data from the first emitter
+    let spectral = doc.emitters.iter()
+        .find_map(|e| e.spectral_distribution.as_ref());
+
+    let Some(spd) = spectral else {
+        return error_svg(width, height, "No spectral data in TM-33 file");
+    };
+
+    if spd.wavelengths.is_empty() || spd.values.is_empty() {
+        return error_svg(width, height, "Empty spectral data");
+    }
+
+    // Use atla's SpectralDiagram
+    let theme = atla::SpectralTheme::dark();
+    let diagram = atla::SpectralDiagram::from_spectral(spd);
+    diagram.to_svg(width, height, &theme)
 }
 
 fn error_svg(width: f64, height: f64, message: &str) -> String {

@@ -3,11 +3,35 @@
 use crate::state::{use_gldf, GldfAction};
 use yew::prelude::*;
 
+/// Available emitter view types for the dropdown
+const EMITTER_VIEW_OPTIONS: &[(&str, &str, &str)] = &[
+    ("", "(default: Polar)", "Use the default view type"),
+    ("polar", "Polar", "Traditional polar candela distribution diagram"),
+    ("cartesian", "Cartesian", "Cartesian intensity plot"),
+    ("heatmap", "Heatmap", "Heat map visualization of light distribution"),
+    ("butterfly", "3D Butterfly", "3D butterfly diagram"),
+    ("bug", "BUG Rating", "Backlight/Uplight/Glare outdoor rating"),
+    ("lcs", "LCS", "Luminaire Classification System"),
+    ("spectral", "Spectral (SPD)", "Spectral Power Distribution - best for TM-33 files with color data"),
+];
+
 /// Header editor component
 #[function_component(HeaderEditor)]
 pub fn header_editor() -> Html {
     let gldf = use_gldf();
     let header = &gldf.product.header;
+
+    // Get current default_emitter_view from custom properties
+    let current_emitter_view = gldf
+        .product
+        .product_definitions
+        .product_meta_data
+        .as_ref()
+        .and_then(|m| m.descriptive_attributes.as_ref())
+        .and_then(|d| d.custom_properties.as_ref())
+        .and_then(|cp| cp.property.iter().find(|p| p.id == "default_emitter_view"))
+        .map(|p| p.value.clone())
+        .unwrap_or_default();
 
     let on_author_change = {
         let gldf = gldf.clone();
@@ -51,6 +75,18 @@ pub fn header_editor() -> Html {
             } else {
                 Some(value)
             }));
+        })
+    };
+
+    let on_emitter_view_change = {
+        let gldf = gldf.clone();
+        Callback::from(move |e: Event| {
+            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+            let value = select.value();
+            gldf.dispatch(GldfAction::SetCustomProperty {
+                id: "default_emitter_view".to_string(),
+                value: if value.is_empty() { None } else { Some(value) },
+            });
         })
     };
 
@@ -130,6 +166,49 @@ pub fn header_editor() -> Html {
                     onchange={on_format_version_change}
                     placeholder="e.g., 1.0.0-rc.3"
                 />
+            </div>
+
+            <hr style="margin: 24px 0; border-color: var(--border-color);" />
+
+            <h3 style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">
+                { "Display Settings" }
+            </h3>
+
+            <div class="form-group">
+                <label for="default-emitter-view">
+                    { "Default Emitter View" }
+                    <span
+                        class="help-icon"
+                        title="Sets the default diagram type when viewing emitter photometry.\nThis is stored as a custom property in the GLDF."
+                        style="margin-left: 6px; cursor: help; color: var(--accent-blue);"
+                    >
+                        { "ⓘ" }
+                    </span>
+                </label>
+                <select
+                    id="default-emitter-view"
+                    value={current_emitter_view.clone()}
+                    onchange={on_emitter_view_change}
+                    style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);"
+                >
+                    { for EMITTER_VIEW_OPTIONS.iter().map(|(value, label, _desc)| {
+                        html! {
+                            <option
+                                value={*value}
+                                selected={current_emitter_view == *value}
+                            >
+                                { *label }
+                            </option>
+                        }
+                    })}
+                </select>
+                <div class="help-text" style="margin-top: 8px; font-size: 11px; color: var(--text-tertiary);">
+                    { EMITTER_VIEW_OPTIONS.iter()
+                        .find(|(v, _, _)| *v == current_emitter_view.as_str())
+                        .map(|(_, _, desc)| *desc)
+                        .unwrap_or("Select a view type to see its description")
+                    }
+                </div>
             </div>
         </div>
     }

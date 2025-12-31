@@ -222,6 +222,7 @@ fn test_gldf_from_buf() {
     );
 }
 
+#[cfg(feature = "http")]
 #[tokio::test]
 async fn test_gldf_get_phot_files() {
     let loaded: GldfProduct = GldfProduct::load_gldf(GLDF_FILE_NAME).unwrap();

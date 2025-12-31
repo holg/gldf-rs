@@ -5,12 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GLDF Viewer</title>
 
-    <link data-trunk rel="css" href="src/static/styles.css">
+    <link data-trunk rel="css" href="src/static/gldf-styles.css">
+    <link data-trunk rel="copy-file" href="src/static/aec.html" />
+    <link data-trunk rel="copy-file" href="src/static/astral_sky.html" />
+    <link data-trunk rel="copy-file" href="src/static/lidrs.html" />
+    <link data-trunk rel="copy-file" href="src/static/aec_ga15.gldf" />
+    <link data-trunk rel="copy-file" href="src/static/aec_ga15_enriched.gldf" />
+    <link data-trunk rel="copy-file" href="src/static/aec_ga15_enriched_spectral.gldf" />
     <link data-trunk rel="copy-file" href="src/static/slv_tria_2.gldf" />
-    <link data-trunk rel="copy-file" href="src/static/bevy-loader.js" />
-    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="" />
+    <link data-trunk rel="copy-file" href="src/static/astral_sky_lüdinghausen.gldf" />
+    <link data-trunk rel="copy-file" href="src/static/astral_sky_lüdinghausen.json" />
+    <link data-trunk rel="copy-file" href="src/static/gldf-bevy-loader.js" />
+    <!-- AutoLISP support (acadlisp.de) -->
+    <link data-trunk rel="copy-file" href="src/static/lisp-loader.js" />
+    <!-- PDF export support (hidden feature) -->
+    <link data-trunk rel="copy-file" href="src/static/gldf_pdf_export.html" />
+    <link data-trunk rel="copy-file" href="src/static/typst-loader.js" />
+    <link data-trunk rel="copy-dir" href="src/static/typst" />
+    <!-- Embedded WASM viewer loader (for self-contained GLDFs) -->
+    <link data-trunk rel="copy-file" href="src/static/embedded-viewer-loader.js" />
+    <!-- New WASM plugin architecture (self-describing plugins) -->
+    <link data-trunk rel="copy-file" href="src/static/wasm-plugin-loader.js" />
+    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="0" />
 </head>
 <body>
-    <script src="bevy-loader.js"></script>
+    <!-- Load plugin system first, then legacy loaders for backwards compatibility -->
+    <script src="wasm-plugin-loader.js"></script>
+    <script src="embedded-viewer-loader.js"></script>
+    <script src="gldf-bevy-loader.js"></script>
+    <script src="lisp-loader.js"></script>
 </body>
 </html>

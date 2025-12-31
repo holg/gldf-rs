@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astral Sky Demo - GLDF Stars</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #1a1a2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent-blue: #4da6ff;
+            --accent-gold: #ffd700;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid #2a2a4e;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .controls {
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid #2a2a4e;
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .control-group input {
+            background: var(--bg-primary);
+            border: 1px solid #2a2a4e;
+            color: var(--text-primary);
+            padding: 0.5rem;
+            border-radius: 4px;
+            width: 120px;
+        }
+
+        button {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+
+        #sky-canvas {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(26, 26, 46, 0.9);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #2a2a4e;
+            max-width: 300px;
+        }
+
+        .info-panel h3 {
+            margin-bottom: 0.5rem;
+            color: var(--accent-gold);
+        }
+
+        .star-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .star-item {
+            padding: 0.5rem;
+            border-bottom: 1px solid #2a2a4e;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .star-item:hover {
+            background: rgba(77, 166, 255, 0.1);
+        }
+
+        .star-name {
+            font-weight: 500;
+        }
+
+        .star-info {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .star-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .credits {
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid #2a2a4e;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .credits a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Astral Sky Demo</h1>
+        <p>Stellar photometry visualization using GLDF/TM-33 spectral data</p>
+    </header>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Latitude</label>
+            <input type="number" id="lat" value="51.77" step="0.01">
+        </div>
+        <div class="control-group">
+            <label>Longitude</label>
+            <input type="number" id="lng" value="7.44" step="0.01">
+        </div>
+        <div class="control-group">
+            <label>Location</label>
+            <input type="text" id="location" value="Lüdinghausen">
+        </div>
+        <button onclick="updateSky()">Update Sky</button>
+        <button onclick="loadFromGeoDB()">Get from GeoDB</button>
+    </div>
+
+    <main>
+        <canvas id="sky-canvas"></canvas>
+        <div class="info-panel">
+            <h3>Visible Stars</h3>
+            <div id="star-count">Loading...</div>
+            <div class="star-list" id="star-list"></div>
+        </div>
+    </main>
+
+    <div class="credits">
+        Tribute to <a href="https://github.com/sammorrell/lidrs">Sam Morell (lidrs)</a> and the astronomy community.
+        Star positions calculated for the specified location and current time.
+        Spectral data generated using blackbody approximations.
+        <br>
+        <a href="/?url=/astral_sky_lüdinghausen.gldf">Open in GLDF Viewer</a>
+    </div>
+
+    <script>
+        // Sky rendering
+        let stars = [];
+        let canvas, ctx;
+
+        function init() {
+            canvas = document.getElementById('sky-canvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            loadSkyData();
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            if (stars.length > 0) renderSky();
+        }
+
+        async function loadSkyData() {
+            try {
+                const response = await fetch('/astral_sky_lüdinghausen.json');
+                const data = await response.json();
+                stars = data.stars;
+                document.getElementById('star-count').textContent =
+                    `${stars.length} stars visible from ${data.location.name}`;
+                renderStarList();
+                renderSky();
+            } catch (e) {
+                document.getElementById('star-count').textContent =
+                    'Error loading star data. Generate with: python scripts/astral_sky_demo.py';
+            }
+        }
+
+        function renderStarList() {
+            const list = document.getElementById('star-list');
+            list.innerHTML = stars.map(star => {
+                const color = tempToColor(star.temp);
+                return `
+                    <div class="star-item" onclick="highlightStar('${star.name}')">
+                        <span class="star-dot" style="background: ${color}"></span>
+                        <span class="star-name">${star.name}</span>
+                        <div class="star-info">
+                            ${star.spectral} | mag ${star.mag} | ${star.temp}K
+                            <br>Alt: ${star.alt.toFixed(1)}° Az: ${star.az.toFixed(1)}°
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function tempToColor(temp) {
+            // Approximate color from temperature
+            if (temp > 10000) return '#aabbff';  // Blue-white
+            if (temp > 7500) return '#caddff';   // White
+            if (temp > 6000) return '#fff4e8';   // Yellow-white
+            if (temp > 5000) return '#ffd700';   // Yellow
+            if (temp > 4000) return '#ffaa00';   // Orange
+            return '#ff6644';                     // Red
+        }
+
+        function renderSky() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+            const radius = Math.min(w, h) / 2 - 40;
+
+            // Clear and draw background
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw horizon circle
+            ctx.strokeStyle = '#2a2a4e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw altitude circles
+            ctx.strokeStyle = '#1a1a2e';
+            ctx.lineWidth = 1;
+            for (let alt = 30; alt < 90; alt += 30) {
+                const r = radius * (1 - alt / 90);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Draw cardinal directions
+            ctx.fillStyle = '#666';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('N', cx, cy - radius - 10);
+            ctx.fillText('S', cx, cy + radius + 15);
+            ctx.fillText('E', cx - radius - 15, cy + 4);
+            ctx.fillText('W', cx + radius + 15, cy + 4);
+
+            // Draw stars
+            stars.forEach(star => {
+                // Convert alt/az to x/y (azimuth-altitude projection)
+                const altRad = star.alt * Math.PI / 180;
+                const azRad = (star.az - 180) * Math.PI / 180;  // N at top
+
+                const r = radius * (1 - star.alt / 90);
+                const x = cx + r * Math.sin(azRad);
+                const y = cy - r * Math.cos(azRad);
+
+                // Size based on magnitude (brighter = bigger)
+                const size = Math.max(2, 8 - star.mag * 1.5);
+
+                // Color based on temperature
+                const color = tempToColor(star.temp);
+
+                // Draw star with glow
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(0.5, color + '88');
+                gradient.addColorStop(1, 'transparent');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, size * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw star core
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw labels for bright stars
+            ctx.fillStyle = '#888';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'left';
+            stars.filter(s => s.mag < 1.5).forEach(star => {
+                const altRad = star.alt * Math.PI / 180;
+                const azRad = (star.az - 180) * Math.PI / 180;
+                const r = radius * (1 - star.alt / 90);
+                const x = cx + r * Math.sin(azRad) + 8;
+                const y = cy - r * Math.cos(azRad) + 3;
+                ctx.fillText(star.name, x, y);
+            });
+        }
+
+        function highlightStar(name) {
+            const star = stars.find(s => s.name === name);
+            if (!star) return;
+
+            // Flash the star
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+            const radius = Math.min(w, h) / 2 - 40;
+
+            const azRad = (star.az - 180) * Math.PI / 180;
+            const r = radius * (1 - star.alt / 90);
+            const x = cx + r * Math.sin(azRad);
+            const y = cy - r * Math.cos(azRad);
+
+            // Draw highlight circle
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Fade out
+            setTimeout(() => renderSky(), 1000);
+        }
+
+        function updateSky() {
+            alert('Sky update with new coordinates requires regenerating the GLDF.\n\n' +
+                  'Run: python scripts/astral_sky_demo.py\n' +
+                  'with updated LAT/LNG values.');
+        }
+
+        function loadFromGeoDB() {
+            window.open('https://trahe.eu/geodb-rs.html', '_blank');
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

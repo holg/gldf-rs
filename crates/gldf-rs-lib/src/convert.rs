@@ -25,14 +25,15 @@
 //! ```
 
 #[cfg(feature = "eulumdat")]
-use eulumdat::{Eulumdat, IesParser};
+use eulumdat::{Eulumdat, GldfPhotometricData, IesData, IesMetadata, IesParser};
 
 use crate::{
     gldf::{
-        Emitter, Emitters, File, Files, FixedLightEmitter, FixedLightSource, FormatVersion,
-        GeneralDefinitions, GldfProduct, Header, LightSourceReference, LightSources, Locale,
-        LocaleFoo, Photometries, Photometry, PhotometryFileReference, PhotometryReference,
-        ProductDefinitions, ProductMetaData, Variant, Variants,
+        DescriptivePhotometry, Emitter, Emitters, File, Files, FixedLightEmitter,
+        FixedLightSource, FormatVersion, GeneralDefinitions, GldfProduct, HalfPeakDivergence,
+        Header, LightSourceReference, LightSources, Locale, LocaleFoo, Photometries, Photometry,
+        PhotometryFileReference, PhotometryReference, ProductDefinitions, ProductMetaData,
+        TenthPeakDivergence, UGR4H8H705020LQ, Variant, Variants,
     },
     BufFile, FileBufGldf,
 };
@@ -60,6 +61,14 @@ pub struct LdtMetadata {
     pub symmetry: Option<String>,
     /// Measurement report number.
     pub measurement_report: Option<String>,
+
+    // === IES LM-63-19 Specific Fields ===
+    /// IES-specific metadata (test lab, file generation type, etc.)
+    #[cfg(feature = "eulumdat")]
+    pub ies_metadata: Option<IesMetadata>,
+    /// Calculated photometric properties for GLDF DescriptivePhotometry
+    #[cfg(feature = "eulumdat")]
+    pub photometric_data: Option<GldfPhotometricData>,
 }
 
 #[cfg(feature = "eulumdat")]
@@ -68,6 +77,9 @@ impl LdtMetadata {
     pub fn from_eulumdat(ldt: &Eulumdat) -> Self {
         // Get first lamp set info if available
         let lamp_set = ldt.lamp_sets.first();
+
+        // Calculate GLDF photometric data
+        let photometric_data = Some(GldfPhotometricData::from_eulumdat(ldt));
 
         Self {
             manufacturer: if !ldt.identification.is_empty() {
@@ -125,7 +137,41 @@ impl LdtMetadata {
             } else {
                 None
             },
+            ies_metadata: None, // Populated by from_ies_data
+            photometric_data,
         }
+    }
+
+    /// Extract metadata from parsed IES data, including LM-63-19 specific fields.
+    ///
+    /// This method extracts additional metadata available in IES files that isn't
+    /// present in EULUMDAT format, such as:
+    /// - File generation type (accredited lab, simulation, etc.)
+    /// - Luminous opening shape and dimensions
+    /// - TILT data
+    /// - Test lab and issue date
+    pub fn from_ies_data(ies: &IesData, ldt: &Eulumdat) -> Self {
+        let mut meta = Self::from_eulumdat(ldt);
+
+        // Override manufacturer from IES if available
+        if !ies.manufacturer.is_empty() {
+            meta.manufacturer = Some(ies.manufacturer.clone());
+        }
+
+        // Override name from IES LUMINAIRE if available
+        if !ies.luminaire.is_empty() {
+            meta.name = ies.luminaire.clone();
+        }
+
+        // Use IES catalog number if available
+        if !ies.luminaire_catalog.is_empty() {
+            meta.luminaire_number = Some(ies.luminaire_catalog.clone());
+        }
+
+        // Add IES-specific metadata
+        meta.ies_metadata = Some(IesMetadata::from_ies_data(ies));
+
+        meta
     }
 }
 
@@ -133,6 +179,12 @@ impl LdtMetadata {
 ///
 /// Parses the photometric file and creates a minimal but valid GLDF structure
 /// containing the photometry data, light source, and emitter definitions.
+///
+/// For IES files, this now extracts LM-63-2019 specific metadata including:
+/// - File generation type (accredited lab, simulation, etc.)
+/// - Luminous opening shape and dimensions
+/// - Test lab and issue date
+/// - Photometric data for DescriptivePhotometry
 ///
 /// # Arguments
 /// * `data` - The raw LDT or IES file bytes
@@ -151,7 +203,7 @@ impl LdtMetadata {
 /// // The GLDF now contains:
 /// // - Header with manufacturer from LDT line 1
 /// // - Files section with the embedded LDT
-/// // - Photometries referencing the file
+/// // - Photometries referencing the file with DescriptivePhotometry
 /// // - LightSources with power/flux data
 /// // - Emitters linking everything together
 /// ```
@@ -161,14 +213,27 @@ pub fn ldt_to_gldf(data: &[u8], filename: &str) -> Result<FileBufGldf, String> {
     let content =
         std::str::from_utf8(data).map_err(|e| format!("Invalid UTF-8 encoding: {:?}", e))?;
 
-    let ldt = if content.trim_start().starts_with("IESNA") {
-        IesParser::parse(content).map_err(|e| format!("IES parse error: {:?}", e))?
+    let is_ies = filename.to_lowercase().ends_with(".ies")
+        || content.trim_start().starts_with("IES")
+        || content.trim_start().starts_with("IESNA");
+
+    let (ldt, ies_data) = if is_ies {
+        // Parse as IES and get both Eulumdat conversion and raw IES data
+        let ies = IesParser::parse_to_ies_data(content)
+            .map_err(|e| format!("IES parse error: {:?}", e))?;
+        let ldt = IesParser::parse(content).map_err(|e| format!("IES parse error: {:?}", e))?;
+        (ldt, Some(ies))
     } else {
-        Eulumdat::parse(content).map_err(|e| format!("LDT parse error: {:?}", e))?
+        let ldt = Eulumdat::parse(content).map_err(|e| format!("LDT parse error: {:?}", e))?;
+        (ldt, None)
     };
 
-    // Extract metadata
-    let meta = LdtMetadata::from_eulumdat(&ldt);
+    // Extract metadata with IES-specific fields if available
+    let meta = if let Some(ies) = &ies_data {
+        LdtMetadata::from_ies_data(ies, &ldt)
+    } else {
+        LdtMetadata::from_eulumdat(&ldt)
+    };
 
     // Build GLDF from metadata
     ldt_metadata_to_gldf(&meta, data, filename)
@@ -207,6 +272,77 @@ pub fn ldt_metadata_to_gldf(
         }],
     };
 
+    // Build DescriptivePhotometry from calculated photometric data
+    #[cfg(feature = "eulumdat")]
+    let descriptive_photometry = meta.photometric_data.as_ref().map(|pd| DescriptivePhotometry {
+        luminaire_luminance: if pd.luminaire_luminance > 0.0 {
+            Some(pd.luminaire_luminance.round() as i32)
+        } else {
+            None
+        },
+        light_output_ratio: if pd.light_output_ratio > 0.0 {
+            Some(pd.light_output_ratio)
+        } else {
+            None
+        },
+        luminous_efficacy: if pd.luminous_efficacy > 0.0 {
+            Some(pd.luminous_efficacy)
+        } else {
+            None
+        },
+        downward_flux_fraction: if pd.downward_flux_fraction > 0.0 {
+            Some(pd.downward_flux_fraction)
+        } else {
+            None
+        },
+        downward_light_output_ratio: if pd.downward_light_output_ratio > 0.0 {
+            Some(pd.downward_light_output_ratio)
+        } else {
+            None
+        },
+        upward_light_output_ratio: if pd.upward_light_output_ratio > 0.0 {
+            Some(pd.upward_light_output_ratio)
+        } else {
+            None
+        },
+        tenth_peak_divergence: Some(TenthPeakDivergence {
+            c0_c180: Some(pd.tenth_peak_divergence.0),
+            c90_c270: Some(pd.tenth_peak_divergence.1),
+        }),
+        half_peak_divergence: Some(HalfPeakDivergence {
+            c0_c180: Some(pd.half_peak_divergence.0),
+            c90_c270: Some(pd.half_peak_divergence.1),
+        }),
+        photometric_code: if !pd.photometric_code.is_empty() {
+            Some(pd.photometric_code.clone())
+        } else {
+            None
+        },
+        cie_flux_code: if !pd.cie_flux_code.is_empty() {
+            Some(pd.cie_flux_code.clone())
+        } else {
+            None
+        },
+        cut_off_angle: if pd.cut_off_angle > 0.0 {
+            Some(pd.cut_off_angle)
+        } else {
+            None
+        },
+        ugr4_h8_h705020_lq: pd.ugr_4h_8h_705020.as_ref().map(|ugr| UGR4H8H705020LQ {
+            x: Some(ugr.crosswise),
+            y: Some(ugr.endwise),
+        }),
+        iesna_light_distribution_definition: None, // Could be populated from IES keywords
+        light_distribution_bug_rating: if !pd.light_distribution_bug_rating.is_empty() {
+            Some(pd.light_distribution_bug_rating.clone())
+        } else {
+            None
+        },
+    });
+
+    #[cfg(not(feature = "eulumdat"))]
+    let descriptive_photometry: Option<DescriptivePhotometry> = None;
+
     // Photometries
     let photometries = Some(Photometries {
         photometry: vec![Photometry {
@@ -214,7 +350,7 @@ pub fn ldt_metadata_to_gldf(
             photometry_file_reference: Some(PhotometryFileReference {
                 file_id: file_id.to_string(),
             }),
-            descriptive_photometry: None,
+            descriptive_photometry,
         }],
     });
 
@@ -360,5 +496,165 @@ mod tests {
         let meta = LdtMetadata::default();
         assert_eq!(meta.name, "");
         assert!(meta.manufacturer.is_none());
+    }
+
+    #[test]
+    fn test_ldt_to_gldf_with_photometric_data() {
+        // Sample LDT content
+        let ldt_content = r#"Test Manufacturer
+1
+1
+1
+0
+3
+5
+0
+Test Luminaire
+LUM-001
+test.ldt
+2024-01-01
+100
+50
+30
+80
+40
+0
+0
+0
+0
+100
+85
+1.0
+0
+1
+1
+LED
+1000
+3000K
+80
+10
+0.5
+0.55
+0.6
+0.65
+0.7
+0.75
+0.8
+0.82
+0.85
+0.88
+0
+0
+45
+90
+100
+80
+50
+"#;
+
+        let result = ldt_to_gldf(ldt_content.as_bytes(), "test.ldt");
+        assert!(result.is_ok());
+
+        let gldf = result.unwrap();
+
+        // Check that manufacturer is set
+        assert_eq!(gldf.gldf.header.manufacturer, "Test Manufacturer");
+
+        // Check that photometry has descriptive_photometry populated
+        let photometries = gldf.gldf.general_definitions.photometries.unwrap();
+        assert!(!photometries.photometry.is_empty());
+
+        let photometry = &photometries.photometry[0];
+        assert!(photometry.descriptive_photometry.is_some());
+
+        let dp = photometry.descriptive_photometry.as_ref().unwrap();
+        // Check that CIE flux code is populated
+        assert!(dp.cie_flux_code.is_some());
+        // Check that light output ratio is populated
+        assert!(dp.light_output_ratio.is_some());
+        assert_eq!(dp.light_output_ratio.unwrap(), 85.0);
+        // Check beam angles are populated
+        assert!(dp.half_peak_divergence.is_some());
+        assert!(dp.tenth_peak_divergence.is_some());
+    }
+
+    #[test]
+    fn test_ies_to_gldf_with_metadata() {
+        // Sample IES content with LM-63-2019 format
+        let ies_content = r#"IES:LM-63-2019
+[TEST] TEST-001
+[TESTLAB] Acme Testing Labs
+[ISSUEDATE] 2024-01-15
+[MANUFAC] Light Corp
+[LUMCAT] LC-100
+[LUMINAIRE] LED Downlight
+[LAMP] LED Module 3000K
+TILT=NONE
+1 1000.0 1.0 3 1 1 2 0.1 0.1 0.0
+1.0 1.10000 10.0
+0 45 90
+0
+100.0
+80.0
+50.0
+"#;
+
+        let result = ldt_to_gldf(ies_content.as_bytes(), "test.ies");
+        assert!(result.is_ok());
+
+        let gldf = result.unwrap();
+
+        // Check manufacturer from IES [MANUFAC]
+        assert_eq!(gldf.gldf.header.manufacturer, "Light Corp");
+
+        // Check metadata has IES-specific data
+        let photometries = gldf.gldf.general_definitions.photometries.unwrap();
+        let photometry = &photometries.photometry[0];
+        assert!(photometry.descriptive_photometry.is_some());
+    }
+
+    #[test]
+    fn test_ies_metadata_from_ies_data() {
+        let ies_content = r#"IES:LM-63-2019
+[TEST] RPT-12345
+[TESTLAB] IES Test Lab
+[ISSUEDATE] 2024-06-01
+[MANUFAC] Test Manufacturer
+[LUMCAT] CAT-001
+TILT=NONE
+1 1000.0 1.0 3 1 1 2 0.15 0.15 0.0
+1.0 1.10000 15.0
+0 45 90
+0
+200.0
+150.0
+100.0
+"#;
+
+        // Parse and extract IES data
+        let ies_data = IesParser::parse_to_ies_data(ies_content).unwrap();
+        let ldt = IesParser::parse(ies_content).unwrap();
+
+        // Create metadata using IES-specific method
+        let meta = LdtMetadata::from_ies_data(&ies_data, &ldt);
+
+        // Verify IES metadata is populated
+        assert!(meta.ies_metadata.is_some());
+        let ies_meta = meta.ies_metadata.as_ref().unwrap();
+
+        assert_eq!(ies_meta.test_report, "RPT-12345");
+        assert_eq!(ies_meta.test_lab, "IES Test Lab");
+        assert_eq!(ies_meta.issue_date, "2024-06-01");
+        assert!(ies_meta.is_accredited); // 1.10000 = accredited lab
+        assert!(!ies_meta.is_simulation);
+        assert!(!ies_meta.is_scaled);
+        assert!(!ies_meta.is_interpolated);
+
+        // Verify luminous shape (rectangular from positive dimensions)
+        assert!(ies_meta.is_rectangular);
+        assert!(!ies_meta.is_circular);
+
+        // Verify photometric data is also populated
+        assert!(meta.photometric_data.is_some());
     }
 }

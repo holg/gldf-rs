@@ -71,9 +71,18 @@ pub use mapping::{
     EmitterRenderData, L3dLdtMapping, L3dWithLdt, VariantEmitterData,
 };
 
+/// Version and build information
+pub mod version;
+pub use version::{
+    compute_hash, library_version, BuildVersion, ComponentHashes, FileHashes, VersionStatus,
+};
+
 /// Conversion utilities for creating GLDF from other formats (LDT/IES)
 #[cfg(feature = "eulumdat")]
 pub mod convert;
+
+#[cfg(feature = "hyg")]
+pub mod hyg;
 #[cfg(feature = "eulumdat")]
 pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 

@@ -1,0 +1,24 @@
+/* Minimal GLDF Viewer Styles */
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #f8f9fa;
+    color: #212529;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    html, body {
+        background: #1a1a2e;
+        color: #e8e8e8;
+    }
+
+    .minimal-viewer {
+        background: #1a1a2e;
+    }
+}

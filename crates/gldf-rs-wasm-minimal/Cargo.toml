@@ -1,0 +1,60 @@
+[package]
+name = "gldf-rs-wasm-minimal"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage = "https://gldf.icu"
+description = "Minimal WebAssembly GLDF viewer - thin plugin host that loads functionality from embedded plugins"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[[bin]]
+name = "gldf_minimal"
+path = "src/main.rs"
+
+[features]
+default = []
+
+[dependencies]
+# Core library - minimal, no eulumdat, no heavy processing
+gldf-rs = { workspace = true }
+
+# Error handling
+anyhow.workspace = true
+
+# Minimal utilities
+base64.workspace = true
+futures = "0.3"
+gloo.workspace = true
+
+# WASM
+js-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+yew.workspace = true
+zip.workspace = true
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "File",
+    "DragEvent",
+    "DataTransfer",
+    "HtmlInputElement",
+    "HtmlSelectElement",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
+    "Window",
+    "Document",
+    "HtmlElement",
+    "RequestMode",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true

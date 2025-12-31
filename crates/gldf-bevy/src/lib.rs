@@ -7,11 +7,11 @@
 
 pub mod l3d_loader;
 pub mod scene;
+pub mod star_sky;
 
 use bevy::prelude::*;
-use eulumdat_bevy::camera::CameraPlugin;
-use eulumdat_bevy::lighting::PhotometricLightPlugin;
-use eulumdat_bevy::scene::{ScenePlugin, SceneType};
+use eulumdat_bevy::photometric::PhotometricPlugin;
+use eulumdat_bevy::viewer::{CameraPlugin, ScenePlugin, SceneType};
 pub use eulumdat_bevy::SceneSettings;
 
 /// Resource to store the current GLDF scene data
@@ -40,6 +40,8 @@ pub const LDT_STORAGE_KEY: &str = "gldf_current_ldt";
 pub const EMITTER_CONFIG_KEY: &str = "gldf_emitter_config";
 #[cfg(target_arch = "wasm32")]
 pub const GLDF_TIMESTAMP_KEY: &str = "gldf_timestamp";
+#[cfg(target_arch = "wasm32")]
+pub const STAR_SKY_STORAGE_KEY: &str = "gldf_star_sky_json";
 
 /// Per-emitter configuration from GLDF
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -147,6 +149,25 @@ pub fn get_gldf_timestamp() -> Option<String> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn get_gldf_timestamp() -> Option<String> {
     None
+}
+
+/// Check if star sky data exists in localStorage
+#[cfg(target_arch = "wasm32")]
+pub fn has_star_sky_data() -> bool {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return false,
+    };
+    let storage = match window.local_storage().ok().flatten() {
+        Some(s) => s,
+        None => return false,
+    };
+    storage.get_item(STAR_SKY_STORAGE_KEY).ok().flatten().is_some()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn has_star_sky_data() -> bool {
+    false
 }
 
 /// Poll localStorage for changes
@@ -258,7 +279,7 @@ fn ensure_visible_scene(
 }
 
 /// Run the 3D viewer on a specific canvas element (WASM)
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn run_on_canvas(canvas_selector: &str) {
     console_error_panic_hook::set_once();
@@ -277,18 +298,30 @@ pub fn run_on_canvas(canvas_selector: &str) {
     ));
 
     // Create settings with LDT data
-    // Disable show_luminaire since we have L3D model
+    // Disable show_luminaire and pendulum since we have L3D model
     let has_l3d = l3d_data.is_some();
     let settings = SceneSettings {
         ldt_data: ldt_data.clone(),
         show_luminaire: !has_l3d, // Don't show fake luminaire if we have L3D
+        pendulum_length: if has_l3d { 0.0 } else { 0.3 }, // No pendulum with L3D
         ..default()
+    };
+
+    // Check if we have star sky data (for astral sky demo)
+    let has_star_sky = has_star_sky_data();
+
+    // Use Outdoor scene for star sky (no room walls), Room for luminaires
+    let scene_type = if has_star_sky && !has_l3d {
+        log("[Bevy] Star sky mode - using Outdoor scene");
+        SceneType::Outdoor
+    } else {
+        SceneType::Room
     };
 
     let scene_data = GldfSceneData {
         l3d_data,
         ldt_data,
-        scene_type: SceneType::Room,
+        scene_type,
         emitter_config,
     };
 
@@ -314,11 +347,14 @@ pub fn run_on_canvas(canvas_selector: &str) {
 
     app.add_plugins((CameraPlugin, ScenePlugin, l3d_loader::L3dLoaderPlugin));
 
-    // Only add PhotometricLightPlugin if we don't have L3D with emitters
+    // Only add PhotometricPlugin if we don't have L3D with emitters
     // (L3D loader handles its own lights from LEO positions)
     if !has_l3d {
-        app.add_plugins(PhotometricLightPlugin);
+        app.add_plugins(PhotometricPlugin::<eulumdat::Eulumdat>::default());
     }
+
+    // Add StarSkyPlugin for rendering star sky
+    app.add_plugins(star_sky::StarSkyPlugin);
 
     app.add_systems(Update, ui_controls_system);
     app.add_systems(Update, poll_gldf_changes);
@@ -356,7 +392,7 @@ pub fn run_native() {
         .add_plugins((
             CameraPlugin,
             ScenePlugin,
-            PhotometricLightPlugin,
+            PhotometricPlugin::<eulumdat::Eulumdat>::default(),
             l3d_loader::L3dLoaderPlugin,
         ))
         .add_systems(Update, ui_controls_system)
@@ -365,15 +401,24 @@ pub fn run_native() {
         .run();
 }
 
-#[cfg(target_arch = "wasm32")]
+/// WASM entry point with standalone feature
+#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
 pub fn run_native() {
     run_on_canvas("#bevy-canvas");
 }
 
-/// WASM entry point - exported for manual calling
-#[cfg(target_arch = "wasm32")]
+/// WASM stub without standalone feature
+#[cfg(all(target_arch = "wasm32", not(feature = "standalone")))]
+pub fn run_native() {
+    // No-op when standalone is not enabled
+    log("[Bevy] run_native called but standalone feature not enabled");
+}
+
+/// WASM entry point - exported for manual calling from JavaScript
+/// Use this when embedding gldf-bevy in another WASM app
+#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
-pub fn wasm_start() {
-    log("[Bevy] wasm_start called");
+pub fn start_gldf_viewer() {
+    log("[Bevy] start_gldf_viewer called");
     run_native();
 }

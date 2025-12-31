@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GLDF Viewer - PDF Export</title>
+    <script>
+        // Redirect to main app with pdf=1 parameter
+        // The app will dynamically load typst-loader.js when PDF export is used
+        const currentParams = new URLSearchParams(window.location.search);
+        currentParams.set('pdf', '1');
+        window.location.href = "index.html?" + currentParams.toString();
+    </script>
+</head>
+<body>
+    <p>Redirecting to GLDF Viewer with PDF export enabled...</p>
+</body>
+</html>

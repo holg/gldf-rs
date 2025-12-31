@@ -4,7 +4,7 @@
 //! and adds GLDF-specific scene features.
 
 // Re-export scene types from eulumdat-bevy
-pub use eulumdat_bevy::scene::SceneType;
+pub use eulumdat_bevy::viewer::SceneType;
 
 // Future: Add GLDF-specific scene features here
 // - Scene types based on GLDF mounting information
