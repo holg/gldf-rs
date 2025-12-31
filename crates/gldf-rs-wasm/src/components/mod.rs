@@ -11,6 +11,7 @@ mod ldt_viewer;
 mod light_source_editor;
 mod locale_input;
 mod photometry_editor;
+mod star_sky_viewer;
 mod url_file_viewer;
 mod variant_editor;
 
@@ -26,5 +27,6 @@ pub use light_source_editor::LightSourceEditor;
 #[allow(unused_imports)]
 pub use locale_input::LocaleInput;
 pub use photometry_editor::PhotometryEditor;
+pub use star_sky_viewer::StarSkyViewer;
 pub use url_file_viewer::UrlFileViewer;
 pub use variant_editor::VariantEditor;

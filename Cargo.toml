@@ -8,6 +8,7 @@ members = [
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
+    "crates/gldf-starsky-wasm",
 ]
 
 [workspace.package]
