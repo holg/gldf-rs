@@ -77,6 +77,10 @@ pub mod convert;
 #[cfg(feature = "eulumdat")]
 pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 
+/// IFC (Industry Foundation Classes) integration for BIM interoperability
+pub mod ifc;
+pub use ifc::{IfcLightFixtureData, LightEmissionSource, LightFixtureType};
+
 #[cfg(test)]
 mod tests;
 
