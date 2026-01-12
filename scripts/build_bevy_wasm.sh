@@ -1,9 +1,15 @@
 #!/bin/bash
 # Build gldf-bevy for WASM and copy to gldf-rs-wasm dist folder
+#
+# Usage:
+#   ./scripts/build_bevy_wasm.sh         # Build only
+#   ./scripts/build_bevy_wasm.sh local   # Build and serve locally on port 8052
+#   ./scripts/build_bevy_wasm.sh deploy  # Build for production (same as no args)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+MODE="${1:-build}"
 
 echo "Building gldf-bevy for WASM..."
 
@@ -51,3 +57,20 @@ echo "{\"hash\":\"${HASH}\",\"js\":\"gldf-bevy-viewer-${HASH}.js\",\"wasm\":\"gl
 echo "Bevy WASM built successfully!"
 echo "Output: $BEVY_OUT_DIR/"
 ls -la "$BEVY_OUT_DIR/"
+
+# Handle local/deploy modes
+DIST_DIR="$PROJECT_DIR/crates/gldf-rs-wasm/dist"
+
+if [ "$MODE" = "local" ]; then
+    echo ""
+    echo "=== Starting local server ==="
+    echo "Serving: $DIST_DIR"
+    echo "Open: http://localhost:8052"
+    echo "Press Ctrl+C to stop"
+    echo ""
+    python3 -m http.server 8052 --directory "$DIST_DIR"
+elif [ "$MODE" = "deploy" ]; then
+    echo ""
+    echo "=== Production build complete ==="
+    echo "Deploy contents of: $DIST_DIR"
+fi

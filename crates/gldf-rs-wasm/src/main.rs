@@ -8,6 +8,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use gldf_rs::convert::ldt_to_gldf;
 use gldf_rs::gldf::GldfProduct;
+use gldf_rs::ifc::GldfToIfc;
 use gldf_rs::{BufFile, FileBufGldf};
 use gloo::console;
 use gloo::file::callbacks::FileReader;
@@ -49,6 +50,7 @@ pub enum NavItem {
     Overview,
     RawData,
     FileViewer,
+    Plugins,
     Header,
     Electrical,
     Applications,
@@ -69,6 +71,7 @@ pub enum Msg {
     ExportJson,
     ExportXml,
     ExportGldf,
+    ExportIfc,
     SetDragging(bool),
     LoadDemo,
     DemoLoaded(Result<Vec<u8>, String>),
@@ -309,6 +312,48 @@ impl Component for App {
                                     let _ = web_sys::Url::revoke_object_url(&url);
                                 }
                             }
+                        }
+                    }
+                }
+                false
+            }
+            Msg::ExportIfc => {
+                if let Some(ref gldf) = self.loaded_gldf {
+                    match GldfToIfc::export(&gldf.gldf) {
+                        Ok(ifc_content) => {
+                            console::log!("Exported IFC:", ifc_content.len(), "chars");
+
+                            // Create blob and trigger download
+                            let bytes = ifc_content.as_bytes();
+                            let uint8arr = js_sys::Uint8Array::new(
+                                &unsafe { js_sys::Uint8Array::view(bytes) }.into(),
+                            );
+                            let array = js_sys::Array::new();
+                            array.push(&uint8arr.buffer());
+                            let opts = web_sys::BlobPropertyBag::new();
+                            opts.set_type("application/x-step");
+                            if let Ok(blob) =
+                                web_sys::Blob::new_with_u8_array_sequence_and_options(&array, &opts)
+                            {
+                                if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                                    let window = web_sys::window().unwrap();
+                                    let document = window.document().unwrap();
+                                    if let Ok(a) = document.create_element("a") {
+                                        let _ = a.set_attribute("href", &url);
+                                        let _ = a.set_attribute("download", "exported.ifc");
+                                        let _ = a.set_attribute("style", "display: none");
+                                        let _ = document.body().unwrap().append_child(&a);
+                                        if let Some(html_a) = a.dyn_ref::<web_sys::HtmlElement>() {
+                                            html_a.click();
+                                        }
+                                        let _ = document.body().unwrap().remove_child(&a);
+                                        let _ = web_sys::Url::revoke_object_url(&url);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            console::error!("IFC export error:", e.to_string());
                         }
                     }
                 }
@@ -1082,6 +1127,11 @@ impl App {
                     .unwrap_or(0)
             })
             .unwrap_or(0);
+        let plugins_count = self
+            .loaded_gldf
+            .as_ref()
+            .map(|g| gldf_rs::plugin::PluginManager::discover_plugins(&g.files).len())
+            .unwrap_or(0);
 
         html! {
             <div class="sidebar">
@@ -1098,6 +1148,9 @@ impl App {
                         { self.nav_item(ctx, NavItem::Overview, "📊", "Overview", None, has_file) }
                         { self.nav_item(ctx, NavItem::RawData, "{ }", "Raw Data", None, has_file) }
                         { self.nav_item(ctx, NavItem::FileViewer, "👁", "File Viewer", Some(self.files.len()), has_file) }
+                        if plugins_count > 0 {
+                            { self.nav_item(ctx, NavItem::Plugins, "🔌", "Plugins", Some(plugins_count), has_file) }
+                        }
                     </ul>
                 </div>
 
@@ -1227,6 +1280,7 @@ impl App {
             NavItem::Overview => "Overview",
             NavItem::RawData => "Raw Data",
             NavItem::FileViewer => "File Viewer",
+            NavItem::Plugins => "Plugins",
             NavItem::Header => "Header",
             NavItem::Electrical => "Electrical",
             NavItem::Applications => "Applications",
@@ -1258,6 +1312,9 @@ impl App {
                             <button class="btn btn-success" onclick={ctx.link().callback(|_| Msg::ExportXml)}>
                                 { "Export XML" }
                             </button>
+                            <button class="btn btn-info" onclick={ctx.link().callback(|_| Msg::ExportIfc)} title="Export to IFC (BIM format)">
+                                { "Export IFC" }
+                            </button>
                         }
                         // Always show Clear and Help buttons
                         <button class="btn btn-outline" onclick={ctx.link().callback(|_| Msg::ClearAll)} title="Clear all and start over">
@@ -1276,6 +1333,7 @@ impl App {
                             NavItem::Overview => self.view_overview(),
                             NavItem::RawData => self.view_raw_data(),
                             NavItem::FileViewer => self.view_file_viewer(ctx),
+                            NavItem::Plugins => self.view_plugins(),
                             NavItem::Header => self.view_header_editor(),
                             NavItem::Electrical => self.view_electrical_editor(),
                             NavItem::Applications => self.view_applications_editor(),
@@ -1689,6 +1747,52 @@ impl App {
             <div id="preview-area">
                 { for self.files.iter().map(Self::view_file) }
             </div>
+        }
+    }
+
+    fn view_plugins(&self) -> Html {
+        use crate::components::PluginViewer;
+
+        if let Some(ref gldf) = self.loaded_gldf {
+            let plugins = gldf_rs::plugin::PluginManager::discover_plugins(&gldf.files);
+
+            if plugins.is_empty() {
+                return html! {
+                    <div class="empty-state">
+                        <div class="icon">{ "🔌" }</div>
+                        <h3>{ "No Plugins Found" }</h3>
+                        <p>{ "This GLDF file does not contain any embedded viewer plugins." }</p>
+                    </div>
+                };
+            }
+
+            html! {
+                <div class="plugins-container">
+                    <div class="plugins-info">
+                        <p>{ format!("Found {} plugin(s) in this GLDF file:", plugins.len()) }</p>
+                        <ul class="plugin-list">
+                            { for plugins.iter().map(|p| html! {
+                                <li class="plugin-item">
+                                    <strong>{ &p.manifest.name }</strong>
+                                    <span class="plugin-version">{ format!(" v{}", p.manifest.version) }</span>
+                                    <p class="plugin-description">{ &p.manifest.description }</p>
+                                </li>
+                            })}
+                        </ul>
+                    </div>
+                    <div class="plugin-viewer-container">
+                        <PluginViewer files={gldf.files.clone()} width={800} height={600} />
+                    </div>
+                </div>
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🔌" }</div>
+                    <h3>{ "No File Loaded" }</h3>
+                    <p>{ "Load a GLDF file to view embedded plugins." }</p>
+                </div>
+            }
         }
     }
 

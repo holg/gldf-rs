@@ -120,9 +120,7 @@ impl StarSkyRenderer {
     #[wasm_bindgen]
     pub fn load_from_storage(&mut self, key: &str) -> Result<usize, JsValue> {
         let window = web_sys::window().ok_or("No window")?;
-        let storage = window
-            .local_storage()?
-            .ok_or("No localStorage")?;
+        let storage = window.local_storage()?.ok_or("No localStorage")?;
 
         if let Some(json) = storage.get_item(key)? {
             self.load_json(&json)
@@ -190,9 +188,13 @@ impl StarSkyRenderer {
         self.ctx.fill_text("N", cx, cy - radius - 10.0).unwrap();
         self.ctx.fill_text("S", cx, cy + radius + 15.0).unwrap();
         self.ctx.set_text_align("right");
-        self.ctx.fill_text("E", cx - radius - 8.0, cy + 4.0).unwrap();
+        self.ctx
+            .fill_text("E", cx - radius - 8.0, cy + 4.0)
+            .unwrap();
         self.ctx.set_text_align("left");
-        self.ctx.fill_text("W", cx + radius + 8.0, cy + 4.0).unwrap();
+        self.ctx
+            .fill_text("W", cx + radius + 8.0, cy + 4.0)
+            .unwrap();
 
         // Draw stars
         for star in &self.stars {
@@ -230,7 +232,9 @@ impl StarSkyRenderer {
         // Draw star with glow (radial gradient)
         if let Ok(gradient) = self.ctx.create_radial_gradient(x, y, 0.0, x, y, size * 2.0) {
             gradient.add_color_stop(0.0, &color).unwrap();
-            gradient.add_color_stop(0.5, &format!("{}88", color)).unwrap();
+            gradient
+                .add_color_stop(0.5, &format!("{}88", color))
+                .unwrap();
             gradient.add_color_stop(1.0, "transparent").unwrap();
 
             self.ctx.set_fill_style_canvas_gradient(&gradient);

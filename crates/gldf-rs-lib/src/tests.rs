@@ -376,3 +376,132 @@ fn test_create_new_gldf() {
 
     println!("Create new GLDF test passed!");
 }
+
+/// Test loading GLDF with embedded WASM viewer plugin (star_sky.gldf)
+#[test]
+fn test_star_sky_gldf_with_plugin() {
+    // Load the star_sky.gldf test file
+    let test_file = "../../tests/data/star_sky.gldf";
+
+    // Check if file exists (test may be skipped if not generated)
+    if !std::path::Path::new(test_file).exists() {
+        println!("Skipping test: {} not found", test_file);
+        println!("Generate with: python3 scripts/create_star_sky_test.py");
+        return;
+    }
+
+    let file_buf = fs::read(test_file).expect("Failed to read star_sky.gldf");
+    let loaded =
+        GldfProduct::load_gldf_from_buf_all(file_buf).expect("Failed to parse star_sky.gldf");
+
+    // Verify basic GLDF structure
+    assert_eq!(loaded.gldf.header.manufacturer, "Star Sky Test");
+    println!("Manufacturer: {}", loaded.gldf.header.manufacturer);
+
+    // Check for embedded files
+    println!("Embedded files: {}", loaded.files.len());
+    for file in &loaded.files {
+        println!(
+            "  - {:?}: {} bytes",
+            file.name,
+            file.content.as_ref().map(|c| c.len()).unwrap_or(0)
+        );
+    }
+
+    // Find sky_data.json
+    let sky_data = loaded.files.iter().find(|f| {
+        f.name
+            .as_ref()
+            .map(|n| n.contains("sky_data.json"))
+            .unwrap_or(false)
+    });
+    assert!(sky_data.is_some(), "sky_data.json not found in GLDF");
+
+    // Verify sky_data.json contains star data
+    if let Some(sky_file) = sky_data {
+        let content = sky_file
+            .content
+            .as_ref()
+            .expect("sky_data.json has no content");
+        let json_str = String::from_utf8_lossy(content);
+        assert!(
+            json_str.contains("\"stars\""),
+            "sky_data.json missing stars array"
+        );
+        assert!(
+            json_str.contains("Sirius"),
+            "sky_data.json missing Sirius star"
+        );
+        println!("sky_data.json: {} bytes, contains star data", content.len());
+    }
+
+    // Find viewer plugin manifest
+    let manifest = loaded.files.iter().find(|f| {
+        f.name
+            .as_ref()
+            .map(|n| n.contains("other/viewer/starsky/manifest.json"))
+            .unwrap_or(false)
+    });
+    assert!(
+        manifest.is_some(),
+        "Plugin manifest not found at other/viewer/starsky/manifest.json"
+    );
+
+    // Verify manifest content
+    if let Some(manifest_file) = manifest {
+        let content = manifest_file
+            .content
+            .as_ref()
+            .expect("manifest.json has no content");
+        let json_str = String::from_utf8_lossy(content);
+        assert!(
+            json_str.contains("\"type\": \"starsky\""),
+            "manifest missing type: starsky"
+        );
+        assert!(
+            json_str.contains("gldf_starsky_wasm.js"),
+            "manifest missing js file reference"
+        );
+        assert!(
+            json_str.contains("gldf_starsky_wasm_bg.wasm"),
+            "manifest missing wasm file reference"
+        );
+        println!("Plugin manifest: valid starsky plugin");
+    }
+
+    // Find WASM binary
+    let wasm = loaded.files.iter().find(|f| {
+        f.name
+            .as_ref()
+            .map(|n| n.ends_with(".wasm"))
+            .unwrap_or(false)
+    });
+    assert!(wasm.is_some(), "WASM binary not found in GLDF");
+
+    if let Some(wasm_file) = wasm {
+        let content = wasm_file
+            .content
+            .as_ref()
+            .expect("WASM file has no content");
+        // WASM files start with magic bytes: 0x00 0x61 0x73 0x6D ("\0asm")
+        assert!(content.len() > 4, "WASM file too small");
+        assert_eq!(&content[0..4], b"\0asm", "Invalid WASM magic bytes");
+        println!("WASM binary: {} bytes, valid WASM format", content.len());
+    }
+
+    // Find JS loader
+    let js = loaded.files.iter().find(|f| {
+        f.name
+            .as_ref()
+            .map(|n| n.contains("gldf_starsky_wasm.js"))
+            .unwrap_or(false)
+    });
+    assert!(js.is_some(), "JS loader not found in GLDF");
+
+    println!("\nStar Sky GLDF plugin test passed!");
+    println!("  - GLDF structure: valid");
+    println!("  - Sky data: present");
+    println!("  - Plugin manifest: valid");
+    println!("  - WASM binary: valid");
+    println!("  - JS loader: present");
+}
