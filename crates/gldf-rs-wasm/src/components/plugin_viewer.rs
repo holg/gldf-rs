@@ -213,7 +213,10 @@ async fn load_and_render_plugin(plugin: &Plugin, _canvas_ref: &NodeRef) -> Resul
             .map_err(|e| format!("Invalid UTF-8 in data file: {}", e))?;
 
         local_storage_set(storage_key, &data_str);
-        log!(format!("[PluginViewer] Stored config data as '{}'", storage_key));
+        log!(format!(
+            "[PluginViewer] Stored config data as '{}'",
+            storage_key
+        ));
     }
 
     // 1b. Store LDT data if plugin has it
@@ -229,7 +232,11 @@ async fn load_and_render_plugin(plugin: &Plugin, _canvas_ref: &NodeRef) -> Resul
             .map_err(|e| format!("Invalid UTF-8 in LDT file: {}", e))?;
 
         local_storage_set(ldt_key, &ldt_str);
-        log!(format!("[PluginViewer] Stored LDT data ({} bytes) as '{}'", ldt_str.len(), ldt_key));
+        log!(format!(
+            "[PluginViewer] Stored LDT data ({} bytes) as '{}'",
+            ldt_str.len(),
+            ldt_key
+        ));
     }
 
     // 2. Create blob URLs for JS and WASM
@@ -396,7 +403,10 @@ fn call_plugin_entry(
         // For Canvas 2D plugins (render_from_storage), use canvas ID and storage key
         let result = if entry_point == "run_on_canvas" {
             // Bevy expects CSS selector like "#canvas-id"
-            func.call1(&JsValue::NULL, &JsValue::from_str(&format!("#{}", canvas_id)))
+            func.call1(
+                &JsValue::NULL,
+                &JsValue::from_str(&format!("#{}", canvas_id)),
+            )
         } else {
             // Canvas 2D plugins use ID and storage key
             func.call2(
@@ -411,9 +421,12 @@ fn call_plugin_entry(
             Err(e) => {
                 let error_str = format!("{:?}", e);
                 // Bevy uses exceptions for control flow - ignore these
-                if error_str.contains("Using exceptions for control flow") ||
-                   error_str.contains("don't mind me") {
-                    log!(format!("[PluginViewer] Ignoring control flow exception (Bevy is running)"));
+                if error_str.contains("Using exceptions for control flow")
+                    || error_str.contains("don't mind me")
+                {
+                    log!(format!(
+                        "[PluginViewer] Ignoring control flow exception (Bevy is running)"
+                    ));
                     return Ok(()); // Bevy is running, not an error
                 }
                 return Err(format!("Entry point failed: {:?}", e));

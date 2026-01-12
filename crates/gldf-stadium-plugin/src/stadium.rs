@@ -104,7 +104,10 @@ fn handle_intensity_controls(
         for mut light in photometric_lights.iter_mut() {
             light.intensity_scale *= multiplier;
         }
-        log(&format!("[Stadium] Light intensity: {:.1}x", intensity_scale.0));
+        log(&format!(
+            "[Stadium] Light intensity: {:.1}x",
+            intensity_scale.0
+        ));
     }
 }
 
@@ -171,7 +174,10 @@ fn handle_layout_toggle(
             TowerLayout::FourCorners => TowerLayout::SixWithMiddle,
             TowerLayout::SixWithMiddle => TowerLayout::FourCorners,
         };
-        log(&format!("[Stadium] Switching to {:?} layout", settings.tower_layout));
+        log(&format!(
+            "[Stadium] Switching to {:?} layout",
+            settings.tower_layout
+        ));
 
         // Despawn existing
         for entity in geometry_query.iter() {
@@ -182,7 +188,13 @@ fn handle_layout_toggle(
         }
 
         // Rebuild
-        build_stadium(&mut commands, &mut meshes, &mut materials, &settings, &gldf_data);
+        build_stadium(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &settings,
+            &gldf_data,
+        );
     }
 }
 
@@ -199,12 +211,18 @@ fn setup_stadium(
     // Ambient light - enough to see the stadium
     commands.insert_resource(AmbientLight {
         color: Color::srgb(0.2, 0.2, 0.25),
-        brightness: 800.0,  // Higher for visibility
+        brightness: 800.0, // Higher for visibility
     });
 
     log("[Stadium] Setup: Ambient light configured");
 
-    build_stadium(&mut commands, &mut meshes, &mut materials, &settings, &gldf_data);
+    build_stadium(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &settings,
+        &gldf_data,
+    );
     log("[Stadium] Stadium scene setup complete");
 }
 
@@ -231,7 +249,14 @@ fn build_stadium_with_tilt(
     build_field(commands, meshes, materials, settings);
     build_stands(commands, meshes, materials, settings);
     build_towers_with_tilt(commands, meshes, materials, settings, tilt_degrees);
-    spawn_floodlights_with_tilt(commands, meshes, materials, settings, gldf_data, tilt_degrees);
+    spawn_floodlights_with_tilt(
+        commands,
+        meshes,
+        materials,
+        settings,
+        gldf_data,
+        tilt_degrees,
+    );
 }
 
 /// Build the football field
@@ -249,7 +274,13 @@ fn build_field(
 
     // Field plane
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(settings.field_length, settings.field_width))),
+        Mesh3d(
+            meshes.add(
+                Plane3d::default()
+                    .mesh()
+                    .size(settings.field_length, settings.field_width),
+            ),
+        ),
         MeshMaterial3d(grass),
         Transform::from_xyz(settings.field_length / 2.0, 0.0, settings.field_width / 2.0),
         StadiumGeometry,
@@ -269,7 +300,11 @@ fn build_field(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(line_w, line_h, settings.field_width))),
         MeshMaterial3d(white.clone()),
-        Transform::from_xyz(settings.field_length / 2.0, line_h / 2.0, settings.field_width / 2.0),
+        Transform::from_xyz(
+            settings.field_length / 2.0,
+            line_h / 2.0,
+            settings.field_width / 2.0,
+        ),
         StadiumGeometry,
     ));
 
@@ -337,12 +372,16 @@ fn build_stands(
 
     let fl = settings.field_length;
     let fw = settings.field_width;
-    let stand_width = 20.0;  // How far stands extend from field
-    let stand_offset = 5.0;  // Gap between field and stands
+    let stand_width = 20.0; // How far stands extend from field
+    let stand_offset = 5.0; // Gap between field and stands
 
     // Long sides (along field length) - main tribunes
     for z_side in [-1.0, 1.0] {
-        let z_base = if z_side < 0.0 { -stand_offset } else { fw + stand_offset };
+        let z_base = if z_side < 0.0 {
+            -stand_offset
+        } else {
+            fw + stand_offset
+        };
 
         // Tiered seating - 5 tiers
         for tier in 0..5 {
@@ -373,7 +412,11 @@ fn build_stands(
 
     // Short sides (behind goals) - smaller tribunes
     for x_side in [-1.0, 1.0] {
-        let x_base = if x_side < 0.0 { -stand_offset } else { fl + stand_offset };
+        let x_base = if x_side < 0.0 {
+            -stand_offset
+        } else {
+            fl + stand_offset
+        };
 
         // 3 tiers for goal ends
         for tier in 0..3 {
@@ -418,21 +461,13 @@ fn build_towers_with_tilt(
     });
 
     let positions = get_tower_positions(settings);
-    let field_center = Vec3::new(
-        settings.field_length / 2.0,
-        0.0,
-        settings.field_width / 2.0,
-    );
+    let field_center = Vec3::new(settings.field_length / 2.0, 0.0, settings.field_width / 2.0);
 
     for pos in &positions {
         let pole_top = Vec3::new(pos.x, settings.tower_height, pos.z);
 
         // Calculate horizontal direction toward field (for the arm)
-        let to_field = Vec3::new(
-            field_center.x - pos.x,
-            0.0,
-            field_center.z - pos.z,
-        ).normalize();
+        let to_field = Vec3::new(field_center.x - pos.x, 0.0, field_center.z - pos.z).normalize();
 
         // Tower pole
         commands.spawn((
@@ -452,8 +487,7 @@ fn build_towers_with_tilt(
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(arm_length, 0.5, 0.5))),
             MeshMaterial3d(tower_mat.clone()),
-            Transform::from_translation(arm_pos)
-                .with_rotation(arm_rotation),
+            Transform::from_translation(arm_pos).with_rotation(arm_rotation),
             StadiumGeometry,
         ));
 
@@ -472,8 +506,7 @@ fn build_towers_with_tilt(
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(4.0, 0.4, 2.5))),
             MeshMaterial3d(tower_mat.clone()),
-            Transform::from_translation(platform_pos)
-                .with_rotation(platform_rotation),
+            Transform::from_translation(platform_pos).with_rotation(platform_rotation),
             StadiumGeometry,
         ));
     }
@@ -513,17 +546,16 @@ fn spawn_floodlights_with_tilt(
     tilt_degrees: f32,
 ) {
     let positions = get_tower_positions(settings);
-    let field_center = Vec3::new(
-        settings.field_length / 2.0,
-        0.0,
-        settings.field_width / 2.0,
-    );
+    let field_center = Vec3::new(settings.field_length / 2.0, 0.0, settings.field_width / 2.0);
 
-    let arm_length = 4.0;  // Must match build_towers arm_length
+    let arm_length = 4.0; // Must match build_towers arm_length
 
     // Get light properties from LDT or use defaults
     let (flux, color_temp) = if let Some(ref ldt) = gldf_data.ldt_data {
-        log(&format!("[Stadium] Using LDT data: {} lm", ldt.total_luminous_flux()));
+        log(&format!(
+            "[Stadium] Using LDT data: {} lm",
+            ldt.total_luminous_flux()
+        ));
         (ldt.total_luminous_flux() as f32, 5700.0)
     } else {
         log("[Stadium] No LDT data - using defaults");
@@ -544,11 +576,8 @@ fn spawn_floodlights_with_tilt(
         let pole_top = Vec3::new(pos.x, settings.tower_height, pos.z);
 
         // Calculate horizontal direction toward field
-        let to_field_horizontal = Vec3::new(
-            field_center.x - pos.x,
-            0.0,
-            field_center.z - pos.z,
-        ).normalize();
+        let to_field_horizontal =
+            Vec3::new(field_center.x - pos.x, 0.0, field_center.z - pos.z).normalize();
 
         // Light position at end of arm
         let light_pos = pole_top + to_field_horizontal * arm_length - Vec3::Y * 0.5;
@@ -564,8 +593,7 @@ fn spawn_floodlights_with_tilt(
         // The light direction is -Z after rotation (SpotLight default)
         let light_dir = rotation * (-Vec3::Z);
 
-        let light_transform = Transform::from_translation(light_pos)
-            .with_rotation(rotation);
+        let light_transform = Transform::from_translation(light_pos).with_rotation(rotation);
 
         // Intensity - very high value for stadium floodlights
         // Bevy 0.15 uses physical light units - need higher values
@@ -573,7 +601,9 @@ fn spawn_floodlights_with_tilt(
 
         log(&format!(
             "[Stadium] Creating lights with intensity {} (flux={}, towers={})",
-            intensity, flux, positions.len()
+            intensity,
+            flux,
+            positions.len()
         ));
 
         // Spawn multiple SpotLights for better coverage
@@ -627,31 +657,37 @@ fn spawn_floodlights_with_tilt(
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(3.0, 0.2, 2.0))),
             MeshMaterial3d(emissive_mat.clone()),
-            Transform::from_translation(light_pos - Vec3::Y * 0.4)
-                .with_rotation(rotation),
+            Transform::from_translation(light_pos - Vec3::Y * 0.4).with_rotation(rotation),
             Floodlight,
         ));
 
         log(&format!(
             "[Stadium] Floodlight {} at ({:.1}, {:.1}, {:.1}) dir ({:.2}, {:.2}, {:.2})",
-            i, light_pos.x, light_pos.y, light_pos.z,
-            light_dir.x, light_dir.y, light_dir.z
+            i, light_pos.x, light_pos.y, light_pos.z, light_dir.x, light_dir.y, light_dir.z
         ));
     }
 
-    log(&format!("[Stadium] Spawned {} floodlights", positions.len()));
+    log(&format!(
+        "[Stadium] Spawned {} floodlights",
+        positions.len()
+    ));
 }
 
 /// Parse color temperature from string
 fn parse_color_temperature(s: &str) -> f32 {
-    s.trim().trim_end_matches('K').trim_end_matches('k')
-        .parse().unwrap_or(5700.0)
+    s.trim()
+        .trim_end_matches('K')
+        .trim_end_matches('k')
+        .parse()
+        .unwrap_or(5700.0)
 }
 
 /// Convert Kelvin to RGB color
 fn kelvin_to_rgb(kelvin: f32) -> Color {
     let temp = kelvin / 100.0;
-    let r = if temp <= 66.0 { 1.0 } else {
+    let r = if temp <= 66.0 {
+        1.0
+    } else {
         (329.698727446 * (temp - 60.0).powf(-0.1332047592) / 255.0).clamp(0.0, 1.0)
     };
     let g = if temp <= 66.0 {
@@ -659,7 +695,11 @@ fn kelvin_to_rgb(kelvin: f32) -> Color {
     } else {
         (288.1221695283 * (temp - 60.0).powf(-0.0755148492) / 255.0).clamp(0.0, 1.0)
     };
-    let b = if temp >= 66.0 { 1.0 } else if temp <= 19.0 { 0.0 } else {
+    let b = if temp >= 66.0 {
+        1.0
+    } else if temp <= 19.0 {
+        0.0
+    } else {
         (138.5177312231 * (temp - 10.0).ln() - 305.0447927307).clamp(0.0, 255.0) / 255.0
     };
     Color::srgb(r, g, b)
