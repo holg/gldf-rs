@@ -92,29 +92,25 @@ pub fn load_config_from_storage() -> Option<StadiumSettings> {
 /// Run the stadium viewer with a specific LDT file
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native_with_ldt(ldt_path: Option<&str>) {
-    let ldt_data = ldt_path.and_then(|path| {
-        match std::fs::read_to_string(path) {
-            Ok(content) => {
-                match eulumdat::Eulumdat::parse(&content) {
-                    Ok(ldt) => {
-                        println!("[Stadium] Loaded LDT: {}", path);
-                        println!("[Stadium] Luminaire: {}", ldt.luminaire_name);
-                        println!("[Stadium] Luminous flux: {} lm", ldt.total_luminous_flux());
-                        if let Some(lamp) = ldt.lamp_sets.first() {
-                            println!("[Stadium] Color temp: {}", lamp.color_appearance);
-                        }
-                        Some(ldt)
-                    }
-                    Err(e) => {
-                        eprintln!("[Stadium] Failed to parse LDT: {}", e);
-                        None
-                    }
+    let ldt_data = ldt_path.and_then(|path| match std::fs::read_to_string(path) {
+        Ok(content) => match eulumdat::Eulumdat::parse(&content) {
+            Ok(ldt) => {
+                println!("[Stadium] Loaded LDT: {}", path);
+                println!("[Stadium] Luminaire: {}", ldt.luminaire_name);
+                println!("[Stadium] Luminous flux: {} lm", ldt.total_luminous_flux());
+                if let Some(lamp) = ldt.lamp_sets.first() {
+                    println!("[Stadium] Color temp: {}", lamp.color_appearance);
                 }
+                Some(ldt)
             }
             Err(e) => {
-                eprintln!("[Stadium] Failed to read LDT file: {}", e);
+                eprintln!("[Stadium] Failed to parse LDT: {}", e);
                 None
             }
+        },
+        Err(e) => {
+            eprintln!("[Stadium] Failed to read LDT file: {}", e);
+            None
         }
     });
 
@@ -152,7 +148,10 @@ pub fn run_native() {
 #[wasm_bindgen]
 pub fn run_on_canvas(canvas_selector: &str) {
     console_error_panic_hook::set_once();
-    log(&format!("[Stadium] Starting on canvas: {}", canvas_selector));
+    log(&format!(
+        "[Stadium] Starting on canvas: {}",
+        canvas_selector
+    ));
 
     // Load data from localStorage
     let ldt_data = load_ldt_from_storage();
@@ -213,7 +212,10 @@ pub fn store_ldt_data(ldt_content: &str) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let storage = window.local_storage()?.ok_or("No localStorage")?;
     storage.set_item(STADIUM_LDT_KEY, ldt_content)?;
-    log(&format!("[Stadium] Stored LDT data, {} bytes", ldt_content.len()));
+    log(&format!(
+        "[Stadium] Stored LDT data, {} bytes",
+        ldt_content.len()
+    ));
     Ok(())
 }
 
@@ -224,6 +226,9 @@ pub fn store_config(config_json: &str) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let storage = window.local_storage()?.ok_or("No localStorage")?;
     storage.set_item(STADIUM_CONFIG_KEY, config_json)?;
-    log(&format!("[Stadium] Stored config, {} bytes", config_json.len()));
+    log(&format!(
+        "[Stadium] Stored config, {} bytes",
+        config_json.len()
+    ));
     Ok(())
 }
