@@ -79,7 +79,11 @@ pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 
 /// IFC (Industry Foundation Classes) integration for BIM interoperability
 pub mod ifc;
-pub use ifc::{IfcLightFixtureData, LightEmissionSource, LightFixtureType};
+pub use ifc::{GldfToIfc, LightEmissionSourceEnum, LightFixtureTypeEnum, StepWriter};
+
+/// Plugin system for embedded WASM viewer plugins
+pub mod plugin;
+pub use plugin::{Plugin, PluginManager, PluginManifest};
 
 #[cfg(test)]
 mod tests;
@@ -99,7 +103,7 @@ impl GldfProduct {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BufFile {
     pub name: Option<String>,
     pub content: Option<Vec<u8>>,

@@ -9,9 +9,7 @@ pub mod l3d_loader;
 pub mod scene;
 
 use bevy::prelude::*;
-use eulumdat_bevy::camera::CameraPlugin;
-use eulumdat_bevy::lighting::PhotometricLightPlugin;
-use eulumdat_bevy::scene::{ScenePlugin, SceneType};
+use eulumdat_bevy::viewer::{EulumdatViewerPlugin, SceneType};
 pub use eulumdat_bevy::SceneSettings;
 
 /// Resource to store the current GLDF scene data
@@ -312,13 +310,7 @@ pub fn run_on_canvas(canvas_selector: &str) {
         ..default()
     }));
 
-    app.add_plugins((CameraPlugin, ScenePlugin, l3d_loader::L3dLoaderPlugin));
-
-    // Only add PhotometricLightPlugin if we don't have L3D with emitters
-    // (L3D loader handles its own lights from LEO positions)
-    if !has_l3d {
-        app.add_plugins(PhotometricLightPlugin);
-    }
+    app.add_plugins((EulumdatViewerPlugin::default(), l3d_loader::L3dLoaderPlugin));
 
     app.add_systems(Update, ui_controls_system);
     app.add_systems(Update, poll_gldf_changes);
@@ -353,12 +345,7 @@ pub fn run_native() {
         .insert_resource(settings)
         .insert_resource(scene_data)
         .insert_resource(GldfTimestamp::default())
-        .add_plugins((
-            CameraPlugin,
-            ScenePlugin,
-            PhotometricLightPlugin,
-            l3d_loader::L3dLoaderPlugin,
-        ))
+        .add_plugins((EulumdatViewerPlugin::default(), l3d_loader::L3dLoaderPlugin))
         .add_systems(Update, ui_controls_system)
         .add_systems(Update, poll_gldf_changes)
         .add_systems(Update, ensure_visible_scene)

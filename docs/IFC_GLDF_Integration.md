@@ -173,20 +173,199 @@ GLDF luminaire catalog → gldf-rs → IFC fixtures for BIM models
 IFC building model + GLDF luminaires → Combined model for simulation
 ```
 
+## Fundamental Differences
+
+### 1. Purpose & Scope
+
+| Aspect | GLDF | IFC |
+|--------|------|-----|
+| **Focus** | Complete luminaire product data | Building element in context |
+| **Scope** | Single product, all variants | Many products, positioned in space |
+| **Primary Use** | Manufacturer → Lighting designer | Architect → All trades |
+| **Detail Level** | Deep photometric/electrical data | Minimal lighting properties |
+
+### 2. Data Model Philosophy
+
+**GLDF**: Product-centric
+```
+GldfProduct
+├── Header (manufacturer, version)
+├── GeneralDefinitions
+│   ├── Files (LDT, IES, L3D, images)
+│   ├── LightSources (detailed specs)
+│   ├── Photometries (full distribution)
+│   └── Geometries (3D models)
+├── ProductDefinitions
+│   ├── ProductMetaData
+│   └── Variants (configurations)
+└── Embedded files in ZIP container
+```
+
+**IFC**: Building-centric
+```
+IfcProject
+├── IfcSite
+│   └── IfcBuilding
+│       └── IfcBuildingStorey
+│           └── IfcSpace
+│               └── IfcLightFixture (placed here)
+│                   ├── ObjectPlacement (position in building)
+│                   ├── Representation (simplified geometry)
+│                   └── PropertySets (flat key-value)
+```
+
+### 3. Photometric Data
+
+| GLDF (via LDT/IES) | IFC (IfcLightSourceGoniometric) |
+|--------------------|--------------------------------|
+| Full C-gamma table (thousands of values) | Optional external reference OR simplified inline |
+| Multiple C-planes | Single distribution curve set |
+| Spectral data possible | RGB color only |
+| Detailed lamp data | Basic flux + color temp |
+| Multiple photometries per product | One per light source |
+
+### 4. Geometry Representation
+
+| GLDF (L3D) | IFC |
+|------------|-----|
+| OBJ-based mesh in ZIP | BREP, tessellated, or CSG |
+| Level of Detail (LOD) variants | Single representation |
+| Joints for articulation | Static geometry |
+| Separate electrical/light output parts | Combined or separate |
+
+### 5. Key Conversion Challenges
+
+```
+GLDF → IFC Export:
+┌─────────────────────────────────────────────────────────────┐
+│ Challenge                    │ Solution                     │
+├─────────────────────────────────────────────────────────────┤
+│ No building context          │ Create standalone fixture    │
+│                              │ (user places in BIM)         │
+├─────────────────────────────────────────────────────────────┤
+│ Multiple variants            │ Export each as IfcTypeObject │
+│                              │ OR let user choose one       │
+├─────────────────────────────────────────────────────────────┤
+│ Rich photometry              │ Reference external LDT/IES   │
+│                              │ (IfcExternalReference)       │
+├─────────────────────────────────────────────────────────────┤
+│ L3D geometry                 │ Convert OBJ → tessellated    │
+│                              │ IfcTriangulatedFaceSet       │
+├─────────────────────────────────────────────────────────────┤
+│ Embedded files               │ Extract to filesystem        │
+│                              │ (IFC references external)    │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Challenges
 
 1. **Geometry Conversion**: L3D (GLDF) ↔ BREP/tessellated (IFC) requires complex mesh operations
 2. **Photometric Data**: IFC `IfcLightIntensityDistribution` is simplified compared to full LDT/IES
 3. **Property Set Mapping**: Custom properties need standardized mapping rules
 4. **Version Compatibility**: IFC 2x3 vs IFC4 vs IFC4.3 have different capabilities
+5. **Context Loss**: GLDF is self-contained; IFC expects external file references
+6. **Variant Explosion**: One GLDF with 50 variants → 50 IFC type objects?
+
+## Implementation Strategy
+
+### Option A: Direct STEP Generation (Recommended for MVP)
+
+Write IFC STEP format directly without depending on ifc_rs (which lacks lighting entities):
+
+```rust
+// Generate minimal valid IFC STEP file
+fn gldf_to_ifc_step(gldf: &GldfProduct) -> String {
+    let mut step = StepWriter::new("IFC4");
+
+    // Required entities
+    let project = step.add_project("GLDF Export");
+    let site = step.add_site(project);
+    let building = step.add_building(site);
+    let storey = step.add_storey(building);
+
+    // Light fixture type (from GLDF product)
+    let fixture_type = step.add_light_fixture_type(
+        &gldf.name(),
+        &gldf.manufacturer(),
+        LightFixtureTypeEnum::PointSource,
+    );
+
+    // Light fixture occurrence
+    let fixture = step.add_light_fixture(
+        &format!("{}_001", gldf.name()),
+        fixture_type,
+        storey,
+    );
+
+    // Photometric data reference
+    if let Some(ldt_path) = gldf.get_ldt_path() {
+        step.add_goniometric_source(fixture, ldt_path);
+    }
+
+    step.to_string()
+}
+```
+
+### Option B: IfcOpenShell Python Bridge
+
+Call IfcOpenShell from Rust via PyO3 (gldf-rs-python already exists):
+
+```python
+# Python script called from Rust
+import ifcopenshell
+import ifcopenshell.api
+
+def gldf_to_ifc(gldf_json: str, output_path: str):
+    gldf = json.loads(gldf_json)
+    model = ifcopenshell.file(schema="IFC4")
+
+    # Create hierarchy...
+    light_fixture = ifcopenshell.api.run(
+        "root.create_entity", model,
+        ifc_class="IfcLightFixture",
+        name=gldf["name"]
+    )
+    # Add properties from GLDF...
+
+    model.write(output_path)
+```
+
+### Option C: Contribute to ifc_rs
+
+Add lighting entities to the ifc_rs crate:
+
+```rust
+// Would need to add to ifc_rs:
+// - IfcLightFixture
+// - IfcLightFixtureType
+// - IfcLightSource
+// - IfcLightSourceGoniometric
+// - IfcExternalReference (for LDT/IES)
+// - Pset_LightFixtureTypeCommon
+```
+
+### Recommended Approach
+
+**Phase 1: Direct STEP generation** (minimal dependencies, full control)
+- Write IFC STEP text format directly
+- Include only entities needed for lighting
+- Reference external LDT/IES files
+
+**Phase 2: Validate with IfcOpenShell**
+- Use Python tests to validate generated IFC files
+- Ensure compatibility with BIM tools
+
+**Phase 3: Consider ifc_rs contribution**
+- If community interest, upstream the lighting entities
 
 ## Next Steps
 
-1. Add `ifc_rs` as optional dependency
-2. Implement GLDF → IFC export for basic fixtures
-3. Implement IFC → GLDF import with photometry extraction
-4. Add geometry conversion utilities (L3D ↔ IFC geometry)
+1. Implement STEP text writer for minimal IFC structure
+2. Add IfcLightFixture and IfcLightFixtureType generation
+3. Add IfcLightSourceGoniometric with external LDT reference
+4. Add property set generation (Pset_LightFixtureTypeCommon)
 5. Create CLI tool: `gldf ifc-export input.gldf output.ifc`
+6. Validate with IfcOpenShell and real BIM tools
 
 ## References
 

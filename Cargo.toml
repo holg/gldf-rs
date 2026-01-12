@@ -9,6 +9,7 @@ members = [
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
+    "crates/gldf-stadium-plugin",
 ]
 
 [workspace.package]
@@ -79,11 +80,11 @@ bevy = { version = "0.15", default-features = false, features = [
     "x11",
 ] }
 
-# eulumdat-bevy for lighting plugins
-eulumdat-bevy = "0.3.0"
+# eulumdat-bevy for lighting plugins (use local path due to broken include_str in published version)
+eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 
 # Photometric data
-eulumdat = "0.3.0"
+eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
 l3d_rs = "0.2.3"
 # Unified lighting file conversion (ULD, ROLF -> GLDF) - not published yet
 # light-convert = { path = "../light-other-rs/crates/light-convert" }

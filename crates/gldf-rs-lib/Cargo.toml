@@ -44,3 +44,6 @@ reqwest = { workspace = true, optional = true }
 
 # Photometry parsing (optional)
 eulumdat = { workspace = true, optional = true }
+
+# Date/time for IFC export
+chrono = "0.4"
