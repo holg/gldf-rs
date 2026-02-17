@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- NuGet Package -->
+    <PackageId>Gldf.Net</PackageId>
+    <Version>0.3.3</Version>
+    <Authors>Holger Trahe</Authors>
+    <Description>GLDF (Global Lighting Data Format) library with EULUMDAT photometry, L3D geometry, and IFC/BIM integration. Powered by Rust.</Description>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/holg/gldf-rs</RepositoryUrl>
+    <PackageTags>GLDF;lighting;IFC;BIM;photometry;EULUMDAT;L3D;IES</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <!-- Native library for current platform (dev) -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <None Include="runtimes/osx-arm64/native/libgldf_ffi.dylib" Pack="true" PackagePath="runtimes/osx-arm64/native/" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('linux'))">
+    <None Include="runtimes/linux-x64/native/libgldf_ffi.so" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <None Include="runtimes/win-x64/native/gldf_ffi.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -562,6 +562,11 @@ public protocol GldfEngineProtocol : AnyObject {
     func addFile(id: String, fileName: String, contentType: String, fileType: String) 
     
     /**
+     * Export current GLDF product to IFC STEP format
+     */
+    func exportToIfc() throws  -> String
+    
+    /**
      * Get current applications list
      */
     func getApplications()  -> [String]
@@ -647,6 +652,11 @@ public protocol GldfEngineProtocol : AnyObject {
      * Check if raw archive data is available for file extraction
      */
     func hasArchiveData()  -> Bool
+    
+    /**
+     * Import IFC content and return parsed luminaire data
+     */
+    func importFromIfc(ifcContent: String) throws  -> IfcImportedLuminaire
     
     /**
      * Check if the product has been modified
@@ -869,6 +879,16 @@ open func addFile(id: String, fileName: String, contentType: String, fileType: S
 }
     
     /**
+     * Export current GLDF product to IFC STEP format
+     */
+open func exportToIfc()throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_method_gldfengine_export_to_ifc(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * Get current applications list
      */
 open func getApplications() -> [String] {
@@ -1042,6 +1062,17 @@ open func getVariants() -> [GldfVariant] {
 open func hasArchiveData() -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_gldf_ffi_fn_method_gldfengine_has_archive_data(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Import IFC content and return parsed luminaire data
+     */
+open func importFromIfc(ifcContent: String)throws  -> IfcImportedLuminaire {
+    return try  FfiConverterTypeIfcImportedLuminaire.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_method_gldfengine_import_from_ifc(self.uniffiClonePointer(),
+        FfiConverterString.lower(ifcContent),$0
     )
 })
 }
@@ -2468,6 +2499,1108 @@ public func FfiConverterTypeGldfVariant_lift(_ buf: RustBuffer) throws -> GldfVa
 #endif
 public func FfiConverterTypeGldfVariant_lower(_ value: GldfVariant) -> RustBuffer {
     return FfiConverterTypeGldfVariant.lower(value)
+}
+
+
+/**
+ * Product-level descriptive attributes from IFC
+ */
+public struct IfcDescriptiveAttributes {
+    /**
+     * Electrical safety class (I, II, III)
+     */
+    public var electricalSafetyClass: String?
+    /**
+     * IP code (e.g., IP20, IP65)
+     */
+    public var ipCode: String?
+    /**
+     * Median useful life (e.g., "L80B50 70000h 25°C")
+     */
+    public var medianUsefulLife: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Electrical safety class (I, II, III)
+         */electricalSafetyClass: String?, 
+        /**
+         * IP code (e.g., IP20, IP65)
+         */ipCode: String?, 
+        /**
+         * Median useful life (e.g., "L80B50 70000h 25°C")
+         */medianUsefulLife: String?) {
+        self.electricalSafetyClass = electricalSafetyClass
+        self.ipCode = ipCode
+        self.medianUsefulLife = medianUsefulLife
+    }
+}
+
+
+
+extension IfcDescriptiveAttributes: Equatable, Hashable {
+    public static func ==(lhs: IfcDescriptiveAttributes, rhs: IfcDescriptiveAttributes) -> Bool {
+        if lhs.electricalSafetyClass != rhs.electricalSafetyClass {
+            return false
+        }
+        if lhs.ipCode != rhs.ipCode {
+            return false
+        }
+        if lhs.medianUsefulLife != rhs.medianUsefulLife {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(electricalSafetyClass)
+        hasher.combine(ipCode)
+        hasher.combine(medianUsefulLife)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcDescriptiveAttributes: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcDescriptiveAttributes {
+        return
+            try IfcDescriptiveAttributes(
+                electricalSafetyClass: FfiConverterOptionString.read(from: &buf), 
+                ipCode: FfiConverterOptionString.read(from: &buf), 
+                medianUsefulLife: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcDescriptiveAttributes, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.electricalSafetyClass, into: &buf)
+        FfiConverterOptionString.write(value.ipCode, into: &buf)
+        FfiConverterOptionString.write(value.medianUsefulLife, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcDescriptiveAttributes_lift(_ buf: RustBuffer) throws -> IfcDescriptiveAttributes {
+    return try FfiConverterTypeIfcDescriptiveAttributes.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcDescriptiveAttributes_lower(_ value: IfcDescriptiveAttributes) -> RustBuffer {
+    return FfiConverterTypeIfcDescriptiveAttributes.lower(value)
+}
+
+
+/**
+ * Embedded file from IFC roundtrip (image, sensor, etc.)
+ */
+public struct IfcEmbeddedFile {
+    /**
+     * File type ("image", "sensor", etc.)
+     */
+    public var fileType: String
+    /**
+     * Original filename
+     */
+    public var filename: String
+    /**
+     * Content type (MIME type)
+     */
+    public var contentType: String
+    /**
+     * File content as bytes
+     */
+    public var content: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * File type ("image", "sensor", etc.)
+         */fileType: String, 
+        /**
+         * Original filename
+         */filename: String, 
+        /**
+         * Content type (MIME type)
+         */contentType: String, 
+        /**
+         * File content as bytes
+         */content: Data) {
+        self.fileType = fileType
+        self.filename = filename
+        self.contentType = contentType
+        self.content = content
+    }
+}
+
+
+
+extension IfcEmbeddedFile: Equatable, Hashable {
+    public static func ==(lhs: IfcEmbeddedFile, rhs: IfcEmbeddedFile) -> Bool {
+        if lhs.fileType != rhs.fileType {
+            return false
+        }
+        if lhs.filename != rhs.filename {
+            return false
+        }
+        if lhs.contentType != rhs.contentType {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(fileType)
+        hasher.combine(filename)
+        hasher.combine(contentType)
+        hasher.combine(content)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcEmbeddedFile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcEmbeddedFile {
+        return
+            try IfcEmbeddedFile(
+                fileType: FfiConverterString.read(from: &buf), 
+                filename: FfiConverterString.read(from: &buf), 
+                contentType: FfiConverterString.read(from: &buf), 
+                content: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcEmbeddedFile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.fileType, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+        FfiConverterString.write(value.contentType, into: &buf)
+        FfiConverterData.write(value.content, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcEmbeddedFile_lift(_ buf: RustBuffer) throws -> IfcEmbeddedFile {
+    return try FfiConverterTypeIfcEmbeddedFile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcEmbeddedFile_lower(_ value: IfcEmbeddedFile) -> RustBuffer {
+    return FfiConverterTypeIfcEmbeddedFile.lower(value)
+}
+
+
+/**
+ * Imported light source from IFC
+ */
+public struct IfcImportedLightSource {
+    /**
+     * Source name
+     */
+    public var name: String
+    /**
+     * Correlated color temperature (K)
+     */
+    public var colorTemperature: Double?
+    /**
+     * Luminous flux (lm)
+     */
+    public var luminousFlux: Double?
+    /**
+     * Emission source type (LED, FLUORESCENT, etc.)
+     */
+    public var emissionSource: String?
+    /**
+     * Whether this source has distribution data
+     */
+    public var hasDistribution: Bool
+    /**
+     * Original photometry filename (for roundtrip)
+     */
+    public var photometryFilename: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Source name
+         */name: String, 
+        /**
+         * Correlated color temperature (K)
+         */colorTemperature: Double?, 
+        /**
+         * Luminous flux (lm)
+         */luminousFlux: Double?, 
+        /**
+         * Emission source type (LED, FLUORESCENT, etc.)
+         */emissionSource: String?, 
+        /**
+         * Whether this source has distribution data
+         */hasDistribution: Bool, 
+        /**
+         * Original photometry filename (for roundtrip)
+         */photometryFilename: String?) {
+        self.name = name
+        self.colorTemperature = colorTemperature
+        self.luminousFlux = luminousFlux
+        self.emissionSource = emissionSource
+        self.hasDistribution = hasDistribution
+        self.photometryFilename = photometryFilename
+    }
+}
+
+
+
+extension IfcImportedLightSource: Equatable, Hashable {
+    public static func ==(lhs: IfcImportedLightSource, rhs: IfcImportedLightSource) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.colorTemperature != rhs.colorTemperature {
+            return false
+        }
+        if lhs.luminousFlux != rhs.luminousFlux {
+            return false
+        }
+        if lhs.emissionSource != rhs.emissionSource {
+            return false
+        }
+        if lhs.hasDistribution != rhs.hasDistribution {
+            return false
+        }
+        if lhs.photometryFilename != rhs.photometryFilename {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(colorTemperature)
+        hasher.combine(luminousFlux)
+        hasher.combine(emissionSource)
+        hasher.combine(hasDistribution)
+        hasher.combine(photometryFilename)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcImportedLightSource: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcImportedLightSource {
+        return
+            try IfcImportedLightSource(
+                name: FfiConverterString.read(from: &buf), 
+                colorTemperature: FfiConverterOptionDouble.read(from: &buf), 
+                luminousFlux: FfiConverterOptionDouble.read(from: &buf), 
+                emissionSource: FfiConverterOptionString.read(from: &buf), 
+                hasDistribution: FfiConverterBool.read(from: &buf), 
+                photometryFilename: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcImportedLightSource, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionDouble.write(value.colorTemperature, into: &buf)
+        FfiConverterOptionDouble.write(value.luminousFlux, into: &buf)
+        FfiConverterOptionString.write(value.emissionSource, into: &buf)
+        FfiConverterBool.write(value.hasDistribution, into: &buf)
+        FfiConverterOptionString.write(value.photometryFilename, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedLightSource_lift(_ buf: RustBuffer) throws -> IfcImportedLightSource {
+    return try FfiConverterTypeIfcImportedLightSource.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedLightSource_lower(_ value: IfcImportedLightSource) -> RustBuffer {
+    return FfiConverterTypeIfcImportedLightSource.lower(value)
+}
+
+
+/**
+ * Imported luminaire data from IFC file
+ */
+public struct IfcImportedLuminaire {
+    /**
+     * Product name
+     */
+    public var name: String
+    /**
+     * Description
+     */
+    public var description: String?
+    /**
+     * Manufacturer name
+     */
+    public var manufacturer: String?
+    /**
+     * Model/article number
+     */
+    public var modelReference: String?
+    /**
+     * Variants (one per IFCLIGHTFIXTURETYPE)
+     */
+    public var variants: [IfcImportedVariant]
+    /**
+     * Product-level descriptive attributes
+     */
+    public var descriptiveAttributes: IfcDescriptiveAttributes
+    /**
+     * Embedded files (images, sensors) for roundtrip preservation
+     */
+    public var embeddedFiles: [IfcEmbeddedFile]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Product name
+         */name: String, 
+        /**
+         * Description
+         */description: String?, 
+        /**
+         * Manufacturer name
+         */manufacturer: String?, 
+        /**
+         * Model/article number
+         */modelReference: String?, 
+        /**
+         * Variants (one per IFCLIGHTFIXTURETYPE)
+         */variants: [IfcImportedVariant], 
+        /**
+         * Product-level descriptive attributes
+         */descriptiveAttributes: IfcDescriptiveAttributes, 
+        /**
+         * Embedded files (images, sensors) for roundtrip preservation
+         */embeddedFiles: [IfcEmbeddedFile]) {
+        self.name = name
+        self.description = description
+        self.manufacturer = manufacturer
+        self.modelReference = modelReference
+        self.variants = variants
+        self.descriptiveAttributes = descriptiveAttributes
+        self.embeddedFiles = embeddedFiles
+    }
+}
+
+
+
+extension IfcImportedLuminaire: Equatable, Hashable {
+    public static func ==(lhs: IfcImportedLuminaire, rhs: IfcImportedLuminaire) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.manufacturer != rhs.manufacturer {
+            return false
+        }
+        if lhs.modelReference != rhs.modelReference {
+            return false
+        }
+        if lhs.variants != rhs.variants {
+            return false
+        }
+        if lhs.descriptiveAttributes != rhs.descriptiveAttributes {
+            return false
+        }
+        if lhs.embeddedFiles != rhs.embeddedFiles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(description)
+        hasher.combine(manufacturer)
+        hasher.combine(modelReference)
+        hasher.combine(variants)
+        hasher.combine(descriptiveAttributes)
+        hasher.combine(embeddedFiles)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcImportedLuminaire: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcImportedLuminaire {
+        return
+            try IfcImportedLuminaire(
+                name: FfiConverterString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf), 
+                manufacturer: FfiConverterOptionString.read(from: &buf), 
+                modelReference: FfiConverterOptionString.read(from: &buf), 
+                variants: FfiConverterSequenceTypeIfcImportedVariant.read(from: &buf), 
+                descriptiveAttributes: FfiConverterTypeIfcDescriptiveAttributes.read(from: &buf), 
+                embeddedFiles: FfiConverterSequenceTypeIfcEmbeddedFile.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcImportedLuminaire, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.manufacturer, into: &buf)
+        FfiConverterOptionString.write(value.modelReference, into: &buf)
+        FfiConverterSequenceTypeIfcImportedVariant.write(value.variants, into: &buf)
+        FfiConverterTypeIfcDescriptiveAttributes.write(value.descriptiveAttributes, into: &buf)
+        FfiConverterSequenceTypeIfcEmbeddedFile.write(value.embeddedFiles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedLuminaire_lift(_ buf: RustBuffer) throws -> IfcImportedLuminaire {
+    return try FfiConverterTypeIfcImportedLuminaire.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedLuminaire_lower(_ value: IfcImportedLuminaire) -> RustBuffer {
+    return FfiConverterTypeIfcImportedLuminaire.lower(value)
+}
+
+
+/**
+ * Imported properties from IFC property sets
+ */
+public struct IfcImportedProperties {
+    /**
+     * Number of light sources
+     */
+    public var numberOfSources: Int32?
+    /**
+     * Total wattage (W)
+     */
+    public var totalWattage: Double?
+    /**
+     * Mounting type (CEILING, WALL, etc.)
+     */
+    public var mountingType: String?
+    /**
+     * Color temperature (K)
+     */
+    public var colorTemperature: Double?
+    /**
+     * Luminous flux (lm)
+     */
+    public var luminousFlux: Double?
+    /**
+     * Power (W)
+     */
+    public var power: Double?
+    /**
+     * Efficacy (lm/W)
+     */
+    public var efficacy: Double?
+    /**
+     * Color rendering index
+     */
+    public var cri: Int32?
+    /**
+     * Weight (kg)
+     */
+    public var weight: Double?
+    /**
+     * IP code (IEC 60529)
+     */
+    public var ipCode: String?
+    /**
+     * IK code (IEC 62262)
+     */
+    public var ikCode: String?
+    /**
+     * Rated voltage (V)
+     */
+    public var ratedVoltage: Double?
+    /**
+     * Maximum rated voltage (V)
+     */
+    public var ratedVoltageMax: Double?
+    /**
+     * Rated current (A)
+     */
+    public var ratedCurrent: Double?
+    /**
+     * Power factor (cos phi)
+     */
+    public var powerFactor: Double?
+    /**
+     * Nominal frequency min (Hz)
+     */
+    public var nominalFrequencyMin: Double?
+    /**
+     * Nominal frequency max (Hz)
+     */
+    public var nominalFrequencyMax: Double?
+    /**
+     * Number of electrical poles
+     */
+    public var numberOfPoles: Int32?
+    /**
+     * Has protective earth connection
+     */
+    public var hasProtectiveEarth: Bool?
+    /**
+     * Insulation standard class (CLASS0, CLASSI, CLASSII, CLASSIII)
+     */
+    public var insulationStandardClass: String?
+    /**
+     * Heat dissipation (W)
+     */
+    public var heatDissipation: Double?
+    /**
+     * Nominal power consumption (W)
+     */
+    public var nominalPowerConsumption: Double?
+    /**
+     * Electrical safety class (I, II, III)
+     */
+    public var electricalSafetyClass: String?
+    /**
+     * Median useful life
+     */
+    public var medianUsefulLife: String?
+    /**
+     * GLDF mounting type (Ceiling, Wall, Ground, etc.)
+     */
+    public var gldfMountingType: String?
+    /**
+     * Recessed depth (mm)
+     */
+    public var recessedDepth: Double?
+    /**
+     * Maintenance factor (0.0-1.0)
+     */
+    public var maintenanceFactor: Double?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Number of light sources
+         */numberOfSources: Int32?, 
+        /**
+         * Total wattage (W)
+         */totalWattage: Double?, 
+        /**
+         * Mounting type (CEILING, WALL, etc.)
+         */mountingType: String?, 
+        /**
+         * Color temperature (K)
+         */colorTemperature: Double?, 
+        /**
+         * Luminous flux (lm)
+         */luminousFlux: Double?, 
+        /**
+         * Power (W)
+         */power: Double?, 
+        /**
+         * Efficacy (lm/W)
+         */efficacy: Double?, 
+        /**
+         * Color rendering index
+         */cri: Int32?, 
+        /**
+         * Weight (kg)
+         */weight: Double?, 
+        /**
+         * IP code (IEC 60529)
+         */ipCode: String?, 
+        /**
+         * IK code (IEC 62262)
+         */ikCode: String?, 
+        /**
+         * Rated voltage (V)
+         */ratedVoltage: Double?, 
+        /**
+         * Maximum rated voltage (V)
+         */ratedVoltageMax: Double?, 
+        /**
+         * Rated current (A)
+         */ratedCurrent: Double?, 
+        /**
+         * Power factor (cos phi)
+         */powerFactor: Double?, 
+        /**
+         * Nominal frequency min (Hz)
+         */nominalFrequencyMin: Double?, 
+        /**
+         * Nominal frequency max (Hz)
+         */nominalFrequencyMax: Double?, 
+        /**
+         * Number of electrical poles
+         */numberOfPoles: Int32?, 
+        /**
+         * Has protective earth connection
+         */hasProtectiveEarth: Bool?, 
+        /**
+         * Insulation standard class (CLASS0, CLASSI, CLASSII, CLASSIII)
+         */insulationStandardClass: String?, 
+        /**
+         * Heat dissipation (W)
+         */heatDissipation: Double?, 
+        /**
+         * Nominal power consumption (W)
+         */nominalPowerConsumption: Double?, 
+        /**
+         * Electrical safety class (I, II, III)
+         */electricalSafetyClass: String?, 
+        /**
+         * Median useful life
+         */medianUsefulLife: String?, 
+        /**
+         * GLDF mounting type (Ceiling, Wall, Ground, etc.)
+         */gldfMountingType: String?, 
+        /**
+         * Recessed depth (mm)
+         */recessedDepth: Double?, 
+        /**
+         * Maintenance factor (0.0-1.0)
+         */maintenanceFactor: Double?) {
+        self.numberOfSources = numberOfSources
+        self.totalWattage = totalWattage
+        self.mountingType = mountingType
+        self.colorTemperature = colorTemperature
+        self.luminousFlux = luminousFlux
+        self.power = power
+        self.efficacy = efficacy
+        self.cri = cri
+        self.weight = weight
+        self.ipCode = ipCode
+        self.ikCode = ikCode
+        self.ratedVoltage = ratedVoltage
+        self.ratedVoltageMax = ratedVoltageMax
+        self.ratedCurrent = ratedCurrent
+        self.powerFactor = powerFactor
+        self.nominalFrequencyMin = nominalFrequencyMin
+        self.nominalFrequencyMax = nominalFrequencyMax
+        self.numberOfPoles = numberOfPoles
+        self.hasProtectiveEarth = hasProtectiveEarth
+        self.insulationStandardClass = insulationStandardClass
+        self.heatDissipation = heatDissipation
+        self.nominalPowerConsumption = nominalPowerConsumption
+        self.electricalSafetyClass = electricalSafetyClass
+        self.medianUsefulLife = medianUsefulLife
+        self.gldfMountingType = gldfMountingType
+        self.recessedDepth = recessedDepth
+        self.maintenanceFactor = maintenanceFactor
+    }
+}
+
+
+
+extension IfcImportedProperties: Equatable, Hashable {
+    public static func ==(lhs: IfcImportedProperties, rhs: IfcImportedProperties) -> Bool {
+        if lhs.numberOfSources != rhs.numberOfSources {
+            return false
+        }
+        if lhs.totalWattage != rhs.totalWattage {
+            return false
+        }
+        if lhs.mountingType != rhs.mountingType {
+            return false
+        }
+        if lhs.colorTemperature != rhs.colorTemperature {
+            return false
+        }
+        if lhs.luminousFlux != rhs.luminousFlux {
+            return false
+        }
+        if lhs.power != rhs.power {
+            return false
+        }
+        if lhs.efficacy != rhs.efficacy {
+            return false
+        }
+        if lhs.cri != rhs.cri {
+            return false
+        }
+        if lhs.weight != rhs.weight {
+            return false
+        }
+        if lhs.ipCode != rhs.ipCode {
+            return false
+        }
+        if lhs.ikCode != rhs.ikCode {
+            return false
+        }
+        if lhs.ratedVoltage != rhs.ratedVoltage {
+            return false
+        }
+        if lhs.ratedVoltageMax != rhs.ratedVoltageMax {
+            return false
+        }
+        if lhs.ratedCurrent != rhs.ratedCurrent {
+            return false
+        }
+        if lhs.powerFactor != rhs.powerFactor {
+            return false
+        }
+        if lhs.nominalFrequencyMin != rhs.nominalFrequencyMin {
+            return false
+        }
+        if lhs.nominalFrequencyMax != rhs.nominalFrequencyMax {
+            return false
+        }
+        if lhs.numberOfPoles != rhs.numberOfPoles {
+            return false
+        }
+        if lhs.hasProtectiveEarth != rhs.hasProtectiveEarth {
+            return false
+        }
+        if lhs.insulationStandardClass != rhs.insulationStandardClass {
+            return false
+        }
+        if lhs.heatDissipation != rhs.heatDissipation {
+            return false
+        }
+        if lhs.nominalPowerConsumption != rhs.nominalPowerConsumption {
+            return false
+        }
+        if lhs.electricalSafetyClass != rhs.electricalSafetyClass {
+            return false
+        }
+        if lhs.medianUsefulLife != rhs.medianUsefulLife {
+            return false
+        }
+        if lhs.gldfMountingType != rhs.gldfMountingType {
+            return false
+        }
+        if lhs.recessedDepth != rhs.recessedDepth {
+            return false
+        }
+        if lhs.maintenanceFactor != rhs.maintenanceFactor {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(numberOfSources)
+        hasher.combine(totalWattage)
+        hasher.combine(mountingType)
+        hasher.combine(colorTemperature)
+        hasher.combine(luminousFlux)
+        hasher.combine(power)
+        hasher.combine(efficacy)
+        hasher.combine(cri)
+        hasher.combine(weight)
+        hasher.combine(ipCode)
+        hasher.combine(ikCode)
+        hasher.combine(ratedVoltage)
+        hasher.combine(ratedVoltageMax)
+        hasher.combine(ratedCurrent)
+        hasher.combine(powerFactor)
+        hasher.combine(nominalFrequencyMin)
+        hasher.combine(nominalFrequencyMax)
+        hasher.combine(numberOfPoles)
+        hasher.combine(hasProtectiveEarth)
+        hasher.combine(insulationStandardClass)
+        hasher.combine(heatDissipation)
+        hasher.combine(nominalPowerConsumption)
+        hasher.combine(electricalSafetyClass)
+        hasher.combine(medianUsefulLife)
+        hasher.combine(gldfMountingType)
+        hasher.combine(recessedDepth)
+        hasher.combine(maintenanceFactor)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcImportedProperties: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcImportedProperties {
+        return
+            try IfcImportedProperties(
+                numberOfSources: FfiConverterOptionInt32.read(from: &buf), 
+                totalWattage: FfiConverterOptionDouble.read(from: &buf), 
+                mountingType: FfiConverterOptionString.read(from: &buf), 
+                colorTemperature: FfiConverterOptionDouble.read(from: &buf), 
+                luminousFlux: FfiConverterOptionDouble.read(from: &buf), 
+                power: FfiConverterOptionDouble.read(from: &buf), 
+                efficacy: FfiConverterOptionDouble.read(from: &buf), 
+                cri: FfiConverterOptionInt32.read(from: &buf), 
+                weight: FfiConverterOptionDouble.read(from: &buf), 
+                ipCode: FfiConverterOptionString.read(from: &buf), 
+                ikCode: FfiConverterOptionString.read(from: &buf), 
+                ratedVoltage: FfiConverterOptionDouble.read(from: &buf), 
+                ratedVoltageMax: FfiConverterOptionDouble.read(from: &buf), 
+                ratedCurrent: FfiConverterOptionDouble.read(from: &buf), 
+                powerFactor: FfiConverterOptionDouble.read(from: &buf), 
+                nominalFrequencyMin: FfiConverterOptionDouble.read(from: &buf), 
+                nominalFrequencyMax: FfiConverterOptionDouble.read(from: &buf), 
+                numberOfPoles: FfiConverterOptionInt32.read(from: &buf), 
+                hasProtectiveEarth: FfiConverterOptionBool.read(from: &buf), 
+                insulationStandardClass: FfiConverterOptionString.read(from: &buf), 
+                heatDissipation: FfiConverterOptionDouble.read(from: &buf), 
+                nominalPowerConsumption: FfiConverterOptionDouble.read(from: &buf), 
+                electricalSafetyClass: FfiConverterOptionString.read(from: &buf), 
+                medianUsefulLife: FfiConverterOptionString.read(from: &buf), 
+                gldfMountingType: FfiConverterOptionString.read(from: &buf), 
+                recessedDepth: FfiConverterOptionDouble.read(from: &buf), 
+                maintenanceFactor: FfiConverterOptionDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcImportedProperties, into buf: inout [UInt8]) {
+        FfiConverterOptionInt32.write(value.numberOfSources, into: &buf)
+        FfiConverterOptionDouble.write(value.totalWattage, into: &buf)
+        FfiConverterOptionString.write(value.mountingType, into: &buf)
+        FfiConverterOptionDouble.write(value.colorTemperature, into: &buf)
+        FfiConverterOptionDouble.write(value.luminousFlux, into: &buf)
+        FfiConverterOptionDouble.write(value.power, into: &buf)
+        FfiConverterOptionDouble.write(value.efficacy, into: &buf)
+        FfiConverterOptionInt32.write(value.cri, into: &buf)
+        FfiConverterOptionDouble.write(value.weight, into: &buf)
+        FfiConverterOptionString.write(value.ipCode, into: &buf)
+        FfiConverterOptionString.write(value.ikCode, into: &buf)
+        FfiConverterOptionDouble.write(value.ratedVoltage, into: &buf)
+        FfiConverterOptionDouble.write(value.ratedVoltageMax, into: &buf)
+        FfiConverterOptionDouble.write(value.ratedCurrent, into: &buf)
+        FfiConverterOptionDouble.write(value.powerFactor, into: &buf)
+        FfiConverterOptionDouble.write(value.nominalFrequencyMin, into: &buf)
+        FfiConverterOptionDouble.write(value.nominalFrequencyMax, into: &buf)
+        FfiConverterOptionInt32.write(value.numberOfPoles, into: &buf)
+        FfiConverterOptionBool.write(value.hasProtectiveEarth, into: &buf)
+        FfiConverterOptionString.write(value.insulationStandardClass, into: &buf)
+        FfiConverterOptionDouble.write(value.heatDissipation, into: &buf)
+        FfiConverterOptionDouble.write(value.nominalPowerConsumption, into: &buf)
+        FfiConverterOptionString.write(value.electricalSafetyClass, into: &buf)
+        FfiConverterOptionString.write(value.medianUsefulLife, into: &buf)
+        FfiConverterOptionString.write(value.gldfMountingType, into: &buf)
+        FfiConverterOptionDouble.write(value.recessedDepth, into: &buf)
+        FfiConverterOptionDouble.write(value.maintenanceFactor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedProperties_lift(_ buf: RustBuffer) throws -> IfcImportedProperties {
+    return try FfiConverterTypeIfcImportedProperties.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedProperties_lower(_ value: IfcImportedProperties) -> RustBuffer {
+    return FfiConverterTypeIfcImportedProperties.lower(value)
+}
+
+
+/**
+ * Imported variant from IFC (one per IFCLIGHTFIXTURETYPE)
+ */
+public struct IfcImportedVariant {
+    /**
+     * Variant name
+     */
+    public var name: String
+    /**
+     * Description
+     */
+    public var description: String?
+    /**
+     * GLDF variant ID (preserved from Pset_LuminaireVariant)
+     */
+    public var gldfVariantId: String?
+    /**
+     * Light fixture type enum (POINTSOURCE, DIRECTIONSOURCE, etc.)
+     */
+    public var fixtureType: String?
+    /**
+     * Light sources in this variant
+     */
+    public var lightSources: [IfcImportedLightSource]
+    /**
+     * Properties from IFC property sets
+     */
+    public var properties: IfcImportedProperties
+    /**
+     * Whether this variant has geometry data
+     */
+    public var hasGeometry: Bool
+    /**
+     * Number of geometry vertices
+     */
+    public var vertexCount: UInt64
+    /**
+     * Number of geometry triangles
+     */
+    public var triangleCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Variant name
+         */name: String, 
+        /**
+         * Description
+         */description: String?, 
+        /**
+         * GLDF variant ID (preserved from Pset_LuminaireVariant)
+         */gldfVariantId: String?, 
+        /**
+         * Light fixture type enum (POINTSOURCE, DIRECTIONSOURCE, etc.)
+         */fixtureType: String?, 
+        /**
+         * Light sources in this variant
+         */lightSources: [IfcImportedLightSource], 
+        /**
+         * Properties from IFC property sets
+         */properties: IfcImportedProperties, 
+        /**
+         * Whether this variant has geometry data
+         */hasGeometry: Bool, 
+        /**
+         * Number of geometry vertices
+         */vertexCount: UInt64, 
+        /**
+         * Number of geometry triangles
+         */triangleCount: UInt64) {
+        self.name = name
+        self.description = description
+        self.gldfVariantId = gldfVariantId
+        self.fixtureType = fixtureType
+        self.lightSources = lightSources
+        self.properties = properties
+        self.hasGeometry = hasGeometry
+        self.vertexCount = vertexCount
+        self.triangleCount = triangleCount
+    }
+}
+
+
+
+extension IfcImportedVariant: Equatable, Hashable {
+    public static func ==(lhs: IfcImportedVariant, rhs: IfcImportedVariant) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.gldfVariantId != rhs.gldfVariantId {
+            return false
+        }
+        if lhs.fixtureType != rhs.fixtureType {
+            return false
+        }
+        if lhs.lightSources != rhs.lightSources {
+            return false
+        }
+        if lhs.properties != rhs.properties {
+            return false
+        }
+        if lhs.hasGeometry != rhs.hasGeometry {
+            return false
+        }
+        if lhs.vertexCount != rhs.vertexCount {
+            return false
+        }
+        if lhs.triangleCount != rhs.triangleCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(description)
+        hasher.combine(gldfVariantId)
+        hasher.combine(fixtureType)
+        hasher.combine(lightSources)
+        hasher.combine(properties)
+        hasher.combine(hasGeometry)
+        hasher.combine(vertexCount)
+        hasher.combine(triangleCount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfcImportedVariant: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfcImportedVariant {
+        return
+            try IfcImportedVariant(
+                name: FfiConverterString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf), 
+                gldfVariantId: FfiConverterOptionString.read(from: &buf), 
+                fixtureType: FfiConverterOptionString.read(from: &buf), 
+                lightSources: FfiConverterSequenceTypeIfcImportedLightSource.read(from: &buf), 
+                properties: FfiConverterTypeIfcImportedProperties.read(from: &buf), 
+                hasGeometry: FfiConverterBool.read(from: &buf), 
+                vertexCount: FfiConverterUInt64.read(from: &buf), 
+                triangleCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IfcImportedVariant, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.gldfVariantId, into: &buf)
+        FfiConverterOptionString.write(value.fixtureType, into: &buf)
+        FfiConverterSequenceTypeIfcImportedLightSource.write(value.lightSources, into: &buf)
+        FfiConverterTypeIfcImportedProperties.write(value.properties, into: &buf)
+        FfiConverterBool.write(value.hasGeometry, into: &buf)
+        FfiConverterUInt64.write(value.vertexCount, into: &buf)
+        FfiConverterUInt64.write(value.triangleCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedVariant_lift(_ buf: RustBuffer) throws -> IfcImportedVariant {
+    return try FfiConverterTypeIfcImportedVariant.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfcImportedVariant_lower(_ value: IfcImportedVariant) -> RustBuffer {
+    return FfiConverterTypeIfcImportedVariant.lower(value)
 }
 
 
@@ -4067,6 +5200,81 @@ fileprivate struct FfiConverterSequenceTypeGldfVariant: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeIfcEmbeddedFile: FfiConverterRustBuffer {
+    typealias SwiftType = [IfcEmbeddedFile]
+
+    public static func write(_ value: [IfcEmbeddedFile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIfcEmbeddedFile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IfcEmbeddedFile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IfcEmbeddedFile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIfcEmbeddedFile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeIfcImportedLightSource: FfiConverterRustBuffer {
+    typealias SwiftType = [IfcImportedLightSource]
+
+    public static func write(_ value: [IfcImportedLightSource], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIfcImportedLightSource.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IfcImportedLightSource] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IfcImportedLightSource]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIfcImportedLightSource.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeIfcImportedVariant: FfiConverterRustBuffer {
+    typealias SwiftType = [IfcImportedVariant]
+
+    public static func write(_ value: [IfcImportedVariant], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIfcImportedVariant.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IfcImportedVariant] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IfcImportedVariant]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIfcImportedVariant.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeL3dAsset: FfiConverterRustBuffer {
     typealias SwiftType = [L3dAsset]
 
@@ -4244,6 +5452,26 @@ public func gldfToJson(data: Data)throws  -> String {
 })
 }
 /**
+ * Import IFC file content and return luminaire data
+ */
+public func ifcImport(ifcContent: String)throws  -> IfcImportedLuminaire {
+    return try  FfiConverterTypeIfcImportedLuminaire.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_func_ifc_import(
+        FfiConverterString.lower(ifcContent),$0
+    )
+})
+}
+/**
+ * Convert IFC file content to GLDF bytes (ZIP archive)
+ */
+public func ifcToGldfBytes(ifcContent: String)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeGldfError.lift) {
+    uniffi_gldf_ffi_fn_func_ifc_to_gldf_bytes(
+        FfiConverterString.lower(ifcContent),$0
+    )
+})
+}
+/**
  * Parse EULUMDAT (LDT) file from string content
  */
 public func parseEulumdat(content: String) -> EulumdatData {
@@ -4308,6 +5536,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_gldf_ffi_checksum_func_gldf_to_json() != 54896) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gldf_ffi_checksum_func_ifc_import() != 30427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_func_ifc_to_gldf_bytes() != 64122) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gldf_ffi_checksum_func_parse_eulumdat() != 59607) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4324,6 +5558,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_add_file() != 48678) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_export_to_ifc() != 23213) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_get_applications() != 63895) {
@@ -4375,6 +5612,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_has_archive_data() != 16000) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gldf_ffi_checksum_method_gldfengine_import_from_ifc() != 64299) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gldf_ffi_checksum_method_gldfengine_is_modified() != 6972) {

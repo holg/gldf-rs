@@ -1797,3 +1797,282 @@ pub fn get_l3d_asset(l3d_file: &L3dFile, filename: String) -> Option<Vec<u8>> {
         .find(|a| a.name == filename || a.name.ends_with(&format!("/{}", filename)))
         .map(|a| a.data.clone())
 }
+
+// =============================================================================
+// IFC (Industry Foundation Classes) Integration
+// =============================================================================
+
+/// Imported luminaire data from IFC file
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct IfcImportedLuminaire {
+    /// Product name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Manufacturer name
+    pub manufacturer: Option<String>,
+    /// Model/article number
+    pub model_reference: Option<String>,
+    /// Variants (one per IFCLIGHTFIXTURETYPE)
+    pub variants: Vec<IfcImportedVariant>,
+    /// Product-level descriptive attributes
+    pub descriptive_attributes: IfcDescriptiveAttributes,
+    /// Embedded files (images, sensors) for roundtrip preservation
+    pub embedded_files: Vec<IfcEmbeddedFile>,
+}
+
+/// Product-level descriptive attributes from IFC
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct IfcDescriptiveAttributes {
+    /// Electrical safety class (I, II, III)
+    pub electrical_safety_class: Option<String>,
+    /// IP code (e.g., IP20, IP65)
+    pub ip_code: Option<String>,
+    /// Median useful life (e.g., "L80B50 70000h 25°C")
+    pub median_useful_life: Option<String>,
+}
+
+/// Embedded file from IFC roundtrip (image, sensor, etc.)
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct IfcEmbeddedFile {
+    /// File type ("image", "sensor", etc.)
+    pub file_type: String,
+    /// Original filename
+    pub filename: String,
+    /// Content type (MIME type)
+    pub content_type: String,
+    /// File content as bytes
+    pub content: Vec<u8>,
+}
+
+/// Imported variant from IFC (one per IFCLIGHTFIXTURETYPE)
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct IfcImportedVariant {
+    /// Variant name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// GLDF variant ID (preserved from Pset_LuminaireVariant)
+    pub gldf_variant_id: Option<String>,
+    /// Light fixture type enum (POINTSOURCE, DIRECTIONSOURCE, etc.)
+    pub fixture_type: Option<String>,
+    /// Light sources in this variant
+    pub light_sources: Vec<IfcImportedLightSource>,
+    /// Properties from IFC property sets
+    pub properties: IfcImportedProperties,
+    /// Whether this variant has geometry data
+    pub has_geometry: bool,
+    /// Number of geometry vertices
+    pub vertex_count: u64,
+    /// Number of geometry triangles
+    pub triangle_count: u64,
+}
+
+/// Imported light source from IFC
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct IfcImportedLightSource {
+    /// Source name
+    pub name: String,
+    /// Correlated color temperature (K)
+    pub color_temperature: Option<f64>,
+    /// Luminous flux (lm)
+    pub luminous_flux: Option<f64>,
+    /// Emission source type (LED, FLUORESCENT, etc.)
+    pub emission_source: Option<String>,
+    /// Whether this source has distribution data
+    pub has_distribution: bool,
+    /// Original photometry filename (for roundtrip)
+    pub photometry_filename: Option<String>,
+}
+
+/// Imported properties from IFC property sets
+#[derive(uniffi::Record, Debug, Clone, Default)]
+pub struct IfcImportedProperties {
+    /// Number of light sources
+    pub number_of_sources: Option<i32>,
+    /// Total wattage (W)
+    pub total_wattage: Option<f64>,
+    /// Mounting type (CEILING, WALL, etc.)
+    pub mounting_type: Option<String>,
+    /// Color temperature (K)
+    pub color_temperature: Option<f64>,
+    /// Luminous flux (lm)
+    pub luminous_flux: Option<f64>,
+    /// Power (W)
+    pub power: Option<f64>,
+    /// Efficacy (lm/W)
+    pub efficacy: Option<f64>,
+    /// Color rendering index
+    pub cri: Option<i32>,
+    /// Weight (kg)
+    pub weight: Option<f64>,
+    /// IP code (IEC 60529)
+    pub ip_code: Option<String>,
+    /// IK code (IEC 62262)
+    pub ik_code: Option<String>,
+    /// Rated voltage (V)
+    pub rated_voltage: Option<f64>,
+    /// Maximum rated voltage (V)
+    pub rated_voltage_max: Option<f64>,
+    /// Rated current (A)
+    pub rated_current: Option<f64>,
+    /// Power factor (cos phi)
+    pub power_factor: Option<f64>,
+    /// Nominal frequency min (Hz)
+    pub nominal_frequency_min: Option<f64>,
+    /// Nominal frequency max (Hz)
+    pub nominal_frequency_max: Option<f64>,
+    /// Number of electrical poles
+    pub number_of_poles: Option<i32>,
+    /// Has protective earth connection
+    pub has_protective_earth: Option<bool>,
+    /// Insulation standard class (CLASS0, CLASSI, CLASSII, CLASSIII)
+    pub insulation_standard_class: Option<String>,
+    /// Heat dissipation (W)
+    pub heat_dissipation: Option<f64>,
+    /// Nominal power consumption (W)
+    pub nominal_power_consumption: Option<f64>,
+    /// Electrical safety class (I, II, III)
+    pub electrical_safety_class: Option<String>,
+    /// Median useful life
+    pub median_useful_life: Option<String>,
+    /// GLDF mounting type (Ceiling, Wall, Ground, etc.)
+    pub gldf_mounting_type: Option<String>,
+    /// Recessed depth (mm)
+    pub recessed_depth: Option<f64>,
+    /// Maintenance factor (0.0-1.0)
+    pub maintenance_factor: Option<f64>,
+}
+
+// -----------------------------------------------------------------------------
+// IFC Conversion Helpers
+// -----------------------------------------------------------------------------
+
+fn convert_imported_luminaire(src: &gldf_rs::ImportedLuminaire) -> IfcImportedLuminaire {
+    IfcImportedLuminaire {
+        name: src.name.clone(),
+        description: src.description.clone(),
+        manufacturer: src.manufacturer.clone(),
+        model_reference: src.model_reference.clone(),
+        variants: src.variants.iter().map(convert_imported_variant).collect(),
+        descriptive_attributes: IfcDescriptiveAttributes {
+            electrical_safety_class: src.descriptive_attributes.electrical_safety_class.clone(),
+            ip_code: src.descriptive_attributes.ip_code.clone(),
+            median_useful_life: src.descriptive_attributes.median_useful_life.clone(),
+        },
+        embedded_files: src
+            .embedded_files
+            .iter()
+            .map(|f| IfcEmbeddedFile {
+                file_type: f.file_type.clone(),
+                filename: f.filename.clone(),
+                content_type: f.content_type.clone(),
+                content: f.content.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn convert_imported_variant(src: &gldf_rs::ImportedVariant) -> IfcImportedVariant {
+    IfcImportedVariant {
+        name: src.name.clone(),
+        description: src.description.clone(),
+        gldf_variant_id: src.gldf_variant_id.clone(),
+        fixture_type: src.fixture_type.clone(),
+        light_sources: src
+            .light_sources
+            .iter()
+            .map(|ls| IfcImportedLightSource {
+                name: ls.name.clone(),
+                color_temperature: ls.color_temperature,
+                luminous_flux: ls.luminous_flux,
+                emission_source: ls.emission_source.clone(),
+                has_distribution: ls.distribution.is_some(),
+                photometry_filename: ls.photometry_filename.clone(),
+            })
+            .collect(),
+        properties: convert_imported_properties(&src.properties),
+        has_geometry: src.geometry.is_some(),
+        vertex_count: src
+            .geometry
+            .as_ref()
+            .map(|g| g.vertices.len() as u64)
+            .unwrap_or(0),
+        triangle_count: src
+            .geometry
+            .as_ref()
+            .map(|g| g.triangles.len() as u64)
+            .unwrap_or(0),
+    }
+}
+
+fn convert_imported_properties(src: &gldf_rs::ImportedProperties) -> IfcImportedProperties {
+    IfcImportedProperties {
+        number_of_sources: src.number_of_sources,
+        total_wattage: src.total_wattage,
+        mounting_type: src.mounting_type.clone(),
+        color_temperature: src.color_temperature,
+        luminous_flux: src.luminous_flux,
+        power: src.power,
+        efficacy: src.efficacy,
+        cri: src.cri,
+        weight: src.weight,
+        ip_code: src.ip_code.clone(),
+        ik_code: src.ik_code.clone(),
+        rated_voltage: src.rated_voltage,
+        rated_voltage_max: src.rated_voltage_max,
+        rated_current: src.rated_current,
+        power_factor: src.power_factor,
+        nominal_frequency_min: src.nominal_frequency_min,
+        nominal_frequency_max: src.nominal_frequency_max,
+        number_of_poles: src.number_of_poles,
+        has_protective_earth: src.has_protective_earth,
+        insulation_standard_class: src.insulation_standard_class.clone(),
+        heat_dissipation: src.heat_dissipation,
+        nominal_power_consumption: src.nominal_power_consumption,
+        electrical_safety_class: src.electrical_safety_class.clone(),
+        median_useful_life: src.median_useful_life.clone(),
+        gldf_mounting_type: src.gldf_mounting_type.clone(),
+        recessed_depth: src.recessed_depth,
+        maintenance_factor: src.maintenance_factor,
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IFC Export/Import Methods on GldfEngine
+// -----------------------------------------------------------------------------
+
+#[uniffi::export]
+impl GldfEngine {
+    /// Export current GLDF product to IFC STEP format
+    pub fn export_to_ifc(&self) -> Result<String, GldfError> {
+        let product = self.product.read().unwrap();
+        gldf_rs::GldfToIfc::export(&product)
+            .map_err(|e| GldfError::SerializeError { msg: e.to_string() })
+    }
+
+    /// Import IFC content and return parsed luminaire data
+    pub fn import_from_ifc(&self, ifc_content: String) -> Result<IfcImportedLuminaire, GldfError> {
+        let luminaire = gldf_rs::import_ifc(&ifc_content)
+            .map_err(|e| GldfError::ParseError { msg: e.to_string() })?;
+        Ok(convert_imported_luminaire(&luminaire))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// IFC Free Functions
+// -----------------------------------------------------------------------------
+
+/// Import IFC file content and return luminaire data
+#[uniffi::export]
+pub fn ifc_import(ifc_content: String) -> Result<IfcImportedLuminaire, GldfError> {
+    let luminaire = gldf_rs::import_ifc(&ifc_content)
+        .map_err(|e| GldfError::ParseError { msg: e.to_string() })?;
+    Ok(convert_imported_luminaire(&luminaire))
+}
+
+/// Convert IFC file content to GLDF bytes (ZIP archive)
+#[uniffi::export]
+pub fn ifc_to_gldf_bytes(ifc_content: String) -> Result<Vec<u8>, GldfError> {
+    gldf_rs::ifc_to_gldf(&ifc_content).map_err(|e| GldfError::ParseError { msg: e.to_string() })
+}

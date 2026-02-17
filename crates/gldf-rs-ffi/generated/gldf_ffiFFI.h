@@ -287,6 +287,11 @@ void uniffi_gldf_ffi_fn_method_gldfengine_add_application(void*_Nonnull ptr, Rus
 void uniffi_gldf_ffi_fn_method_gldfengine_add_file(void*_Nonnull ptr, RustBuffer id, RustBuffer file_name, RustBuffer content_type, RustBuffer file_type, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_EXPORT_TO_IFC
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_EXPORT_TO_IFC
+RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_export_to_ifc(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_APPLICATIONS
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_GET_APPLICATIONS
 RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_applications(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -370,6 +375,11 @@ RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_get_variants(void*_Nonnull ptr, 
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_HAS_ARCHIVE_DATA
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_HAS_ARCHIVE_DATA
 int8_t uniffi_gldf_ffi_fn_method_gldfengine_has_archive_data(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_IMPORT_FROM_IFC
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_IMPORT_FROM_IFC
+RustBuffer uniffi_gldf_ffi_fn_method_gldfengine_import_from_ifc(void*_Nonnull ptr, RustBuffer ifc_content, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_METHOD_GLDFENGINE_IS_MODIFIED
@@ -496,6 +506,16 @@ RustBuffer uniffi_gldf_ffi_fn_func_gldf_library_version(RustCallStatus *_Nonnull
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_GLDF_TO_JSON
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_GLDF_TO_JSON
 RustBuffer uniffi_gldf_ffi_fn_func_gldf_to_json(RustBuffer data, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_IFC_IMPORT
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_IFC_IMPORT
+RustBuffer uniffi_gldf_ffi_fn_func_ifc_import(RustBuffer ifc_content, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_IFC_TO_GLDF_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_IFC_TO_GLDF_BYTES
+RustBuffer uniffi_gldf_ffi_fn_func_ifc_to_gldf_bytes(RustBuffer ifc_content, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_FN_FUNC_PARSE_EULUMDAT
@@ -816,6 +836,18 @@ uint16_t uniffi_gldf_ffi_checksum_func_gldf_to_json(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_IFC_IMPORT
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_IFC_IMPORT
+uint16_t uniffi_gldf_ffi_checksum_func_ifc_import(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_IFC_TO_GLDF_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_IFC_TO_GLDF_BYTES
+uint16_t uniffi_gldf_ffi_checksum_func_ifc_to_gldf_bytes(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_PARSE_EULUMDAT
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_FUNC_PARSE_EULUMDAT
 uint16_t uniffi_gldf_ffi_checksum_func_parse_eulumdat(void
@@ -849,6 +881,12 @@ uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_add_application(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_FILE
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_ADD_FILE
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_add_file(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_EXPORT_TO_IFC
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_EXPORT_TO_IFC
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_export_to_ifc(void
     
 );
 #endif
@@ -951,6 +989,12 @@ uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_get_variants(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_HAS_ARCHIVE_DATA
 #define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_HAS_ARCHIVE_DATA
 uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_has_archive_data(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_IMPORT_FROM_IFC
+#define UNIFFI_FFIDEF_UNIFFI_GLDF_FFI_CHECKSUM_METHOD_GLDFENGINE_IMPORT_FROM_IFC
+uint16_t uniffi_gldf_ffi_checksum_method_gldfengine_import_from_ifc(void
     
 );
 #endif

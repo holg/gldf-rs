@@ -788,6 +788,42 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -817,15 +853,29 @@ internal interface UniffiLib : Library {
     ): Pointer
     fun uniffi_gldf_ffi_fn_constructor_gldfengine_new_empty(uniffi_out_err: UniffiRustCallStatus, 
     ): Pointer
+    fun uniffi_gldf_ffi_fn_method_gldfengine_add_application(`ptr`: Pointer,`application`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_add_file(`ptr`: Pointer,`id`: RustBuffer.ByValue,`fileName`: RustBuffer.ByValue,`contentType`: RustBuffer.ByValue,`fileType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_export_to_ifc(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_method_gldfengine_get_applications(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_get_archive_file(`ptr`: Pointer,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_method_gldfengine_get_electrical(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_method_gldfengine_get_emitter_data(`ptr`: Pointer,`emitterId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_get_file_content(`ptr`: Pointer,`fileId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_get_file_content_as_string(`ptr`: Pointer,`fileId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_get_files(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_content(`ptr`: Pointer,`geometryId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_file_id(`ptr`: Pointer,`geometryId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_files(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -843,15 +893,23 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_has_archive_data(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    fun uniffi_gldf_ffi_fn_method_gldfengine_import_from_ifc(`ptr`: Pointer,`ifcContent`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_is_modified(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     fun uniffi_gldf_ffi_fn_method_gldfengine_list_archive_files(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_method_gldfengine_mark_saved(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_remove_application(`ptr`: Pointer,`index`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_remove_file(`ptr`: Pointer,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_applications(`ptr`: Pointer,`applications`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_set_author(`ptr`: Pointer,`author`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_constant_light_output(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_set_created_with_application(`ptr`: Pointer,`app`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -859,9 +917,19 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_set_default_language(`ptr`: Pointer,`language`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    fun uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(`ptr`: Pointer,`major`: Int,`minor`: Int,`preRelease`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_electrical_safety_class(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(`ptr`: Pointer,`version`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_ip_code(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_light_distribution(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_set_manufacturer(`ptr`: Pointer,`manufacturer`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_power_factor(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_gldf_ffi_fn_method_gldfengine_set_switching_capacity(`ptr`: Pointer,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_gldf_ffi_fn_method_gldfengine_to_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -876,6 +944,10 @@ internal interface UniffiLib : Library {
     fun uniffi_gldf_ffi_fn_func_gldf_library_version(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_func_gldf_to_json(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_func_ifc_import(`ifcContent`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_gldf_ffi_fn_func_ifc_to_gldf_bytes(`ifcContent`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_gldf_ffi_fn_func_parse_eulumdat(`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1003,6 +1075,10 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_gldf_ffi_checksum_func_gldf_to_json(
     ): Short
+    fun uniffi_gldf_ffi_checksum_func_ifc_import(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_func_ifc_to_gldf_bytes(
+    ): Short
     fun uniffi_gldf_ffi_checksum_func_parse_eulumdat(
     ): Short
     fun uniffi_gldf_ffi_checksum_func_parse_eulumdat_bytes(
@@ -1011,15 +1087,29 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_gldf_ffi_checksum_func_parse_l3d_structure(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_add_application(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_add_file(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_export_to_ifc(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_get_applications(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_get_electrical(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_get_emitter_data(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_get_file_content(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_get_file_content_as_string(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_get_files(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_content(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_file_id(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_files(
     ): Short
@@ -1037,15 +1127,23 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_has_archive_data(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_import_from_ifc(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_is_modified(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_list_archive_files(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_mark_saved(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_remove_application(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_remove_file(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_applications(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_set_author(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_constant_light_output(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_set_created_with_application(
     ): Short
@@ -1053,9 +1151,19 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_set_default_language(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_electrical_safety_class(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version(
     ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_ip_code(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_light_distribution(
+    ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_set_manufacturer(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_power_factor(
+    ): Short
+    fun uniffi_gldf_ffi_checksum_method_gldfengine_set_switching_capacity(
     ): Short
     fun uniffi_gldf_ffi_checksum_method_gldfengine_to_json(
     ): Short
@@ -1097,6 +1205,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_gldf_ffi_checksum_func_gldf_to_json() != 54896.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gldf_ffi_checksum_func_ifc_import() != 30427.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_func_ifc_to_gldf_bytes() != 64122.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gldf_ffi_checksum_func_parse_eulumdat() != 59607.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1109,10 +1223,25 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_gldf_ffi_checksum_func_parse_l3d_structure() != 18908.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_add_application() != 63938.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_add_file() != 48678.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_export_to_ifc() != 23213.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_applications() != 63895.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_archive_file() != 13214.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_electrical() != 61209.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_emitter_data() != 58923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_file_content() != 58159.toShort()) {
@@ -1122,6 +1251,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_files() != 13639.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_content() != 30019.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_file_id() != 40073.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_geometry_files() != 24591.toShort()) {
@@ -1142,10 +1277,13 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_stats() != 47316.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_variants() != 3574.toShort()) {
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_get_variants() != 61898.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_has_archive_data() != 16000.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_import_from_ifc() != 64299.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_is_modified() != 6972.toShort()) {
@@ -1157,10 +1295,19 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_mark_saved() != 7540.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_remove_application() != 46093.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_remove_file() != 14551.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_applications() != 30013.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_author() != 1512.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_constant_light_output() != 9786.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_created_with_application() != 57764.toShort()) {
@@ -1172,10 +1319,25 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_default_language() != 17385.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version() != 5986.toShort()) {
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_electrical_safety_class() != 550.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_format_version() != 21660.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_ip_code() != 20368.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_light_distribution() != 35178.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_manufacturer() != 5472.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_power_factor() != 18230.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_set_switching_capacity() != 28884.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gldf_ffi_checksum_method_gldfengine_to_json() != 53297.toShort()) {
@@ -1245,6 +1407,29 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * @suppress
  * */
 object NoPointer
+
+/**
+ * @suppress
+ */
+public object FfiConverterUInt: FfiConverter<UInt, Int> {
+    override fun lift(value: Int): UInt {
+        return value.toUInt()
+    }
+
+    override fun read(buf: ByteBuffer): UInt {
+        return lift(buf.getInt())
+    }
+
+    override fun lower(value: UInt): Int {
+        return value.toInt()
+    }
+
+    override fun allocationSize(value: UInt) = 4UL
+
+    override fun write(value: UInt, buf: ByteBuffer) {
+        buf.putInt(value.toInt())
+    }
+}
 
 /**
  * @suppress
@@ -1582,14 +1767,39 @@ private class JavaLangRefCleanable(
 public interface GldfEngineInterface {
     
     /**
+     * Add an application
+     */
+    fun `addApplication`(`application`: kotlin.String)
+    
+    /**
      * Add a file definition
      */
     fun `addFile`(`id`: kotlin.String, `fileName`: kotlin.String, `contentType`: kotlin.String, `fileType`: kotlin.String)
     
     /**
+     * Export current GLDF product to IFC STEP format
+     */
+    fun `exportToIfc`(): kotlin.String
+    
+    /**
+     * Get current applications list
+     */
+    fun `getApplications`(): List<kotlin.String>
+    
+    /**
      * Extract raw file from archive by path
      */
     fun `getArchiveFile`(`path`: kotlin.String): kotlin.ByteArray
+    
+    /**
+     * Get electrical attributes
+     */
+    fun `getElectrical`(): GldfElectrical
+    
+    /**
+     * Get emitter data for 3D rendering (photometry info, luminous flux)
+     */
+    fun `getEmitterData`(`emitterId`: kotlin.String): GldfEmitterData?
     
     /**
      * Extract file content by file ID
@@ -1606,6 +1816,17 @@ public interface GldfEngineInterface {
      * Get all file definitions
      */
     fun `getFiles`(): List<GldfFile>
+    
+    /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+    fun `getGeometryContent`(`geometryId`: kotlin.String): GldfFileContent
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */
+    fun `getGeometryFileId`(`geometryId`: kotlin.String): kotlin.String?
     
     /**
      * Get geometry (L3D) files
@@ -1638,7 +1859,7 @@ public interface GldfEngineInterface {
     fun `getStats`(): GldfStats
     
     /**
-     * Get product variants
+     * Get product variants with geometry and emitter references
      */
     fun `getVariants`(): List<GldfVariant>
     
@@ -1646,6 +1867,11 @@ public interface GldfEngineInterface {
      * Check if raw archive data is available for file extraction
      */
     fun `hasArchiveData`(): kotlin.Boolean
+    
+    /**
+     * Import IFC content and return parsed luminaire data
+     */
+    fun `importFromIfc`(`ifcContent`: kotlin.String): IfcImportedLuminaire
     
     /**
      * Check if the product has been modified
@@ -1663,14 +1889,29 @@ public interface GldfEngineInterface {
     fun `markSaved`()
     
     /**
+     * Remove an application by index
+     */
+    fun `removeApplication`(`index`: kotlin.UInt)
+    
+    /**
      * Remove a file by ID
      */
     fun `removeFile`(`id`: kotlin.String)
     
     /**
+     * Set all applications
+     */
+    fun `setApplications`(`applications`: List<kotlin.String>)
+    
+    /**
      * Set the author
      */
     fun `setAuthor`(`author`: kotlin.String)
+    
+    /**
+     * Set constant light output (CLO)
+     */
+    fun `setConstantLightOutput`(`value`: kotlin.Boolean?)
     
     /**
      * Set the created with application
@@ -1688,14 +1929,39 @@ public interface GldfEngineInterface {
     fun `setDefaultLanguage`(`language`: kotlin.String?)
     
     /**
-     * Set the format version
+     * Set electrical safety class (I, II, III or None)
      */
-    fun `setFormatVersion`(`major`: kotlin.Int, `minor`: kotlin.Int, `preRelease`: kotlin.Int)
+    fun `setElectricalSafetyClass`(`value`: kotlin.String?)
+    
+    /**
+     * Set the format version (e.g., "1.0.0-rc.3")
+     */
+    fun `setFormatVersion`(`version`: kotlin.String)
+    
+    /**
+     * Set IP code (ingress protection)
+     */
+    fun `setIpCode`(`value`: kotlin.String?)
+    
+    /**
+     * Set light distribution type
+     */
+    fun `setLightDistribution`(`value`: kotlin.String?)
     
     /**
      * Set the manufacturer
      */
     fun `setManufacturer`(`manufacturer`: kotlin.String)
+    
+    /**
+     * Set power factor (0.0 - 1.0)
+     */
+    fun `setPowerFactor`(`value`: kotlin.Double?)
+    
+    /**
+     * Set switching capacity
+     */
+    fun `setSwitchingCapacity`(`value`: kotlin.String?)
     
     /**
      * Export to JSON string
@@ -1806,6 +2072,20 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
+     * Add an application
+     */override fun `addApplication`(`application`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_add_application(
+        it, FfiConverterString.lower(`application`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Add a file definition
      */override fun `addFile`(`id`: kotlin.String, `fileName`: kotlin.String, `contentType`: kotlin.String, `fileType`: kotlin.String)
         = 
@@ -1820,6 +2100,37 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
+     * Export current GLDF product to IFC STEP format
+     */
+    @Throws(GldfException::class)override fun `exportToIfc`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GldfException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_export_to_ifc(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get current applications list
+     */override fun `getApplications`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_applications(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Extract raw file from archive by path
      */
     @Throws(GldfException::class)override fun `getArchiveFile`(`path`: kotlin.String): kotlin.ByteArray {
@@ -1828,6 +2139,36 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
     uniffiRustCallWithError(GldfException) { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_archive_file(
         it, FfiConverterString.lower(`path`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get electrical attributes
+     */override fun `getElectrical`(): GldfElectrical {
+            return FfiConverterTypeGldfElectrical.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_electrical(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get emitter data for 3D rendering (photometry info, luminous flux)
+     */override fun `getEmitterData`(`emitterId`: kotlin.String): GldfEmitterData? {
+            return FfiConverterOptionalTypeGldfEmitterData.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_emitter_data(
+        it, FfiConverterString.lower(`emitterId`),_status)
 }
     }
     )
@@ -1876,6 +2217,38 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_files(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get geometry file content by geometry ID (from variant)
+     * This resolves: geometry_id -> ModelGeometry -> GeometryFileReference -> File content
+     */
+    @Throws(GldfException::class)override fun `getGeometryContent`(`geometryId`: kotlin.String): GldfFileContent {
+            return FfiConverterTypeGldfFileContent.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GldfException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_content(
+        it, FfiConverterString.lower(`geometryId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the file ID for a geometry ID (resolves ModelGeometry reference)
+     */override fun `getGeometryFileId`(`geometryId`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_get_geometry_file_id(
+        it, FfiConverterString.lower(`geometryId`),_status)
 }
     }
     )
@@ -1974,7 +2347,7 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
-     * Get product variants
+     * Get product variants with geometry and emitter references
      */override fun `getVariants`(): List<GldfVariant> {
             return FfiConverterSequenceTypeGldfVariant.lift(
     callWithPointer {
@@ -1996,6 +2369,22 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_has_archive_data(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Import IFC content and return parsed luminaire data
+     */
+    @Throws(GldfException::class)override fun `importFromIfc`(`ifcContent`: kotlin.String): IfcImportedLuminaire {
+            return FfiConverterTypeIfcImportedLuminaire.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GldfException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_import_from_ifc(
+        it, FfiConverterString.lower(`ifcContent`),_status)
 }
     }
     )
@@ -2049,6 +2438,20 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
+     * Remove an application by index
+     */override fun `removeApplication`(`index`: kotlin.UInt)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_remove_application(
+        it, FfiConverterUInt.lower(`index`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Remove a file by ID
      */override fun `removeFile`(`id`: kotlin.String)
         = 
@@ -2063,6 +2466,20 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
+     * Set all applications
+     */override fun `setApplications`(`applications`: List<kotlin.String>)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_applications(
+        it, FfiConverterSequenceString.lower(`applications`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Set the author
      */override fun `setAuthor`(`author`: kotlin.String)
         = 
@@ -2070,6 +2487,20 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_author(
         it, FfiConverterString.lower(`author`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set constant light output (CLO)
+     */override fun `setConstantLightOutput`(`value`: kotlin.Boolean?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_constant_light_output(
+        it, FfiConverterOptionalBoolean.lower(`value`),_status)
 }
     }
     
@@ -2119,13 +2550,55 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
 
     
     /**
-     * Set the format version
-     */override fun `setFormatVersion`(`major`: kotlin.Int, `minor`: kotlin.Int, `preRelease`: kotlin.Int)
+     * Set electrical safety class (I, II, III or None)
+     */override fun `setElectricalSafetyClass`(`value`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_electrical_safety_class(
+        it, FfiConverterOptionalString.lower(`value`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set the format version (e.g., "1.0.0-rc.3")
+     */override fun `setFormatVersion`(`version`: kotlin.String)
         = 
     callWithPointer {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_format_version(
-        it, FfiConverterInt.lower(`major`),FfiConverterInt.lower(`minor`),FfiConverterInt.lower(`preRelease`),_status)
+        it, FfiConverterString.lower(`version`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set IP code (ingress protection)
+     */override fun `setIpCode`(`value`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_ip_code(
+        it, FfiConverterOptionalString.lower(`value`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set light distribution type
+     */override fun `setLightDistribution`(`value`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_light_distribution(
+        it, FfiConverterOptionalString.lower(`value`),_status)
 }
     }
     
@@ -2140,6 +2613,34 @@ open class GldfEngine: Disposable, AutoCloseable, GldfEngineInterface {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_manufacturer(
         it, FfiConverterString.lower(`manufacturer`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set power factor (0.0 - 1.0)
+     */override fun `setPowerFactor`(`value`: kotlin.Double?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_power_factor(
+        it, FfiConverterOptionalDouble.lower(`value`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set switching capacity
+     */override fun `setSwitchingCapacity`(`value`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_method_gldfengine_set_switching_capacity(
+        it, FfiConverterOptionalString.lower(`value`),_status)
 }
     }
     
@@ -2449,6 +2950,144 @@ public object FfiConverterTypeEulumdatData: FfiConverterRustBuffer<EulumdatData>
 
 
 /**
+ * Electrical attributes from GLDF
+ */
+data class GldfElectrical (
+    var `safetyClass`: kotlin.String?, 
+    var `ipCode`: kotlin.String?, 
+    var `powerFactor`: kotlin.Double?, 
+    var `constantLightOutput`: kotlin.Boolean?, 
+    var `lightDistribution`: kotlin.String?, 
+    var `switchingCapacity`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGldfElectrical: FfiConverterRustBuffer<GldfElectrical> {
+    override fun read(buf: ByteBuffer): GldfElectrical {
+        return GldfElectrical(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GldfElectrical) = (
+            FfiConverterOptionalString.allocationSize(value.`safetyClass`) +
+            FfiConverterOptionalString.allocationSize(value.`ipCode`) +
+            FfiConverterOptionalDouble.allocationSize(value.`powerFactor`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`constantLightOutput`) +
+            FfiConverterOptionalString.allocationSize(value.`lightDistribution`) +
+            FfiConverterOptionalString.allocationSize(value.`switchingCapacity`)
+    )
+
+    override fun write(value: GldfElectrical, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`safetyClass`, buf)
+            FfiConverterOptionalString.write(value.`ipCode`, buf)
+            FfiConverterOptionalDouble.write(value.`powerFactor`, buf)
+            FfiConverterOptionalBoolean.write(value.`constantLightOutput`, buf)
+            FfiConverterOptionalString.write(value.`lightDistribution`, buf)
+            FfiConverterOptionalString.write(value.`switchingCapacity`, buf)
+    }
+}
+
+
+
+/**
+ * Emitter data for 3D rendering
+ */
+data class GldfEmitterData (
+    var `emitterId`: kotlin.String, 
+    /**
+     * Photometry file ID (for IES/LDT lookup)
+     */
+    var `photometryFileId`: kotlin.String?, 
+    /**
+     * Light source type
+     */
+    var `lightSourceType`: kotlin.String, 
+    /**
+     * Rated luminous flux in lumens
+     */
+    var `ratedLuminousFlux`: kotlin.Int?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGldfEmitterData: FfiConverterRustBuffer<GldfEmitterData> {
+    override fun read(buf: ByteBuffer): GldfEmitterData {
+        return GldfEmitterData(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GldfEmitterData) = (
+            FfiConverterString.allocationSize(value.`emitterId`) +
+            FfiConverterOptionalString.allocationSize(value.`photometryFileId`) +
+            FfiConverterString.allocationSize(value.`lightSourceType`) +
+            FfiConverterOptionalInt.allocationSize(value.`ratedLuminousFlux`)
+    )
+
+    override fun write(value: GldfEmitterData, buf: ByteBuffer) {
+            FfiConverterString.write(value.`emitterId`, buf)
+            FfiConverterOptionalString.write(value.`photometryFileId`, buf)
+            FfiConverterString.write(value.`lightSourceType`, buf)
+            FfiConverterOptionalInt.write(value.`ratedLuminousFlux`, buf)
+    }
+}
+
+
+
+/**
+ * Emitter reference in a variant
+ */
+data class GldfEmitterRef (
+    var `emitterId`: kotlin.String, 
+    var `externalName`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGldfEmitterRef: FfiConverterRustBuffer<GldfEmitterRef> {
+    override fun read(buf: ByteBuffer): GldfEmitterRef {
+        return GldfEmitterRef(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GldfEmitterRef) = (
+            FfiConverterString.allocationSize(value.`emitterId`) +
+            FfiConverterOptionalString.allocationSize(value.`externalName`)
+    )
+
+    override fun write(value: GldfEmitterRef, buf: ByteBuffer) {
+            FfiConverterString.write(value.`emitterId`, buf)
+            FfiConverterOptionalString.write(value.`externalName`, buf)
+    }
+}
+
+
+
+/**
  * File definition from GLDF
  */
 data class GldfFile (
@@ -2681,7 +3320,15 @@ public object FfiConverterTypeGldfStats: FfiConverterRustBuffer<GldfStats> {
 data class GldfVariant (
     var `id`: kotlin.String, 
     var `name`: kotlin.String, 
-    var `description`: kotlin.String
+    var `description`: kotlin.String, 
+    /**
+     * Geometry ID reference (if variant has 3D model)
+     */
+    var `geometryId`: kotlin.String?, 
+    /**
+     * List of emitter references with their external names
+     */
+    var `emitterRefs`: List<GldfEmitterRef>
 ) {
     
     companion object
@@ -2696,19 +3343,579 @@ public object FfiConverterTypeGldfVariant: FfiConverterRustBuffer<GldfVariant> {
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeGldfEmitterRef.read(buf),
         )
     }
 
     override fun allocationSize(value: GldfVariant) = (
             FfiConverterString.allocationSize(value.`id`) +
             FfiConverterString.allocationSize(value.`name`) +
-            FfiConverterString.allocationSize(value.`description`)
+            FfiConverterString.allocationSize(value.`description`) +
+            FfiConverterOptionalString.allocationSize(value.`geometryId`) +
+            FfiConverterSequenceTypeGldfEmitterRef.allocationSize(value.`emitterRefs`)
     )
 
     override fun write(value: GldfVariant, buf: ByteBuffer) {
             FfiConverterString.write(value.`id`, buf)
             FfiConverterString.write(value.`name`, buf)
             FfiConverterString.write(value.`description`, buf)
+            FfiConverterOptionalString.write(value.`geometryId`, buf)
+            FfiConverterSequenceTypeGldfEmitterRef.write(value.`emitterRefs`, buf)
+    }
+}
+
+
+
+/**
+ * Product-level descriptive attributes from IFC
+ */
+data class IfcDescriptiveAttributes (
+    /**
+     * Electrical safety class (I, II, III)
+     */
+    var `electricalSafetyClass`: kotlin.String?, 
+    /**
+     * IP code (e.g., IP20, IP65)
+     */
+    var `ipCode`: kotlin.String?, 
+    /**
+     * Median useful life (e.g., "L80B50 70000h 25°C")
+     */
+    var `medianUsefulLife`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcDescriptiveAttributes: FfiConverterRustBuffer<IfcDescriptiveAttributes> {
+    override fun read(buf: ByteBuffer): IfcDescriptiveAttributes {
+        return IfcDescriptiveAttributes(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcDescriptiveAttributes) = (
+            FfiConverterOptionalString.allocationSize(value.`electricalSafetyClass`) +
+            FfiConverterOptionalString.allocationSize(value.`ipCode`) +
+            FfiConverterOptionalString.allocationSize(value.`medianUsefulLife`)
+    )
+
+    override fun write(value: IfcDescriptiveAttributes, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`electricalSafetyClass`, buf)
+            FfiConverterOptionalString.write(value.`ipCode`, buf)
+            FfiConverterOptionalString.write(value.`medianUsefulLife`, buf)
+    }
+}
+
+
+
+/**
+ * Embedded file from IFC roundtrip (image, sensor, etc.)
+ */
+data class IfcEmbeddedFile (
+    /**
+     * File type ("image", "sensor", etc.)
+     */
+    var `fileType`: kotlin.String, 
+    /**
+     * Original filename
+     */
+    var `filename`: kotlin.String, 
+    /**
+     * Content type (MIME type)
+     */
+    var `contentType`: kotlin.String, 
+    /**
+     * File content as bytes
+     */
+    var `content`: kotlin.ByteArray
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcEmbeddedFile: FfiConverterRustBuffer<IfcEmbeddedFile> {
+    override fun read(buf: ByteBuffer): IfcEmbeddedFile {
+        return IfcEmbeddedFile(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcEmbeddedFile) = (
+            FfiConverterString.allocationSize(value.`fileType`) +
+            FfiConverterString.allocationSize(value.`filename`) +
+            FfiConverterString.allocationSize(value.`contentType`) +
+            FfiConverterByteArray.allocationSize(value.`content`)
+    )
+
+    override fun write(value: IfcEmbeddedFile, buf: ByteBuffer) {
+            FfiConverterString.write(value.`fileType`, buf)
+            FfiConverterString.write(value.`filename`, buf)
+            FfiConverterString.write(value.`contentType`, buf)
+            FfiConverterByteArray.write(value.`content`, buf)
+    }
+}
+
+
+
+/**
+ * Imported light source from IFC
+ */
+data class IfcImportedLightSource (
+    /**
+     * Source name
+     */
+    var `name`: kotlin.String, 
+    /**
+     * Correlated color temperature (K)
+     */
+    var `colorTemperature`: kotlin.Double?, 
+    /**
+     * Luminous flux (lm)
+     */
+    var `luminousFlux`: kotlin.Double?, 
+    /**
+     * Emission source type (LED, FLUORESCENT, etc.)
+     */
+    var `emissionSource`: kotlin.String?, 
+    /**
+     * Whether this source has distribution data
+     */
+    var `hasDistribution`: kotlin.Boolean, 
+    /**
+     * Original photometry filename (for roundtrip)
+     */
+    var `photometryFilename`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcImportedLightSource: FfiConverterRustBuffer<IfcImportedLightSource> {
+    override fun read(buf: ByteBuffer): IfcImportedLightSource {
+        return IfcImportedLightSource(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcImportedLightSource) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterOptionalDouble.allocationSize(value.`colorTemperature`) +
+            FfiConverterOptionalDouble.allocationSize(value.`luminousFlux`) +
+            FfiConverterOptionalString.allocationSize(value.`emissionSource`) +
+            FfiConverterBoolean.allocationSize(value.`hasDistribution`) +
+            FfiConverterOptionalString.allocationSize(value.`photometryFilename`)
+    )
+
+    override fun write(value: IfcImportedLightSource, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterOptionalDouble.write(value.`colorTemperature`, buf)
+            FfiConverterOptionalDouble.write(value.`luminousFlux`, buf)
+            FfiConverterOptionalString.write(value.`emissionSource`, buf)
+            FfiConverterBoolean.write(value.`hasDistribution`, buf)
+            FfiConverterOptionalString.write(value.`photometryFilename`, buf)
+    }
+}
+
+
+
+/**
+ * Imported luminaire data from IFC file
+ */
+data class IfcImportedLuminaire (
+    /**
+     * Product name
+     */
+    var `name`: kotlin.String, 
+    /**
+     * Description
+     */
+    var `description`: kotlin.String?, 
+    /**
+     * Manufacturer name
+     */
+    var `manufacturer`: kotlin.String?, 
+    /**
+     * Model/article number
+     */
+    var `modelReference`: kotlin.String?, 
+    /**
+     * Variants (one per IFCLIGHTFIXTURETYPE)
+     */
+    var `variants`: List<IfcImportedVariant>, 
+    /**
+     * Product-level descriptive attributes
+     */
+    var `descriptiveAttributes`: IfcDescriptiveAttributes, 
+    /**
+     * Embedded files (images, sensors) for roundtrip preservation
+     */
+    var `embeddedFiles`: List<IfcEmbeddedFile>
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcImportedLuminaire: FfiConverterRustBuffer<IfcImportedLuminaire> {
+    override fun read(buf: ByteBuffer): IfcImportedLuminaire {
+        return IfcImportedLuminaire(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeIfcImportedVariant.read(buf),
+            FfiConverterTypeIfcDescriptiveAttributes.read(buf),
+            FfiConverterSequenceTypeIfcEmbeddedFile.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcImportedLuminaire) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterOptionalString.allocationSize(value.`description`) +
+            FfiConverterOptionalString.allocationSize(value.`manufacturer`) +
+            FfiConverterOptionalString.allocationSize(value.`modelReference`) +
+            FfiConverterSequenceTypeIfcImportedVariant.allocationSize(value.`variants`) +
+            FfiConverterTypeIfcDescriptiveAttributes.allocationSize(value.`descriptiveAttributes`) +
+            FfiConverterSequenceTypeIfcEmbeddedFile.allocationSize(value.`embeddedFiles`)
+    )
+
+    override fun write(value: IfcImportedLuminaire, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterOptionalString.write(value.`description`, buf)
+            FfiConverterOptionalString.write(value.`manufacturer`, buf)
+            FfiConverterOptionalString.write(value.`modelReference`, buf)
+            FfiConverterSequenceTypeIfcImportedVariant.write(value.`variants`, buf)
+            FfiConverterTypeIfcDescriptiveAttributes.write(value.`descriptiveAttributes`, buf)
+            FfiConverterSequenceTypeIfcEmbeddedFile.write(value.`embeddedFiles`, buf)
+    }
+}
+
+
+
+/**
+ * Imported properties from IFC property sets
+ */
+data class IfcImportedProperties (
+    /**
+     * Number of light sources
+     */
+    var `numberOfSources`: kotlin.Int?, 
+    /**
+     * Total wattage (W)
+     */
+    var `totalWattage`: kotlin.Double?, 
+    /**
+     * Mounting type (CEILING, WALL, etc.)
+     */
+    var `mountingType`: kotlin.String?, 
+    /**
+     * Color temperature (K)
+     */
+    var `colorTemperature`: kotlin.Double?, 
+    /**
+     * Luminous flux (lm)
+     */
+    var `luminousFlux`: kotlin.Double?, 
+    /**
+     * Power (W)
+     */
+    var `power`: kotlin.Double?, 
+    /**
+     * Efficacy (lm/W)
+     */
+    var `efficacy`: kotlin.Double?, 
+    /**
+     * Color rendering index
+     */
+    var `cri`: kotlin.Int?, 
+    /**
+     * Weight (kg)
+     */
+    var `weight`: kotlin.Double?, 
+    /**
+     * IP code (IEC 60529)
+     */
+    var `ipCode`: kotlin.String?, 
+    /**
+     * IK code (IEC 62262)
+     */
+    var `ikCode`: kotlin.String?, 
+    /**
+     * Rated voltage (V)
+     */
+    var `ratedVoltage`: kotlin.Double?, 
+    /**
+     * Maximum rated voltage (V)
+     */
+    var `ratedVoltageMax`: kotlin.Double?, 
+    /**
+     * Rated current (A)
+     */
+    var `ratedCurrent`: kotlin.Double?, 
+    /**
+     * Power factor (cos phi)
+     */
+    var `powerFactor`: kotlin.Double?, 
+    /**
+     * Nominal frequency min (Hz)
+     */
+    var `nominalFrequencyMin`: kotlin.Double?, 
+    /**
+     * Nominal frequency max (Hz)
+     */
+    var `nominalFrequencyMax`: kotlin.Double?, 
+    /**
+     * Number of electrical poles
+     */
+    var `numberOfPoles`: kotlin.Int?, 
+    /**
+     * Has protective earth connection
+     */
+    var `hasProtectiveEarth`: kotlin.Boolean?, 
+    /**
+     * Insulation standard class (CLASS0, CLASSI, CLASSII, CLASSIII)
+     */
+    var `insulationStandardClass`: kotlin.String?, 
+    /**
+     * Heat dissipation (W)
+     */
+    var `heatDissipation`: kotlin.Double?, 
+    /**
+     * Nominal power consumption (W)
+     */
+    var `nominalPowerConsumption`: kotlin.Double?, 
+    /**
+     * Electrical safety class (I, II, III)
+     */
+    var `electricalSafetyClass`: kotlin.String?, 
+    /**
+     * Median useful life
+     */
+    var `medianUsefulLife`: kotlin.String?, 
+    /**
+     * GLDF mounting type (Ceiling, Wall, Ground, etc.)
+     */
+    var `gldfMountingType`: kotlin.String?, 
+    /**
+     * Recessed depth (mm)
+     */
+    var `recessedDepth`: kotlin.Double?, 
+    /**
+     * Maintenance factor (0.0-1.0)
+     */
+    var `maintenanceFactor`: kotlin.Double?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcImportedProperties: FfiConverterRustBuffer<IfcImportedProperties> {
+    override fun read(buf: ByteBuffer): IfcImportedProperties {
+        return IfcImportedProperties(
+            FfiConverterOptionalInt.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalInt.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalInt.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcImportedProperties) = (
+            FfiConverterOptionalInt.allocationSize(value.`numberOfSources`) +
+            FfiConverterOptionalDouble.allocationSize(value.`totalWattage`) +
+            FfiConverterOptionalString.allocationSize(value.`mountingType`) +
+            FfiConverterOptionalDouble.allocationSize(value.`colorTemperature`) +
+            FfiConverterOptionalDouble.allocationSize(value.`luminousFlux`) +
+            FfiConverterOptionalDouble.allocationSize(value.`power`) +
+            FfiConverterOptionalDouble.allocationSize(value.`efficacy`) +
+            FfiConverterOptionalInt.allocationSize(value.`cri`) +
+            FfiConverterOptionalDouble.allocationSize(value.`weight`) +
+            FfiConverterOptionalString.allocationSize(value.`ipCode`) +
+            FfiConverterOptionalString.allocationSize(value.`ikCode`) +
+            FfiConverterOptionalDouble.allocationSize(value.`ratedVoltage`) +
+            FfiConverterOptionalDouble.allocationSize(value.`ratedVoltageMax`) +
+            FfiConverterOptionalDouble.allocationSize(value.`ratedCurrent`) +
+            FfiConverterOptionalDouble.allocationSize(value.`powerFactor`) +
+            FfiConverterOptionalDouble.allocationSize(value.`nominalFrequencyMin`) +
+            FfiConverterOptionalDouble.allocationSize(value.`nominalFrequencyMax`) +
+            FfiConverterOptionalInt.allocationSize(value.`numberOfPoles`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`hasProtectiveEarth`) +
+            FfiConverterOptionalString.allocationSize(value.`insulationStandardClass`) +
+            FfiConverterOptionalDouble.allocationSize(value.`heatDissipation`) +
+            FfiConverterOptionalDouble.allocationSize(value.`nominalPowerConsumption`) +
+            FfiConverterOptionalString.allocationSize(value.`electricalSafetyClass`) +
+            FfiConverterOptionalString.allocationSize(value.`medianUsefulLife`) +
+            FfiConverterOptionalString.allocationSize(value.`gldfMountingType`) +
+            FfiConverterOptionalDouble.allocationSize(value.`recessedDepth`) +
+            FfiConverterOptionalDouble.allocationSize(value.`maintenanceFactor`)
+    )
+
+    override fun write(value: IfcImportedProperties, buf: ByteBuffer) {
+            FfiConverterOptionalInt.write(value.`numberOfSources`, buf)
+            FfiConverterOptionalDouble.write(value.`totalWattage`, buf)
+            FfiConverterOptionalString.write(value.`mountingType`, buf)
+            FfiConverterOptionalDouble.write(value.`colorTemperature`, buf)
+            FfiConverterOptionalDouble.write(value.`luminousFlux`, buf)
+            FfiConverterOptionalDouble.write(value.`power`, buf)
+            FfiConverterOptionalDouble.write(value.`efficacy`, buf)
+            FfiConverterOptionalInt.write(value.`cri`, buf)
+            FfiConverterOptionalDouble.write(value.`weight`, buf)
+            FfiConverterOptionalString.write(value.`ipCode`, buf)
+            FfiConverterOptionalString.write(value.`ikCode`, buf)
+            FfiConverterOptionalDouble.write(value.`ratedVoltage`, buf)
+            FfiConverterOptionalDouble.write(value.`ratedVoltageMax`, buf)
+            FfiConverterOptionalDouble.write(value.`ratedCurrent`, buf)
+            FfiConverterOptionalDouble.write(value.`powerFactor`, buf)
+            FfiConverterOptionalDouble.write(value.`nominalFrequencyMin`, buf)
+            FfiConverterOptionalDouble.write(value.`nominalFrequencyMax`, buf)
+            FfiConverterOptionalInt.write(value.`numberOfPoles`, buf)
+            FfiConverterOptionalBoolean.write(value.`hasProtectiveEarth`, buf)
+            FfiConverterOptionalString.write(value.`insulationStandardClass`, buf)
+            FfiConverterOptionalDouble.write(value.`heatDissipation`, buf)
+            FfiConverterOptionalDouble.write(value.`nominalPowerConsumption`, buf)
+            FfiConverterOptionalString.write(value.`electricalSafetyClass`, buf)
+            FfiConverterOptionalString.write(value.`medianUsefulLife`, buf)
+            FfiConverterOptionalString.write(value.`gldfMountingType`, buf)
+            FfiConverterOptionalDouble.write(value.`recessedDepth`, buf)
+            FfiConverterOptionalDouble.write(value.`maintenanceFactor`, buf)
+    }
+}
+
+
+
+/**
+ * Imported variant from IFC (one per IFCLIGHTFIXTURETYPE)
+ */
+data class IfcImportedVariant (
+    /**
+     * Variant name
+     */
+    var `name`: kotlin.String, 
+    /**
+     * Description
+     */
+    var `description`: kotlin.String?, 
+    /**
+     * GLDF variant ID (preserved from Pset_LuminaireVariant)
+     */
+    var `gldfVariantId`: kotlin.String?, 
+    /**
+     * Light fixture type enum (POINTSOURCE, DIRECTIONSOURCE, etc.)
+     */
+    var `fixtureType`: kotlin.String?, 
+    /**
+     * Light sources in this variant
+     */
+    var `lightSources`: List<IfcImportedLightSource>, 
+    /**
+     * Properties from IFC property sets
+     */
+    var `properties`: IfcImportedProperties, 
+    /**
+     * Whether this variant has geometry data
+     */
+    var `hasGeometry`: kotlin.Boolean, 
+    /**
+     * Number of geometry vertices
+     */
+    var `vertexCount`: kotlin.ULong, 
+    /**
+     * Number of geometry triangles
+     */
+    var `triangleCount`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIfcImportedVariant: FfiConverterRustBuffer<IfcImportedVariant> {
+    override fun read(buf: ByteBuffer): IfcImportedVariant {
+        return IfcImportedVariant(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeIfcImportedLightSource.read(buf),
+            FfiConverterTypeIfcImportedProperties.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IfcImportedVariant) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterOptionalString.allocationSize(value.`description`) +
+            FfiConverterOptionalString.allocationSize(value.`gldfVariantId`) +
+            FfiConverterOptionalString.allocationSize(value.`fixtureType`) +
+            FfiConverterSequenceTypeIfcImportedLightSource.allocationSize(value.`lightSources`) +
+            FfiConverterTypeIfcImportedProperties.allocationSize(value.`properties`) +
+            FfiConverterBoolean.allocationSize(value.`hasGeometry`) +
+            FfiConverterULong.allocationSize(value.`vertexCount`) +
+            FfiConverterULong.allocationSize(value.`triangleCount`)
+    )
+
+    override fun write(value: IfcImportedVariant, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterOptionalString.write(value.`description`, buf)
+            FfiConverterOptionalString.write(value.`gldfVariantId`, buf)
+            FfiConverterOptionalString.write(value.`fixtureType`, buf)
+            FfiConverterSequenceTypeIfcImportedLightSource.write(value.`lightSources`, buf)
+            FfiConverterTypeIfcImportedProperties.write(value.`properties`, buf)
+            FfiConverterBoolean.write(value.`hasGeometry`, buf)
+            FfiConverterULong.write(value.`vertexCount`, buf)
+            FfiConverterULong.write(value.`triangleCount`, buf)
     }
 }
 
@@ -3429,6 +4636,102 @@ public object FfiConverterTypeGldfError : FfiConverterRustBuffer<GldfException> 
 /**
  * @suppress
  */
+public object FfiConverterOptionalInt: FfiConverterRustBuffer<kotlin.Int?> {
+    override fun read(buf: ByteBuffer): kotlin.Int? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterInt.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Int?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterInt.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Int?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterInt.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?> {
+    override fun read(buf: ByteBuffer): kotlin.Double? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterDouble.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Double?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterDouble.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Double?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterDouble.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -3483,6 +4786,38 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
         } else {
             buf.put(1)
             FfiConverterByteArray.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeGldfEmitterData: FfiConverterRustBuffer<GldfEmitterData?> {
+    override fun read(buf: ByteBuffer): GldfEmitterData? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeGldfEmitterData.read(buf)
+    }
+
+    override fun allocationSize(value: GldfEmitterData?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeGldfEmitterData.allocationSize(value)
+        }
+    }
+
+    override fun write(value: GldfEmitterData?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeGldfEmitterData.write(value, buf)
         }
     }
 }
@@ -3613,6 +4948,34 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeGldfEmitterRef: FfiConverterRustBuffer<List<GldfEmitterRef>> {
+    override fun read(buf: ByteBuffer): List<GldfEmitterRef> {
+        val len = buf.getInt()
+        return List<GldfEmitterRef>(len) {
+            FfiConverterTypeGldfEmitterRef.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<GldfEmitterRef>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeGldfEmitterRef.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<GldfEmitterRef>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeGldfEmitterRef.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeGldfFile: FfiConverterRustBuffer<List<GldfFile>> {
     override fun read(buf: ByteBuffer): List<GldfFile> {
         val len = buf.getInt()
@@ -3687,6 +5050,90 @@ public object FfiConverterSequenceTypeGldfVariant: FfiConverterRustBuffer<List<G
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeGldfVariant.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeIfcEmbeddedFile: FfiConverterRustBuffer<List<IfcEmbeddedFile>> {
+    override fun read(buf: ByteBuffer): List<IfcEmbeddedFile> {
+        val len = buf.getInt()
+        return List<IfcEmbeddedFile>(len) {
+            FfiConverterTypeIfcEmbeddedFile.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IfcEmbeddedFile>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIfcEmbeddedFile.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IfcEmbeddedFile>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIfcEmbeddedFile.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeIfcImportedLightSource: FfiConverterRustBuffer<List<IfcImportedLightSource>> {
+    override fun read(buf: ByteBuffer): List<IfcImportedLightSource> {
+        val len = buf.getInt()
+        return List<IfcImportedLightSource>(len) {
+            FfiConverterTypeIfcImportedLightSource.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IfcImportedLightSource>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIfcImportedLightSource.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IfcImportedLightSource>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIfcImportedLightSource.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeIfcImportedVariant: FfiConverterRustBuffer<List<IfcImportedVariant>> {
+    override fun read(buf: ByteBuffer): List<IfcImportedVariant> {
+        val len = buf.getInt()
+        return List<IfcImportedVariant>(len) {
+            FfiConverterTypeIfcImportedVariant.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IfcImportedVariant>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIfcImportedVariant.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IfcImportedVariant>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIfcImportedVariant.write(it, buf)
         }
     }
 }
@@ -3890,6 +5337,32 @@ public object FfiConverterSequenceTypeL3dScenePart: FfiConverterRustBuffer<List<
     uniffiRustCallWithError(GldfException) { _status ->
     UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_func_gldf_to_json(
         FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Import IFC file content and return luminaire data
+         */
+    @Throws(GldfException::class) fun `ifcImport`(`ifcContent`: kotlin.String): IfcImportedLuminaire {
+            return FfiConverterTypeIfcImportedLuminaire.lift(
+    uniffiRustCallWithError(GldfException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_func_ifc_import(
+        FfiConverterString.lower(`ifcContent`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Convert IFC file content to GLDF bytes (ZIP archive)
+         */
+    @Throws(GldfException::class) fun `ifcToGldfBytes`(`ifcContent`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(GldfException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gldf_ffi_fn_func_ifc_to_gldf_bytes(
+        FfiConverterString.lower(`ifcContent`),_status)
 }
     )
     }
