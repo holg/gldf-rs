@@ -1,6 +1,10 @@
 [trunk]
 dist_dir = "dist"
 
+[build]
+# Disable wasm-opt - it has compatibility issues with newer WASM features
+no_wasm_opt = true
+
 [[trunk.copy]]
 source = "src/static/"
 destination = "dist"

@@ -164,4 +164,4 @@ for f in phot_files.iter() {
 
 ## License
 
-GPL-3.0-or-later
+AGPL-3.0-or-later

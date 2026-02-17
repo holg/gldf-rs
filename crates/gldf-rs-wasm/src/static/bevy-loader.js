@@ -9,15 +9,22 @@ let loadPromise = null;
 const L3D_STORAGE_KEY = 'gldf_current_l3d';
 const LDT_STORAGE_KEY = 'gldf_current_ldt';
 const EMITTER_CONFIG_KEY = 'gldf_emitter_config';
+const MOUNTING_CONFIG_KEY = 'gldf_mounting_config';
 const GLDF_TIMESTAMP_KEY = 'gldf_timestamp';
+
+// Storage keys for IFC geometry data
+const IFC_GEOMETRY_KEY = 'ifc_current_geometry';
+const IFC_VARIANT_KEY = 'ifc_current_variant';
+const IFC_TIMESTAMP_KEY = 'ifc_timestamp';
 
 /**
  * Save L3D data to localStorage for Bevy viewer
  * @param {Uint8Array} l3dData - L3D file bytes
  * @param {string|null} ldtData - LDT file content (optional)
  * @param {string|null} emitterConfig - JSON string of emitter configurations (optional)
+ * @param {string|null} mountingConfig - JSON string of mounting configuration (optional)
  */
-function saveL3dForBevy(l3dData, ldtData, emitterConfig) {
+function saveL3dForBevy(l3dData, ldtData, emitterConfig, mountingConfig) {
     console.log('[Bevy] saveL3dForBevy called with:', l3dData?.length, 'bytes L3D');
     try {
         // Convert to base64 for storage (handle large arrays properly)
@@ -47,6 +54,14 @@ function saveL3dForBevy(l3dData, ldtData, emitterConfig) {
             localStorage.removeItem(EMITTER_CONFIG_KEY);
         }
 
+        // Store mounting config for luminaire positioning
+        if (mountingConfig) {
+            localStorage.setItem(MOUNTING_CONFIG_KEY, mountingConfig);
+            console.log('[Bevy] Mounting config stored:', mountingConfig);
+        } else {
+            localStorage.removeItem(MOUNTING_CONFIG_KEY);
+        }
+
         // Update timestamp to trigger Bevy reload
         const ts = Date.now().toString();
         localStorage.setItem(GLDF_TIMESTAMP_KEY, ts);
@@ -54,6 +69,24 @@ function saveL3dForBevy(l3dData, ldtData, emitterConfig) {
     } catch (e) {
         console.error('[Bevy] ❌ Failed to save L3D data:', e);
     }
+}
+
+/**
+ * Clear all L3D/GLDF data from localStorage
+ * Should be called before loading a new GLDF to prevent stale data
+ */
+function clearL3dData() {
+    console.log('[Bevy] clearL3dData called - clearing all GLDF data');
+    localStorage.removeItem(L3D_STORAGE_KEY);
+    localStorage.removeItem(LDT_STORAGE_KEY);
+    localStorage.removeItem(EMITTER_CONFIG_KEY);
+    localStorage.removeItem(MOUNTING_CONFIG_KEY);
+    localStorage.removeItem(GLDF_TIMESTAMP_KEY);
+    // Also clear IFC data
+    localStorage.removeItem(IFC_GEOMETRY_KEY);
+    localStorage.removeItem(IFC_VARIANT_KEY);
+    localStorage.removeItem(IFC_TIMESTAMP_KEY);
+    console.log('[Bevy] ✅ All viewer data cleared');
 }
 
 /**
@@ -125,10 +158,53 @@ async function loadBevyViewer() {
 function isBevyLoaded() { return bevyLoaded; }
 function isBevyLoading() { return bevyLoading; }
 
+/**
+ * Save IFC geometry data to localStorage for Bevy viewer
+ * @param {string} geometryJson - JSON string containing geometry data (vertices, triangles)
+ * @param {string|null} variantName - Optional variant name for display
+ */
+function saveIfcGeometryForBevy(geometryJson, variantName) {
+    console.log('[Bevy] saveIfcGeometryForBevy called, JSON length:', geometryJson?.length);
+    try {
+        localStorage.setItem(IFC_GEOMETRY_KEY, geometryJson);
+
+        if (variantName) {
+            localStorage.setItem(IFC_VARIANT_KEY, variantName);
+            console.log('[Bevy] IFC variant:', variantName);
+        } else {
+            localStorage.removeItem(IFC_VARIANT_KEY);
+        }
+
+        // Update timestamp to trigger Bevy reload
+        const ts = Date.now().toString();
+        localStorage.setItem(IFC_TIMESTAMP_KEY, ts);
+        console.log('[Bevy] ✅ IFC geometry saved to localStorage, timestamp:', ts);
+    } catch (e) {
+        console.error('[Bevy] ❌ Failed to save IFC geometry:', e);
+    }
+}
+
+/**
+ * Clear IFC geometry data from localStorage
+ */
+function clearIfcGeometry() {
+    console.log('[Bevy] clearIfcGeometry called');
+    localStorage.removeItem(IFC_GEOMETRY_KEY);
+    localStorage.removeItem(IFC_VARIANT_KEY);
+    localStorage.removeItem(IFC_TIMESTAMP_KEY);
+    console.log('[Bevy] ✅ IFC geometry cleared');
+}
+
 // Expose to window for WASM to call
 window.loadBevyViewer = loadBevyViewer;
 window.isBevyLoaded = isBevyLoaded;
 window.isBevyLoading = isBevyLoading;
 window.saveL3dForBevy = saveL3dForBevy;
+window.saveIfcGeometryForBevy = saveIfcGeometryForBevy;
+window.clearIfcGeometry = clearIfcGeometry;
+window.clearL3dData = clearL3dData;
 
-console.log('[Bevy] Loader ready');
+// Clear stale viewer data on page load to prevent showing old models
+// This runs every time the page is refreshed
+clearL3dData();
+console.log('[Bevy] Loader ready - cleared any stale viewer data');

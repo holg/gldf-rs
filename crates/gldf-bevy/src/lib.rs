@@ -4,9 +4,13 @@
 //!
 //! This module provides a Bevy-based 3D viewer for GLDF files that displays
 //! L3D 3D models with LDT photometric lighting in various scene types.
+//! Also supports IFC geometry viewing from imported IFC files.
 
+pub mod ifc_loader;
 pub mod l3d_loader;
 pub mod scene;
+
+pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
 
 use bevy::prelude::*;
 use eulumdat_bevy::viewer::{EulumdatViewerPlugin, SceneType};
@@ -23,6 +27,73 @@ pub struct GldfSceneData {
     pub scene_type: SceneType,
     /// Per-emitter configuration from GLDF
     pub emitter_config: Vec<EmitterConfig>,
+    /// Mounting information for positioning
+    pub mounting: MountingConfig,
+}
+
+/// Mounting configuration for luminaire positioning (serializable for WASM)
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+pub struct MountingConfig {
+    /// Mounting type: "ceiling", "wall", "ground", "working_plane"
+    pub mounting_type: Option<String>,
+    /// Recessed depth in mm
+    pub recessed_depth_mm: Option<i32>,
+    /// Pendant length in mm (converted from f64)
+    pub pendant_length_mm: Option<i32>,
+    /// Wall mounting height in mm
+    pub mounting_height_mm: Option<i32>,
+    /// Pole height in mm
+    pub pole_height_mm: Option<i32>,
+    /// Is surface mounted
+    pub is_surface_mounted: bool,
+    /// Is free-standing
+    pub is_free_standing: bool,
+}
+
+impl MountingConfig {
+    /// Get the Y position in meters for the luminaire based on mounting type
+    /// Returns (y_position, is_ceiling_mounted)
+    pub fn get_y_position(&self, room_height: f32) -> (f32, bool) {
+        match self.mounting_type.as_deref() {
+            Some("ceiling") => {
+                if let Some(pendant_mm) = self.pendant_length_mm {
+                    // Pendant: hang down from ceiling
+                    (room_height - (pendant_mm as f32 / 1000.0), true)
+                } else if self.recessed_depth_mm.is_some() {
+                    // Recessed: flush with ceiling
+                    (room_height, true)
+                } else {
+                    // Surface mounted: slightly below ceiling
+                    (room_height - 0.05, true)
+                }
+            }
+            Some("wall") => {
+                // Wall: use mounting height or default to 2m
+                let height_m = self.mounting_height_mm.unwrap_or(2000) as f32 / 1000.0;
+                (height_m, false)
+            }
+            Some("ground") => {
+                if let Some(pole_mm) = self.pole_height_mm {
+                    // Pole mounted: at pole height
+                    (pole_mm as f32 / 1000.0, false)
+                } else if self.is_free_standing {
+                    // Free-standing on ground
+                    (0.0, false)
+                } else {
+                    // Default ground level
+                    (0.0, false)
+                }
+            }
+            Some("working_plane") => {
+                // Working plane: typical desk height ~0.75m
+                (0.75, false)
+            }
+            _ => {
+                // Default: assume ceiling mounted
+                (room_height - 0.1, true)
+            }
+        }
+    }
 }
 
 /// Resource to track localStorage timestamp for hot-reload (WASM)
@@ -36,6 +107,8 @@ pub const L3D_STORAGE_KEY: &str = "gldf_current_l3d";
 pub const LDT_STORAGE_KEY: &str = "gldf_current_ldt";
 #[cfg(target_arch = "wasm32")]
 pub const EMITTER_CONFIG_KEY: &str = "gldf_emitter_config";
+#[cfg(target_arch = "wasm32")]
+pub const MOUNTING_CONFIG_KEY: &str = "gldf_mounting_config";
 #[cfg(target_arch = "wasm32")]
 pub const GLDF_TIMESTAMP_KEY: &str = "gldf_timestamp";
 
@@ -134,6 +207,30 @@ pub fn load_emitter_config_from_storage() -> Vec<EmitterConfig> {
     Vec::new()
 }
 
+/// Load mounting config from localStorage (WASM only)
+#[cfg(target_arch = "wasm32")]
+pub fn load_mounting_config_from_storage() -> MountingConfig {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return MountingConfig::default(),
+    };
+    let storage = match window.local_storage().ok().flatten() {
+        Some(s) => s,
+        None => return MountingConfig::default(),
+    };
+    let config_json = match storage.get_item(MOUNTING_CONFIG_KEY).ok().flatten() {
+        Some(j) => j,
+        None => return MountingConfig::default(),
+    };
+    log(&format!("[Bevy] Loading mounting config: {}", config_json));
+    serde_json::from_str(&config_json).unwrap_or_default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_mounting_config_from_storage() -> MountingConfig {
+    MountingConfig::default()
+}
+
 /// Get timestamp from localStorage
 #[cfg(target_arch = "wasm32")]
 pub fn get_gldf_timestamp() -> Option<String> {
@@ -184,6 +281,15 @@ pub fn poll_gldf_changes(
                         emitter_config.len()
                     ));
                     scene_data.emitter_config = emitter_config;
+                }
+                // Load mounting configuration
+                let mounting_config = load_mounting_config_from_storage();
+                if mounting_config.mounting_type.is_some() {
+                    log(&format!(
+                        "[Bevy] Loaded mounting config: {:?}",
+                        mounting_config.mounting_type
+                    ));
+                    scene_data.mounting = mounting_config;
                 }
                 last_timestamp.0 = new_timestamp;
             }
@@ -266,12 +372,14 @@ pub fn run_on_canvas(canvas_selector: &str) {
     let l3d_data = load_l3d_from_storage();
     let ldt_data = load_ldt_from_storage();
     let emitter_config = load_emitter_config_from_storage();
+    let mounting_config = load_mounting_config_from_storage();
 
     log(&format!(
-        "[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}",
+        "[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}, Mounting: {:?}",
         l3d_data.as_ref().map(|d| d.len()).unwrap_or(0),
         ldt_data.is_some(),
-        emitter_config.len()
+        emitter_config.len(),
+        mounting_config.mounting_type
     ));
 
     // Create settings with LDT data
@@ -288,6 +396,7 @@ pub fn run_on_canvas(canvas_selector: &str) {
         ldt_data,
         scene_type: SceneType::Room,
         emitter_config,
+        mounting: mounting_config,
     };
 
     // Build app with resources inserted FIRST, before ANY plugins
@@ -310,7 +419,11 @@ pub fn run_on_canvas(canvas_selector: &str) {
         ..default()
     }));
 
-    app.add_plugins((EulumdatViewerPlugin::default(), l3d_loader::L3dLoaderPlugin));
+    app.add_plugins((
+        EulumdatViewerPlugin::default(),
+        l3d_loader::L3dLoaderPlugin,
+        ifc_loader::IfcLoaderPlugin,
+    ));
 
     app.add_systems(Update, ui_controls_system);
     app.add_systems(Update, poll_gldf_changes);
@@ -336,7 +449,7 @@ pub fn run_native() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "GLDF 3D Viewer".to_string(),
-                resolution: (1280.0, 720.0).into(),
+                resolution: (1280u32, 720u32).into(),
                 ..default()
             }),
             ..default()
@@ -345,7 +458,11 @@ pub fn run_native() {
         .insert_resource(settings)
         .insert_resource(scene_data)
         .insert_resource(GldfTimestamp::default())
-        .add_plugins((EulumdatViewerPlugin::default(), l3d_loader::L3dLoaderPlugin))
+        .add_plugins((
+            EulumdatViewerPlugin::default(),
+            l3d_loader::L3dLoaderPlugin,
+            ifc_loader::IfcLoaderPlugin,
+        ))
         .add_systems(Update, ui_controls_system)
         .add_systems(Update, poll_gldf_changes)
         .add_systems(Update, ensure_visible_scene)

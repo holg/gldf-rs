@@ -8,7 +8,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use gldf_rs::convert::ldt_to_gldf;
 use gldf_rs::gldf::GldfProduct;
-use gldf_rs::ifc::GldfToIfc;
+use gldf_rs::ifc::{GldfToIfc, IfcImporter};
 use gldf_rs::{BufFile, FileBufGldf};
 use gloo::console;
 use gloo::file::callbacks::FileReader;
@@ -23,7 +23,10 @@ mod draw_l3d;
 mod state;
 mod utils;
 
-use components::{BevySceneViewer, EditorTabs, EmitterConfig, L3dViewer, LdtViewer, UrlFileViewer};
+use components::{
+    BevySceneViewer, EditorTabs, EmitterConfig, IfcViewer, L3dViewer, LdtViewer, MountingConfig,
+    UrlFileViewer,
+};
 use state::{use_gldf, GldfAction, GldfProvider};
 
 /// Wrapper for GLDF product operations
@@ -51,6 +54,7 @@ pub enum NavItem {
     RawData,
     FileViewer,
     Plugins,
+    IfcViewer,
     Header,
     Electrical,
     Applications,
@@ -75,6 +79,8 @@ pub enum Msg {
     SetDragging(bool),
     LoadDemo,
     DemoLoaded(Result<Vec<u8>, String>),
+    LoadFromUrl(String),
+    UrlLoaded(Result<Vec<u8>, String>, String),
     Select3dVariant(Option<String>),
     SelectFile(Option<String>),
     // Mounting updates
@@ -111,13 +117,29 @@ pub struct App {
     selected_3d_variant: Option<String>,
     selected_file: Option<String>,
     show_help: bool,
+    #[allow(dead_code)]
+    pdf_enabled: bool,
+    loading_url: Option<String>,
 }
 
 impl Component for App {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        // Parse URL query parameters
+        let (url_param, pdf_enabled) = Self::parse_url_params();
+
+        // If URL parameter is present, trigger loading
+        if let Some(ref url) = url_param {
+            let url_clone = url.clone();
+            let link = ctx.link().clone();
+            // Use spawn_local to send the message after create completes
+            wasm_bindgen_futures::spawn_local(async move {
+                link.send_message(Msg::LoadFromUrl(url_clone));
+            });
+        }
+
         Self {
             readers: HashMap::default(),
             files: Vec::default(),
@@ -128,6 +150,8 @@ impl Component for App {
             selected_3d_variant: None,
             selected_file: None,
             show_help: false,
+            pdf_enabled,
+            loading_url: url_param,
         }
     }
 
@@ -140,9 +164,103 @@ impl Component for App {
 
                 // Try to parse GLDF
                 if file_name_lower.ends_with(".gldf") {
+                    // Clear stale Bevy viewer data before loading new GLDF
+                    crate::components::clear_l3d_data();
                     if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
                         self.loaded_gldf = Some(gldf);
                     }
+                }
+                // Handle IFC files - convert luminaire data to GLDF
+                else if file_name_lower.ends_with(".ifc") {
+                    console::log!("Converting IFC luminaire to GLDF...");
+                    match String::from_utf8(data.clone()) {
+                        Ok(ifc_content) => {
+                            // Check if this IFC contains luminaire types
+                            if !ifc_content.to_uppercase().contains("IFCLIGHTFIXTURETYPE") {
+                                console::log!("IFC file does not contain IFCLIGHTFIXTURETYPE - not a luminaire IFC");
+                                console::log!("This tool only supports IFC files exported from GLDF or containing luminaire definitions");
+                            } else {
+                                match gldf_rs::ifc_to_gldf(&ifc_content) {
+                                    Ok(gldf_bytes) => {
+                                        console::log!(
+                                            "IFC converted to GLDF successfully, size:",
+                                            gldf_bytes.len()
+                                        );
+                                        match WasmGldfProduct::load_gldf_from_buf_all(gldf_bytes) {
+                                            Ok(gldf) => {
+                                                console::log!(
+                                                    "GLDF loaded successfully from IFC conversion"
+                                                );
+                                                console::log!(
+                                                    "Files in converted GLDF:",
+                                                    gldf.files.len()
+                                                );
+
+                                                // Clear stale Bevy viewer data before loading new GLDF
+                                                crate::components::clear_l3d_data();
+
+                                                // Clear existing files and add files from converted GLDF
+                                                self.files.clear();
+                                                for buf_file in &gldf.files {
+                                                    if let (Some(name), Some(content)) =
+                                                        (&buf_file.name, &buf_file.content)
+                                                    {
+                                                        // Determine file type from extension/name
+                                                        let file_type = if name.ends_with(".xml") {
+                                                            "application/xml"
+                                                        } else if name.ends_with(".ldt") {
+                                                            "ldc/eulumdat"
+                                                        } else if name.ends_with(".l3d") {
+                                                            "geo/l3d"
+                                                        } else if name.ends_with(".png") {
+                                                            "image/png"
+                                                        } else if name.ends_with(".jpg")
+                                                            || name.ends_with(".jpeg")
+                                                        {
+                                                            "image/jpeg"
+                                                        } else {
+                                                            "application/octet-stream"
+                                                        };
+                                                        self.files.push(FileDetails {
+                                                            data: content.clone(),
+                                                            file_type: file_type.to_string(),
+                                                            name: name.clone(),
+                                                        });
+                                                        console::log!(
+                                                            "  Added file:",
+                                                            name.as_str()
+                                                        );
+                                                    }
+                                                }
+
+                                                self.loaded_gldf = Some(gldf);
+                                                self.readers.remove(&file_name);
+                                                return true;
+                                            }
+                                            Err(e) => {
+                                                console::log!(
+                                                    "Failed to load converted GLDF:",
+                                                    format!("{}", e).as_str()
+                                                );
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        console::log!(
+                                            "IFC conversion failed:",
+                                            format!("{}", e).as_str()
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            console::log!("IFC file encoding error:", format!("{}", e).as_str());
+                        }
+                    }
+                    // Don't add IFC to files list - either it converted or we show an error
+                    self.readers.remove(&file_name);
+                    return true;
                 }
                 // Handle ULD (DIALux) and ROLF (Relux) files - not supported yet
                 else if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
@@ -151,6 +269,8 @@ impl Component for App {
                 // Handle LDT/IES files - convert to minimal GLDF
                 else if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
                     console::log!("Converting LDT/IES to GLDF...");
+                    // Clear stale Bevy viewer data before loading new GLDF
+                    crate::components::clear_l3d_data();
                     match ldt_to_gldf(&data, &file_name) {
                         Ok(gldf) => {
                             console::log!("LDT/IES converted to GLDF structure");
@@ -319,7 +439,24 @@ impl Component for App {
             }
             Msg::ExportIfc => {
                 if let Some(ref gldf) = self.loaded_gldf {
-                    match GldfToIfc::export(&gldf.gldf) {
+                    // Extract L3D mesh data for geometry export
+                    let mesh_data = GldfToIfc::extract_mesh_from_files(&gldf.gldf, &gldf.files);
+                    if let Some(ref m) = mesh_data {
+                        console::log!(
+                            "Mesh extracted:",
+                            m.vertices.len(),
+                            "vertices,",
+                            m.triangles.len(),
+                            "triangles"
+                        );
+                    } else {
+                        console::log!("No mesh extracted from L3D files");
+                    }
+                    match GldfToIfc::export_with_mesh_and_files(
+                        &gldf.gldf,
+                        mesh_data.as_ref(),
+                        &gldf.files,
+                    ) {
                         Ok(ifc_content) => {
                             console::log!("Exported IFC:", ifc_content.len(), "chars");
 
@@ -394,6 +531,8 @@ impl Component for App {
                 match result {
                     Ok(data) => {
                         console::log!("Demo loaded:", data.len(), "bytes");
+                        // Clear stale Bevy viewer data before loading new GLDF
+                        crate::components::clear_l3d_data();
                         if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone()) {
                             self.loaded_gldf = Some(gldf);
                         }
@@ -405,6 +544,73 @@ impl Component for App {
                     }
                     Err(e) => {
                         console::log!("Failed to load demo:", e.as_str());
+                    }
+                }
+                true
+            }
+            Msg::LoadFromUrl(url) => {
+                console::log!("Loading from URL:", url.as_str());
+                self.loading_url = Some(url.clone());
+                let link = ctx.link().clone();
+                let url_clone = url.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = gloo::net::http::Request::get(&url_clone)
+                        .send()
+                        .await
+                        .map_err(|e| format!("Network error: {}", e))
+                        .and_then(|resp| {
+                            if resp.ok() {
+                                Ok(resp)
+                            } else {
+                                Err(format!("HTTP error: {}", resp.status()))
+                            }
+                        });
+
+                    let data = match result {
+                        Ok(resp) => resp
+                            .binary()
+                            .await
+                            .map_err(|e| format!("Read error: {}", e)),
+                        Err(e) => Err(e),
+                    };
+
+                    link.send_message(Msg::UrlLoaded(data, url_clone));
+                });
+                true // Re-render to show loading state
+            }
+            Msg::UrlLoaded(result, url) => {
+                self.loading_url = None;
+                match result {
+                    Ok(data) => {
+                        // Extract filename from URL
+                        let file_name = url
+                            .split('/')
+                            .next_back()
+                            .unwrap_or("file.gldf")
+                            .split('?')
+                            .next()
+                            .unwrap_or("file.gldf")
+                            .to_string();
+                        console::log!("URL loaded:", file_name.as_str(), data.len(), "bytes");
+
+                        // Try to parse GLDF
+                        if file_name.to_lowercase().ends_with(".gldf") {
+                            // Clear stale Bevy viewer data before loading new GLDF
+                            crate::components::clear_l3d_data();
+                            if let Ok(gldf) = WasmGldfProduct::load_gldf_from_buf_all(data.clone())
+                            {
+                                self.loaded_gldf = Some(gldf);
+                            }
+                        }
+
+                        self.files.push(FileDetails {
+                            data,
+                            file_type: "application/gldf".to_string(),
+                            name: file_name,
+                        });
+                    }
+                    Err(e) => {
+                        console::log!("Failed to load URL:", e.as_str());
                     }
                 }
                 true
@@ -607,6 +813,54 @@ pub fn get_blob(buf_file: &BufFile) -> String {
 }
 
 impl App {
+    /// Parse URL query parameters (?url=... and ?pdf=1)
+    fn parse_url_params() -> (Option<String>, bool) {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return (None, false),
+        };
+        let location = match window.location().search() {
+            Ok(s) => s,
+            Err(_) => return (None, false),
+        };
+
+        if location.is_empty() {
+            return (None, false);
+        }
+
+        // Parse query string manually (simple implementation)
+        let query = location.trim_start_matches('?');
+        let mut url_param = None;
+        let mut pdf_enabled = false;
+
+        for part in query.split('&') {
+            if let Some((key, value)) = part.split_once('=') {
+                match key {
+                    "url" => {
+                        // URL decode the value
+                        url_param = Some(
+                            js_sys::decode_uri_component(value)
+                                .map(|s| s.as_string().unwrap_or_default())
+                                .unwrap_or_else(|_| value.to_string()),
+                        );
+                    }
+                    "pdf" => {
+                        pdf_enabled = value == "1" || value.to_lowercase() == "true";
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        console::log!(
+            "URL params - url:",
+            url_param.as_deref().unwrap_or("none"),
+            "pdf:",
+            pdf_enabled
+        );
+        (url_param, pdf_enabled)
+    }
+
     /// Helper to get mutable reference to a variant by ID
     fn get_variant_mut(
         &mut self,
@@ -1148,6 +1402,7 @@ impl App {
                         { self.nav_item(ctx, NavItem::Overview, "📊", "Overview", None, has_file) }
                         { self.nav_item(ctx, NavItem::RawData, "{ }", "Raw Data", None, has_file) }
                         { self.nav_item(ctx, NavItem::FileViewer, "👁", "File Viewer", Some(self.files.len()), has_file) }
+                        { self.nav_item(ctx, NavItem::IfcViewer, "🏗️", "IFC Viewer", None, has_file) }
                         if plugins_count > 0 {
                             { self.nav_item(ctx, NavItem::Plugins, "🔌", "Plugins", Some(plugins_count), has_file) }
                         }
@@ -1258,7 +1513,7 @@ impl App {
                 <input
                     id="file-upload"
                     type="file"
-                    accept=".gldf,.ldt,.ies,.uld,.rolf"
+                    accept=".gldf,.ldt,.ies,.ifc,.uld,.rolf"
                     multiple={false}
                     onchange={ctx.link().callback(move |e: Event| {
                         let input: HtmlInputElement = e.target_unchecked_into();
@@ -1281,6 +1536,7 @@ impl App {
             NavItem::RawData => "Raw Data",
             NavItem::FileViewer => "File Viewer",
             NavItem::Plugins => "Plugins",
+            NavItem::IfcViewer => "IFC Viewer",
             NavItem::Header => "Header",
             NavItem::Electrical => "Electrical",
             NavItem::Applications => "Applications",
@@ -1334,6 +1590,7 @@ impl App {
                             NavItem::RawData => self.view_raw_data(),
                             NavItem::FileViewer => self.view_file_viewer(ctx),
                             NavItem::Plugins => self.view_plugins(),
+                            NavItem::IfcViewer => self.view_ifc_viewer(),
                             NavItem::Header => self.view_header_editor(),
                             NavItem::Electrical => self.view_electrical_editor(),
                             NavItem::Applications => self.view_applications_editor(),
@@ -1791,6 +2048,61 @@ impl App {
                     <div class="icon">{ "🔌" }</div>
                     <h3>{ "No File Loaded" }</h3>
                     <p>{ "Load a GLDF file to view embedded plugins." }</p>
+                </div>
+            }
+        }
+    }
+
+    fn view_ifc_viewer(&self) -> Html {
+        if let Some(ref gldf) = self.loaded_gldf {
+            // Convert GLDF to IFC and then import it back to get ImportedLuminaire
+            // Extract mesh data if available
+            let mesh_data = GldfToIfc::extract_mesh_from_files(&gldf.gldf, &gldf.files);
+            match GldfToIfc::export_with_mesh_and_files(&gldf.gldf, mesh_data.as_ref(), &gldf.files)
+            {
+                Ok(ifc_content) => match IfcImporter::from_str(&ifc_content) {
+                    Ok(importer) => match importer.import() {
+                        Ok(luminaire) => {
+                            html! {
+                                <IfcViewer luminaire={luminaire} />
+                            }
+                        }
+                        Err(e) => {
+                            html! {
+                                <div class="empty-state error">
+                                    <div class="icon">{ "⚠️" }</div>
+                                    <h3>{ "IFC Import Error" }</h3>
+                                    <p>{ format!("Failed to import IFC: {}", e) }</p>
+                                </div>
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        html! {
+                            <div class="empty-state error">
+                                <div class="icon">{ "⚠️" }</div>
+                                <h3>{ "IFC Parse Error" }</h3>
+                                <p>{ format!("Failed to parse IFC: {}", e) }</p>
+                            </div>
+                        }
+                    }
+                },
+                Err(e) => {
+                    html! {
+                        <div class="empty-state error">
+                            <div class="icon">{ "⚠️" }</div>
+                            <h3>{ "IFC Export Error" }</h3>
+                            <p>{ format!("Failed to export to IFC: {}", e) }</p>
+                        </div>
+                    }
+                }
+            }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🏗️" }</div>
+                    <h3>{ "No File Loaded" }</h3>
+                    <p>{ "Load a GLDF file to view IFC representation with 3D geometry." }</p>
                 </div>
             }
         }
@@ -2795,7 +3107,29 @@ impl App {
                             emergency_behavior: em.emergency_behavior.clone(),
                         })
                         .collect();
-                    (l3d, ldt_data, emitter_config, variant_id.clone())
+                    // Extract mounting config from variant
+                    let mounting = &emitter_data.mounting;
+                    let mounting_config = MountingConfig {
+                        mounting_type: mounting.mounting_type.as_ref().map(|t| match t {
+                            gldf_rs::MountingType::Ceiling => "ceiling".to_string(),
+                            gldf_rs::MountingType::Wall => "wall".to_string(),
+                            gldf_rs::MountingType::Ground => "ground".to_string(),
+                            gldf_rs::MountingType::WorkingPlane => "working_plane".to_string(),
+                        }),
+                        recessed_depth_mm: mounting.recessed_depth_mm,
+                        pendant_length_mm: mounting.pendant_length_mm.map(|f| f as i32),
+                        mounting_height_mm: mounting.mounting_height_mm,
+                        pole_height_mm: mounting.pole_height_mm,
+                        is_surface_mounted: mounting.is_surface_mounted,
+                        is_free_standing: mounting.is_free_standing,
+                    };
+                    (
+                        l3d,
+                        ldt_data,
+                        emitter_config,
+                        mounting_config,
+                        variant_id.clone(),
+                    )
                 })
             });
 
@@ -2805,7 +3139,7 @@ impl App {
             html! {
                 <div class="variants-container">
                     // 3D Scene Viewer (when variant selected)
-                    if let Some((l3d, ldt_data, emitter_config, variant_id)) = viewer_data {
+                    if let Some((l3d, ldt_data, emitter_config, mounting_config, variant_id)) = viewer_data {
                         <div class="variant-3d-viewer" style="margin-bottom: 20px; background: var(--bg-secondary); border-radius: 8px; overflow: hidden;">
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-color);">
                                 <div style="font-weight: 500;">
@@ -2824,6 +3158,7 @@ impl App {
                                     l3d_data={l3d}
                                     ldt_data={ldt_data}
                                     emitter_config={emitter_config}
+                                    mounting_config={mounting_config}
                                     variant_id={variant_id}
                                     width={800}
                                     height={500}
@@ -3094,6 +3429,39 @@ impl App {
                     </div>
                     <div class="preview-media">
                         <LdtViewer ldt_data={file.data.clone()} width={500.0} height={500.0} />
+                    </div>
+                </div>
+            };
+        }
+
+        // Handle L3D geometry files
+        if file_name_lower.ends_with(".l3d") || file.file_type.contains("geo/l3d") {
+            return html! {
+                <div class="preview-tile">
+                    <div class="preview-header">
+                        <span class="icon">{ "🔷" }</span>
+                        <span class="preview-name">{ &file.name }</span>
+                        <span class="preview-type">{ "L3D Geometry" }</span>
+                    </div>
+                    <div class="preview-media">
+                        <L3dViewer l3d_data={file.data.clone()} width={500} height={500} />
+                    </div>
+                </div>
+            };
+        }
+
+        // Handle XML files (product.xml)
+        if file_name_lower.ends_with(".xml") {
+            let xml_content = String::from_utf8_lossy(&file.data).to_string();
+            return html! {
+                <div class="preview-tile">
+                    <div class="preview-header">
+                        <span class="icon">{ "📋" }</span>
+                        <span class="preview-name">{ &file.name }</span>
+                        <span class="preview-type">{ "XML" }</span>
+                    </div>
+                    <div class="preview-media">
+                        <textarea readonly=true value={xml_content} style="width: 100%; height: 400px; font-family: monospace; font-size: 12px;" />
                     </div>
                 </div>
             };

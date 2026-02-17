@@ -7,10 +7,10 @@
 
     <link data-trunk rel="css" href="src/static/styles.css">
     <link data-trunk rel="copy-file" href="src/static/slv_tria_2.gldf" />
-    <link data-trunk rel="copy-file" href="src/static/bevy-loader.js" />
-    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" />
+    <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="0" />
+    <!-- Inline bevy-loader.js to avoid caching issues - content is embedded in HTML -->
+    <link data-trunk rel="inline" href="src/static/bevy-loader.js" type="js" />
 </head>
 <body>
-    <script src="bevy-loader.js"></script>
 </body>
 </html>

@@ -68,7 +68,7 @@ pub mod operations;
 pub mod mapping;
 pub use mapping::{
     get_first_l3d_with_ldt, get_l3d_files_with_ldt, get_l3d_ldt_mappings, get_variant_emitter_data,
-    EmitterRenderData, L3dLdtMapping, L3dWithLdt, VariantEmitterData,
+    EmitterRenderData, L3dLdtMapping, L3dWithLdt, MountingInfo, MountingType, VariantEmitterData,
 };
 
 /// Conversion utilities for creating GLDF from other formats (LDT/IES)
@@ -79,7 +79,21 @@ pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 
 /// IFC (Industry Foundation Classes) integration for BIM interoperability
 pub mod ifc;
-pub use ifc::{GldfToIfc, LightEmissionSourceEnum, LightFixtureTypeEnum, StepWriter};
+pub use ifc::{
+    // IFC Import
+    ifc_to_gldf,
+    import_ifc,
+    GldfGenerator,
+    GldfToIfc,
+    IfcImporter,
+    ImportedLightSource,
+    ImportedLuminaire,
+    ImportedProperties,
+    ImportedVariant,
+    LightEmissionSourceEnum,
+    LightFixtureTypeEnum,
+    StepWriter,
+};
 
 /// Plugin system for embedded WASM viewer plugins
 pub mod plugin;

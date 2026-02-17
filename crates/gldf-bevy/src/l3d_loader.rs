@@ -3,9 +3,9 @@
 //! Loads L3D 3D models (OBJ format) into Bevy meshes with proper transformations.
 //! Extracts Light Emitting Surfaces (LES) and places photometric lights at those positions.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
-use bevy::render::render_asset::RenderAssetUsages;
 
 use crate::{log, EmitterConfig, GldfSceneData, SceneSettings};
 
@@ -239,12 +239,12 @@ fn update_l3d_model(
 
     // Remove existing models
     for entity in existing_models.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Remove existing L3D lights
     for entity in existing_lights.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Spawn new model
@@ -300,12 +300,50 @@ fn spawn_l3d_model(
     // Rotation matrix: L3D uses Z-up, Bevy uses Y-up
     let z_to_y_rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
 
-    // Position luminaire at mounting height
-    let mounting_offset = Vec3::new(
-        settings.room_width / 2.0,
-        settings.mounting_height,
-        settings.room_length / 2.0,
-    );
+    // For ceiling-mounted fixtures, flip 180° around X-axis so they point downward
+    // This is applied after coordinate conversion
+    let ceiling_flip = Quat::from_rotation_x(std::f32::consts::PI);
+
+    // Position luminaire based on mounting configuration (from GLDF variant)
+    // Falls back to scene type if no mounting info available
+    let (luminaire_y, is_ceiling) = if scene_data.mounting.mounting_type.is_some() {
+        // Use GLDF mounting info
+        let (y, is_ceil) = scene_data.mounting.get_y_position(settings.room_height);
+        log(&format!(
+            "[L3D] Using GLDF mounting: type={:?}, recessed={:?}mm, pendant={:?}mm, pole={:?}mm",
+            scene_data.mounting.mounting_type,
+            scene_data.mounting.recessed_depth_mm,
+            scene_data.mounting.pendant_length_mm,
+            scene_data.mounting.pole_height_mm
+        ));
+        (y, is_ceil)
+    } else {
+        // Fallback to scene type
+        let y = match settings.scene_type {
+            eulumdat_bevy::SceneType::Room => settings.room_height - settings.pendulum_length,
+            _ => settings.mounting_height,
+        };
+        (
+            y,
+            matches!(settings.scene_type, eulumdat_bevy::SceneType::Room),
+        )
+    };
+
+    // For wall-mounted fixtures, position against the wall
+    let (mount_x, mount_z) = if scene_data.mounting.mounting_type.as_deref() == Some("wall") {
+        // Position near wall (centered on X, at wall edge on Z)
+        (settings.room_width / 2.0, 0.1)
+    } else {
+        // Center of room
+        (settings.room_width / 2.0, settings.room_length / 2.0)
+    };
+
+    let mounting_offset = Vec3::new(mount_x, luminaire_y, mount_z);
+
+    log(&format!(
+        "[L3D] Mounting offset: ({:.2}, {:.2}, {:.2}) scene={:?} ceiling={}",
+        mounting_offset.x, mounting_offset.y, mounting_offset.z, settings.scene_type, is_ceiling
+    ));
 
     // Parse the structure XML to get light emitting objects
     let mut light_emitters: Vec<LightEmitter> = Vec::new();
@@ -366,9 +404,23 @@ fn spawn_l3d_model(
         // Extract translation, rotation, scale
         let (scale, rotation, translation) = part_mat.to_scale_rotation_translation();
 
-        // Apply Z-to-Y rotation
-        let final_rotation = z_to_y_rotation * rotation;
-        let final_translation = z_to_y_rotation * translation;
+        // Apply Z-to-Y rotation (coordinate system conversion)
+        // For ceiling mounts, also flip 180° so luminaire points downward
+        let base_rotation = z_to_y_rotation * rotation;
+        let final_rotation = if is_ceiling {
+            ceiling_flip * base_rotation
+        } else {
+            base_rotation
+        };
+
+        // Transform translation to Bevy coords, then flip for ceiling if needed
+        let base_translation = z_to_y_rotation * translation;
+        let final_translation = if is_ceiling {
+            // When flipping, negate Y to keep parts together
+            Vec3::new(base_translation.x, -base_translation.y, -base_translation.z)
+        } else {
+            base_translation
+        };
 
         commands.spawn((
             Mesh3d(mesh_handle),
@@ -393,6 +445,7 @@ fn spawn_l3d_model(
         &light_emitters,
         &mounting_offset,
         &z_to_y_rotation,
+        is_ceiling,
         settings,
         &scene_data.emitter_config,
     );
@@ -530,6 +583,7 @@ fn spawn_lights_from_emitters(
     emitters: &[LightEmitter],
     mounting_offset: &Vec3,
     z_to_y_rotation: &Quat,
+    is_ceiling: bool,
     settings: &SceneSettings,
     emitter_configs: &[EmitterConfig],
 ) {
@@ -623,7 +677,13 @@ fn spawn_lights_from_emitters(
         // Apply emitter rotation to get light direction in L3D space
         let l3d_dir = emitter_rot * default_dir;
         // Convert to Bevy coordinate system (Z-up to Y-up): -Z becomes -Y (down)
-        let bevy_dir = *z_to_y_rotation * l3d_dir;
+        let bevy_dir = if is_ceiling {
+            // For ceiling mount, flip the direction (negate Y component)
+            let transformed = *z_to_y_rotation * l3d_dir;
+            Vec3::new(transformed.x, -transformed.y.abs(), transformed.z)
+        } else {
+            *z_to_y_rotation * l3d_dir
+        };
 
         // Calculate a target point for the spotlight to look at
         let target = world_pos + bevy_dir * 10.0;
