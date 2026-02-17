@@ -23,8 +23,8 @@ default = []
 # light-convert = ["dep:light-convert"]
 
 [dependencies]
-# Core library - enable eulumdat feature for LDT/IES to GLDF conversion
-gldf-rs = { workspace = true, features = ["eulumdat"] }
+# Core library - enable eulumdat for LDT/IES and l3d for geometry export
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
 
 # Error handling
 anyhow.workspace = true

@@ -1,0 +1,67 @@
+# Build configuration for WASM split bundles
+# This file defines project-specific paths and settings for build-wasm-split.sh
+#
+# For gldf-rs: GLDF lighting data format viewer and editor
+
+[project]
+name = "gldf"
+display_name = "GLDF Viewer"
+
+[paths]
+# Relative to repository root
+wasm_crate = "crates/gldf-rs-wasm"
+bevy_crate = "crates/gldf-bevy"
+bevy_output = "target/wasm32-unknown-unknown/web-release"
+# No typst support in gldf-rs yet
+typst_source = ""
+dist_output = "crates/gldf-rs-wasm/dist"
+assets = "assets"
+# Core library to watch for changes (triggers rebuild when modified)
+core_lib = "crates/gldf-rs-lib"
+
+[bevy]
+# Library name for WASM builds (from Cargo.toml [lib] name, with hyphens as underscores)
+# The library is built as cdylib for WASM and exports wasm_start()
+library_name = "gldf_bevy"
+# Binary name for reference (from Cargo.toml [[bin]] name) - not used for WASM
+binary_name = "gldf-bevy-viewer"
+# Features to enable when building (empty - no special features needed)
+features = []
+
+[bundles]
+# Which bundles to build
+leptos = true   # Actually Yew, but the script calls it "leptos"
+bevy = true
+typst = false   # No typst/PDF support in gldf-rs
+gmaps = false   # No Google Maps in gldf-rs
+
+[bundles.leptos]
+description = "Yew GLDF editor"
+load_strategy = "immediate"
+
+[bundles.bevy]
+description = "Bevy 3D viewer"
+load_strategy = "on_demand"
+size_estimate = "~4MB compressed"
+
+[deploy]
+# rsync target for deployment (user@host:/path/)
+# Using same server as eulumdat but different path
+target = "trahe.eu:/var/www/gldf.icu/html/"
+# Additional rsync flags (never use --delete!)
+rsync_flags = "-avz"
+
+[deploy.local]
+# Local server settings
+port = 8052
+# No custom server crate, uses python3 http.server
+server_crate = ""
+
+[pages]
+# Additional HTML pages to generate (empty - none needed)
+secret_export_page = ""
+custom_404_svg = ""
+
+[env]
+# Environment variables (none needed for gldf-rs)
+google_maps_key = ""

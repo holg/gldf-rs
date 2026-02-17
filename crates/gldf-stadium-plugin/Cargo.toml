@@ -27,7 +27,7 @@ rfd = { workspace = true }
 # WASM build
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 base64 = { workspace = true }
-bevy = { version = "0.15", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_core_pipeline",
@@ -38,6 +38,7 @@ bevy = { version = "0.15", default-features = false, features = [
     "webgl2",
     "tonemapping_luts",
     "png",
+    "zstd_rust",
 ] }
 console_error_panic_hook = { workspace = true }
 getrandom = { version = "0.3", features = ["wasm_js"] }
@@ -68,7 +69,7 @@ log.workspace = true
 serde.workspace = true
 
 # Bevy 3D engine
-bevy = { version = "0.15", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_core_pipeline",
@@ -81,4 +82,5 @@ bevy = { version = "0.15", default-features = false, features = [
     "png",
     "x11",
     "wayland",
+    "zstd_rust",
 ] }

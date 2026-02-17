@@ -19,6 +19,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["http"]
 http = ["dep:reqwest", "dep:tokio", "dep:async-std"]
 eulumdat = ["dep:eulumdat"]
+l3d = ["dep:l3d_rs"]
 
 [dependencies]
 # Serialization
@@ -47,3 +48,9 @@ eulumdat = { workspace = true, optional = true }
 
 # Date/time for IFC export
 chrono = "0.4"
+
+# Base64 encoding for LDT content preservation
+base64 = "0.22"
+
+# L3D geometry parsing (optional)
+l3d_rs = { workspace = true, optional = true }

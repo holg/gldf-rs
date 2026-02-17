@@ -42,6 +42,84 @@ pub struct EmitterRenderData {
     pub emergency_behavior: Option<String>,
 }
 
+/// Mounting type for luminaire positioning
+#[derive(Debug, Clone, PartialEq)]
+pub enum MountingType {
+    /// Ceiling mounted (recessed, surface, or pendant)
+    Ceiling,
+    /// Wall mounted
+    Wall,
+    /// Ground mounted (pole, free-standing)
+    Ground,
+    /// Working plane (table/desk)
+    WorkingPlane,
+}
+
+/// Mounting information extracted from GLDF variant
+#[derive(Debug, Clone, Default)]
+pub struct MountingInfo {
+    /// Primary mounting type
+    pub mounting_type: Option<MountingType>,
+    /// Recessed depth in mm (for ceiling/wall recessed)
+    pub recessed_depth_mm: Option<i32>,
+    /// Pendant length in mm (for ceiling pendant)
+    pub pendant_length_mm: Option<f64>,
+    /// Mounting height in mm (for wall mounted)
+    pub mounting_height_mm: Option<i32>,
+    /// Pole height in mm (for ground pole-top/pole-integrated)
+    pub pole_height_mm: Option<i32>,
+    /// Whether surface mounted
+    pub is_surface_mounted: bool,
+    /// Whether free-standing
+    pub is_free_standing: bool,
+}
+
+impl MountingInfo {
+    /// Get the Y offset in meters for positioning in 3D scene
+    /// Returns (y_position, is_from_ceiling)
+    pub fn get_position_offset(&self, room_height: f32) -> (f32, bool) {
+        match self.mounting_type {
+            Some(MountingType::Ceiling) => {
+                if let Some(pendant_mm) = self.pendant_length_mm {
+                    // Pendant: hang down from ceiling
+                    (room_height - (pendant_mm as f32 / 1000.0), true)
+                } else if self.recessed_depth_mm.is_some() {
+                    // Recessed: flush with ceiling
+                    (room_height, true)
+                } else {
+                    // Surface mounted: slightly below ceiling
+                    (room_height - 0.05, true)
+                }
+            }
+            Some(MountingType::Wall) => {
+                // Wall: use mounting height or default to 2m
+                let height_m = self.mounting_height_mm.unwrap_or(2000) as f32 / 1000.0;
+                (height_m, false)
+            }
+            Some(MountingType::Ground) => {
+                if let Some(pole_mm) = self.pole_height_mm {
+                    // Pole mounted: at pole height
+                    (pole_mm as f32 / 1000.0, false)
+                } else if self.is_free_standing {
+                    // Free-standing on ground
+                    (0.0, false)
+                } else {
+                    // Default ground level
+                    (0.0, false)
+                }
+            }
+            Some(MountingType::WorkingPlane) => {
+                // Working plane: typical desk height ~0.75m
+                (0.75, false)
+            }
+            None => {
+                // Default: assume ceiling mounted
+                (room_height - 0.1, true)
+            }
+        }
+    }
+}
+
 /// All emitter data for a variant
 #[derive(Debug, Clone, Default)]
 pub struct VariantEmitterData {
@@ -53,6 +131,8 @@ pub struct VariantEmitterData {
     pub l3d_file_name: Option<String>,
     /// Per-emitter render data
     pub emitters: Vec<EmitterRenderData>,
+    /// Mounting information for positioning
+    pub mounting: MountingInfo,
 }
 
 /// Extract L3D to LDT mappings from a GLDF product
@@ -455,7 +535,96 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
         }
     }
 
+    // Extract mounting information from variant
+    result.mounting = extract_mounting_info(variant);
+
     result
+}
+
+/// Extract mounting information from a GLDF variant
+fn extract_mounting_info(variant: &crate::gldf::product_definitions::Variant) -> MountingInfo {
+    let mut info = MountingInfo::default();
+
+    let Some(mountings) = &variant.mountings else {
+        return info;
+    };
+
+    // Check ceiling mounting
+    if let Some(ceiling) = &mountings.ceiling {
+        info.mounting_type = Some(MountingType::Ceiling);
+
+        // Check for recessed
+        if let Some(recessed) = &ceiling.recessed {
+            info.recessed_depth_mm = Some(recessed.recessed_depth);
+        }
+
+        // Check for pendant
+        if let Some(pendant) = &ceiling.pendant {
+            info.pendant_length_mm = Some(pendant.pendant_length);
+        }
+
+        // Check for surface mounted
+        if ceiling.surface_mounted.is_some() {
+            info.is_surface_mounted = true;
+        }
+    }
+
+    // Check wall mounting (takes precedence if both exist - unusual)
+    if let Some(wall) = &mountings.wall {
+        info.mounting_type = Some(MountingType::Wall);
+        info.mounting_height_mm = Some(wall.mounting_height);
+
+        if let Some(recessed) = &wall.recessed {
+            info.recessed_depth_mm = Some(recessed.recessed_depth);
+        }
+
+        if wall.surface_mounted.is_some() {
+            info.is_surface_mounted = true;
+        }
+    }
+
+    // Check ground mounting
+    if let Some(ground) = &mountings.ground {
+        info.mounting_type = Some(MountingType::Ground);
+
+        // Pole top
+        if let Some(pole_top) = &ground.pole_top {
+            info.pole_height_mm = pole_top.get_pole_height();
+        }
+
+        // Pole integrated
+        if let Some(pole_integrated) = &ground.pole_integrated {
+            if info.pole_height_mm.is_none() {
+                info.pole_height_mm = pole_integrated.get_pole_height();
+            }
+        }
+
+        // Free standing
+        if ground.free_standing.is_some() {
+            info.is_free_standing = true;
+        }
+
+        // Surface mounted on ground
+        if ground.surface_mounted.is_some() {
+            info.is_surface_mounted = true;
+        }
+
+        // Recessed in ground
+        if let Some(recessed) = &ground.recessed {
+            info.recessed_depth_mm = Some(recessed.recessed_depth);
+        }
+    }
+
+    // Check working plane
+    if let Some(working_plane) = &mountings.working_plane {
+        info.mounting_type = Some(MountingType::WorkingPlane);
+
+        if working_plane.free_standing.is_some() {
+            info.is_free_standing = true;
+        }
+    }
+
+    info
 }
 
 #[cfg(test)]

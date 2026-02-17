@@ -16,7 +16,7 @@ members = [
 version = "0.3.3"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
-license = "GPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/holg/gldf-rs"
 homepage = "https://github.com/holg/gldf-rs"
 
@@ -68,7 +68,7 @@ three-d = { version = "0.18", default-features = true }
 three-d-asset = { version = "0.9", features = ["obj"] }
 
 # Bevy 3D engine
-bevy = { version = "0.15", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_render",
     "bevy_core_pipeline",
@@ -78,6 +78,7 @@ bevy = { version = "0.15", default-features = false, features = [
     "png",
     "webgl2",
     "x11",
+    "zstd_rust",
 ] }
 
 # eulumdat-bevy for lighting plugins (use local path due to broken include_str in published version)

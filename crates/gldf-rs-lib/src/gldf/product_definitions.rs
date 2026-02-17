@@ -772,53 +772,69 @@ pub struct Divisions {
     pub division: Vec<String>,
 }
 
-/// Gas groups
+/// Gas groups (contains Group elements)
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Gas {
+pub struct GasGroups {
     /// The list of gas group names.
     #[serde(rename = "Group", default)]
     pub group: Vec<String>,
 }
 
-/// Dust groups
+/// Dust groups (contains Group elements)
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Dust {
+pub struct DustGroups {
     /// The list of dust group names.
     #[serde(rename = "Group", default)]
     pub group: Vec<String>,
+}
+
+/// Gas zones (contains Zone elements)
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GasZones {
+    /// The list of gas zone values.
+    #[serde(rename = "Zone", default)]
+    pub zone: Vec<String>,
+}
+
+/// Dust zones (contains Zone elements)
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DustZones {
+    /// The list of dust zone values.
+    #[serde(rename = "Zone", default)]
+    pub zone: Vec<String>,
 }
 
 /// DivisionGroups
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DivisionGroups {
     /// The gas classification group.
-    #[serde(rename = "Gas")]
-    pub gas: Gas,
+    #[serde(rename = "Gas", skip_serializing_if = "Option::is_none")]
+    pub gas: Option<GasGroups>,
     /// The dust classification group.
-    #[serde(rename = "Dust")]
-    pub dust: Dust,
+    #[serde(rename = "Dust", skip_serializing_if = "Option::is_none")]
+    pub dust: Option<DustGroups>,
 }
 
-/// Zones
+/// Zones (contains Gas and Dust with Zone children)
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Zones {
     /// The gas protection zone.
-    #[serde(rename = "Gas")]
-    pub gas: Gas,
+    #[serde(rename = "Gas", skip_serializing_if = "Option::is_none")]
+    pub gas: Option<GasZones>,
     /// The dust protection zone.
-    #[serde(rename = "Dust")]
-    pub dust: Dust,
+    #[serde(rename = "Dust", skip_serializing_if = "Option::is_none")]
+    pub dust: Option<DustZones>,
 }
 
 /// ZoneGroups
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ZoneGroups {
     /// The gas protection zone group.
-    #[serde(rename = "Gas")]
-    pub gas: Gas,
+    #[serde(rename = "Gas", skip_serializing_if = "Option::is_none")]
+    pub gas: Option<GasGroups>,
     /// The dust protection zone group.
-    #[serde(rename = "Dust")]
-    pub dust: Dust,
+    #[serde(rename = "Dust", skip_serializing_if = "Option::is_none")]
+    pub dust: Option<DustGroups>,
 }
 
 /// TemperatureClasses
@@ -881,29 +897,32 @@ pub struct Groups {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ATEX {
     /// The ATEX directives information.
-    #[serde(rename = "Directives")]
-    pub directives: Directives,
+    #[serde(rename = "Directives", skip_serializing_if = "Option::is_none")]
+    pub directives: Option<Directives>,
     /// The ATEX classes information.
-    #[serde(rename = "Classes")]
-    pub classes: Classes,
+    #[serde(rename = "Classes", skip_serializing_if = "Option::is_none")]
+    pub classes: Option<Classes>,
     /// The ATEX divisions information.
-    #[serde(rename = "Divisions")]
-    pub divisions: Divisions,
+    #[serde(rename = "Divisions", skip_serializing_if = "Option::is_none")]
+    pub divisions: Option<Divisions>,
     /// The ATEX division groups information.
-    #[serde(rename = "DivisionGroups")]
-    pub division_groups: DivisionGroups,
+    #[serde(rename = "DivisionGroups", skip_serializing_if = "Option::is_none")]
+    pub division_groups: Option<DivisionGroups>,
     /// The ATEX zones information.
-    #[serde(rename = "Zones")]
-    pub zones: Zones,
+    #[serde(rename = "Zones", skip_serializing_if = "Option::is_none")]
+    pub zones: Option<Zones>,
     /// The ATEX zone groups information.
-    #[serde(rename = "ZoneGroups")]
-    pub zone_groups: ZoneGroups,
+    #[serde(rename = "ZoneGroups", skip_serializing_if = "Option::is_none")]
+    pub zone_groups: Option<ZoneGroups>,
     /// The maximum surface temperature allowed by ATEX.
-    #[serde(rename = "MaximumSurfaceTemperature")]
-    pub maximum_surface_temperature: String,
+    #[serde(
+        rename = "MaximumSurfaceTemperature",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub maximum_surface_temperature: Option<String>,
     /// The ATEX groups information.
-    #[serde(rename = "Groups")]
-    pub groups: Groups,
+    #[serde(rename = "Groups", skip_serializing_if = "Option::is_none")]
+    pub groups: Option<Groups>,
 }
 
 /// AbsorptionRate

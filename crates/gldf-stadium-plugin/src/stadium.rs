@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 use eulumdat::Eulumdat;
-use eulumdat_bevy::photometric::{PhotometricLight, PhotometricLightBundle};
+use eulumdat_bevy::photometric::PhotometricLight;
 
 use crate::{log, StadiumGldfData};
 
@@ -112,6 +112,7 @@ fn handle_intensity_controls(
 }
 
 /// Handle C/V keys to adjust tilt angle
+#[allow(clippy::too_many_arguments)]
 fn handle_tilt_controls(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tilt_angle: ResMut<TiltAngle>,
@@ -141,10 +142,10 @@ fn handle_tilt_controls(
 
         // Despawn and rebuild with new tilt
         for entity in geometry_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
         for entity in light_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
 
         build_stadium_with_tilt(
@@ -159,6 +160,7 @@ fn handle_tilt_controls(
 }
 
 /// Handle T key to toggle layout
+#[allow(clippy::too_many_arguments)]
 fn handle_layout_toggle(
     mut settings: ResMut<StadiumSettings>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -181,10 +183,10 @@ fn handle_layout_toggle(
 
         // Despawn existing
         for entity in geometry_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
         for entity in light_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
 
         // Rebuild
@@ -209,9 +211,10 @@ fn setup_stadium(
     log("[Stadium] Setting up stadium scene...");
 
     // Ambient light - enough to see the stadium
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(bevy::light::GlobalAmbientLight {
         color: Color::srgb(0.2, 0.2, 0.25),
         brightness: 800.0, // Higher for visibility
+        affects_lightmapped_meshes: true,
     });
 
     log("[Stadium] Setup: Ambient light configured");
@@ -674,6 +677,7 @@ fn spawn_floodlights_with_tilt(
 }
 
 /// Parse color temperature from string
+#[allow(dead_code)]
 fn parse_color_temperature(s: &str) -> f32 {
     s.trim()
         .trim_end_matches('K')
@@ -683,6 +687,7 @@ fn parse_color_temperature(s: &str) -> f32 {
 }
 
 /// Convert Kelvin to RGB color
+#[allow(clippy::excessive_precision)]
 fn kelvin_to_rgb(kelvin: f32) -> Color {
     let temp = kelvin / 100.0;
     let r = if temp <= 66.0 {

@@ -1,6 +1,7 @@
 //! Bevy 3D Scene Viewer Component
 //!
 //! Lazy-loads the Bevy WASM module and displays L3D models with LDT lighting.
+//! The bevy-loader.js script is inlined in the HTML to avoid caching issues.
 
 use gloo::console::log;
 use serde::Serialize;
@@ -23,7 +24,11 @@ extern "C" {
         l3d_data: &js_sys::Uint8Array,
         ldt_data: Option<&str>,
         emitter_json: Option<&str>,
+        mounting_json: Option<&str>,
     );
+
+    #[wasm_bindgen(js_name = clearL3dData)]
+    pub fn clear_l3d_data();
 }
 
 /// Per-emitter rendering data (serializable for localStorage)
@@ -37,6 +42,25 @@ pub struct EmitterConfig {
     pub color_temperature: Option<i32>,
     /// Emergency behavior
     pub emergency_behavior: Option<String>,
+}
+
+/// Mounting configuration for luminaire positioning (serializable for localStorage)
+#[derive(Clone, Debug, PartialEq, Default, Serialize)]
+pub struct MountingConfig {
+    /// Mounting type: "ceiling", "wall", "ground", "working_plane"
+    pub mounting_type: Option<String>,
+    /// Recessed depth in mm
+    pub recessed_depth_mm: Option<i32>,
+    /// Pendant length in mm
+    pub pendant_length_mm: Option<i32>,
+    /// Wall mounting height in mm
+    pub mounting_height_mm: Option<i32>,
+    /// Pole height in mm
+    pub pole_height_mm: Option<i32>,
+    /// Is surface mounted
+    pub is_surface_mounted: bool,
+    /// Is free-standing
+    pub is_free_standing: bool,
 }
 
 /// Loading state for the Bevy viewer
@@ -58,6 +82,9 @@ pub struct BevySceneViewerProps {
     /// Per-emitter configuration (flux, color temp)
     #[prop_or_default]
     pub emitter_config: Vec<EmitterConfig>,
+    /// Mounting configuration for positioning
+    #[prop_or_default]
+    pub mounting_config: MountingConfig,
     /// Variant ID (used to trigger reload when switching variants)
     #[prop_or_default]
     pub variant_id: String,
@@ -85,6 +112,7 @@ pub fn bevy_scene_viewer(props: &BevySceneViewerProps) -> Html {
         let l3d_data = props.l3d_data.clone();
         let ldt_data = props.ldt_data.clone();
         let emitter_config = props.emitter_config.clone();
+        let mounting_config = props.mounting_config.clone();
         let variant_id = props.variant_id.clone();
 
         // Use variant_id as the key to ensure effect re-runs when switching variants
@@ -104,8 +132,22 @@ pub fn bevy_scene_viewer(props: &BevySceneViewerProps) -> Html {
                 } else {
                     None
                 };
-                log!(format!("[BevyScene] Emitter config: {:?}", emitter_json));
-                save_l3d_for_bevy(&js_array, ldt_str, emitter_json.as_deref());
+                // Serialize mounting config to JSON
+                let mounting_json = if mounting_config.mounting_type.is_some() {
+                    serde_json::to_string(&mounting_config).ok()
+                } else {
+                    None
+                };
+                log!(format!(
+                    "[BevyScene] Emitter config: {:?}, Mounting: {:?}",
+                    emitter_json, mounting_json
+                ));
+                save_l3d_for_bevy(
+                    &js_array,
+                    ldt_str,
+                    emitter_json.as_deref(),
+                    mounting_json.as_deref(),
+                );
             }
             || {}
         });
