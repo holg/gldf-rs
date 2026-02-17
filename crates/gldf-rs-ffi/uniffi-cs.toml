@@ -1,0 +1,4 @@
+[bindings.csharp]
+namespace = "GldfNet.Interop"
+cdylib_name = "gldf_ffi"
+access_modifier = "public"
