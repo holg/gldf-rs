@@ -158,9 +158,9 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 
 # C# / .NET build artifacts
-crates/gldf-rs-csharp/bin/
-crates/gldf-rs-csharp/obj/
-crates/gldf-rs-csharp/runtimes/
+bindings/csharp/bin/
+bindings/csharp/obj/
+bindings/csharp/runtimes/
 *.nupkg
 
 # Code Injection

@@ -36,7 +36,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 FFI_CRATE="$ROOT_DIR/crates/gldf-rs-ffi"
-CSHARP_DIR="$ROOT_DIR/crates/gldf-rs-csharp"
+CSHARP_DIR="$ROOT_DIR/bindings/csharp"
 TARGET_DIR="$ROOT_DIR/target"
 
 # Colors
