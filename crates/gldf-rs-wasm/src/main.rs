@@ -263,90 +263,11 @@ impl Component for App {
                     return true;
                 }
                 // Handle ULD (DIALux) and ROLF (Relux) files
-                #[cfg(feature = "light-convert")]
+                // ULD/ROLF conversion requires the light-other branch with light-convert feature
                 if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
-                    let fmt_name = if file_name_lower.ends_with(".uld") {
-                        "ULD"
-                    } else {
-                        "ROLF"
-                    };
-                    console::log!("Converting", fmt_name, "to GLDF...");
-                    match light_convert::convert_to_gldf(&data, None) {
-                        Ok(gldf_bytes) => {
-                            console::log!(
-                                fmt_name,
-                                "converted to GLDF successfully, size:",
-                                gldf_bytes.len()
-                            );
-                            match WasmGldfProduct::load_gldf_from_buf_all(gldf_bytes) {
-                                Ok(gldf) => {
-                                    console::log!(
-                                        "GLDF loaded successfully from",
-                                        fmt_name,
-                                        "conversion"
-                                    );
-
-                                    // Clear stale Bevy viewer data before loading new GLDF
-                                    crate::components::clear_l3d_data();
-
-                                    // Clear existing files and add files from converted GLDF
-                                    self.files.clear();
-                                    for buf_file in &gldf.files {
-                                        if let (Some(name), Some(content)) =
-                                            (&buf_file.name, &buf_file.content)
-                                        {
-                                            let file_type = if name.ends_with(".xml") {
-                                                "application/xml"
-                                            } else if name.ends_with(".ldt") {
-                                                "ldc/eulumdat"
-                                            } else if name.ends_with(".ies") {
-                                                "ldc/ies"
-                                            } else if name.ends_with(".l3d") {
-                                                "geo/l3d"
-                                            } else if name.ends_with(".png") {
-                                                "image/png"
-                                            } else if name.ends_with(".jpg")
-                                                || name.ends_with(".jpeg")
-                                            {
-                                                "image/jpeg"
-                                            } else {
-                                                "application/octet-stream"
-                                            };
-                                            self.files.push(FileDetails {
-                                                data: content.clone(),
-                                                file_type: file_type.to_string(),
-                                                name: name.clone(),
-                                            });
-                                            console::log!("  Added file:", name.as_str());
-                                        }
-                                    }
-
-                                    self.loaded_gldf = Some(gldf);
-                                    self.readers.remove(&file_name);
-                                    return true;
-                                }
-                                Err(e) => {
-                                    console::log!(
-                                        "Failed to load converted GLDF:",
-                                        format!("{}", e).as_str()
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            console::log!(
-                                fmt_name,
-                                "conversion failed:",
-                                format!("{}", e).as_str()
-                            );
-                        }
-                    }
+                    console::log!("ULD/ROLF file conversion is not available in this build.");
                     self.readers.remove(&file_name);
                     return true;
-                }
-                #[cfg(not(feature = "light-convert"))]
-                if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
-                    console::log!("ULD/ROLF file conversion requires the light-convert feature.");
                 }
                 // Handle LDT/IES files - convert to minimal GLDF
                 if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
