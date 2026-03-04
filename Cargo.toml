@@ -81,11 +81,11 @@ bevy = { version = "0.18", default-features = false, features = [
     "zstd_rust",
 ] }
 
-# eulumdat-bevy for lighting plugins (use local path due to broken include_str in published version)
-eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
+# eulumdat-bevy for lighting plugins
+eulumdat-bevy = "0.5.0"
 
 # Photometric data
-eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
+eulumdat = "0.5.0"
 l3d_rs = "0.2.3"
 
 # File dialogs (native)
