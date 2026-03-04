@@ -19,25 +19,34 @@ Learn more at: https://gldf.io
 ```
 gldf-rs/
 ├── crates/
-│   ├── gldf-rs-lib/      # Core Rust library
-│   ├── gldf-rs-egui/     # Desktop GUI (egui)
-│   ├── gldf-rs-wasm/     # WebAssembly viewer
-│   ├── gldf-rs-python/   # Python bindings (PyO3)
-│   └── gldf-rs-ffi/      # FFI bindings (Swift/Kotlin)
-├── GldfApp/              # Native iOS/macOS/Android apps
-├── tests/                # Shared test data
-└── scripts/              # Build scripts
+│   ├── gldf-rs-lib/           # Core Rust library
+│   ├── gldf-rs-wasm/          # WebAssembly viewer (Yew + Bevy 3D)
+│   ├── gldf-rs-egui/          # Desktop GUI (egui)
+│   ├── gldf-rs-python/        # Python bindings (PyO3)
+│   ├── gldf-rs-ffi/           # FFI bindings (Swift/Kotlin)
+│   ├── gldf-bevy/             # Bevy 3D scene renderer
+│   ├── gldf-stadium-plugin/   # Stadium lighting plugin
+│   ├── gldf-starsky-wasm/     # Star sky WASM plugin
+│   └── gldf-ifc-viewer-wasm/  # IFC viewer WASM module
+├── bindings/
+│   └── csharp/                # C# / .NET bindings (uniffi-bindgen-cs)
+├── GldfApp/                   # Native iOS/macOS/Android apps
+├── tests/                     # Shared test data
+└── scripts/                   # Build & utility scripts
 ```
 
 ## Packages
 
 | Package | Description | Published |
 |---------|-------------|-----------|
-| `gldf-rs` | Core Rust library for GLDF parsing and manipulation | [crates.io](https://crates.io/crates/gldf-rs) |
+| `gldf-rs` | Core Rust library for GLDF parsing, IFC integration, plugin system | [crates.io](https://crates.io/crates/gldf-rs) |
+| `gldf-rs-wasm` | WebAssembly app with GLDF editor, 3D viewer, photometry diagrams | [gldf.icu](https://gldf.icu) |
+| `gldf-bevy` | Bevy-based 3D scene renderer with L3D models and lighting | - |
 | `gldf-rs-egui` | Desktop GUI application with 3D L3D viewer | - |
-| `gldf-rs-wasm` | WebAssembly app with interactive GLDF viewer | [gldf.icu](https://gldf.icu) |
 | `gldf-rs-python` | Python bindings via PyO3 | [PyPI](https://pypi.org/project/gldf-rs-python/) |
 | `gldf-rs-ffi` | FFI bindings for Swift/Kotlin (iOS, macOS, Android) | - |
+| `bindings/csharp` | C# / .NET bindings via uniffi-bindgen-cs | - |
+| `gldf-stadium-plugin` | Stadium lighting plugin (example plugin architecture) | - |
 | `GldfApp` | Native applications for iOS, macOS, and Android | - |
 
 ## Features
@@ -46,9 +55,13 @@ gldf-rs/
 - Convert between XML and JSON representations
 - Extract and process embedded files (images, photometry, 3D models)
 - **Convert LDT/IES photometry files to GLDF** (Rust, Python, WASM)
-- Support for meta-information.xml
-- WebGL-based L3D 3D model viewer
-- LDT/IES photometry diagram rendering (Polar, Cartesian, Heatmap, BUG, LCS)
+- **IFC integration**: Import/export IFC (Industry Foundation Classes) files with STEP parser
+- **Plugin system**: Extensible architecture for custom luminaire scenes (stadium, star sky)
+- Support for meta-information.xml and multi-variant GLDF files
+- **Bevy 3D scene renderer**: Room, road, parking, and outdoor scenes with realistic lighting
+- LDT/IES photometry diagram rendering (Polar, Cartesian, Heatmap, 3D Butterfly, BUG, LCS, Cone, Isocandela, Isolux, Floodlight V-H)
+- JSON/XML export with browser download
+- **Multi-language bindings**: Python (PyO3), Swift/Kotlin (UniFFI), C# (.NET)
 - Native apps with Swift Package Manager support
 
 ## Live Demo
@@ -82,8 +95,11 @@ assert_eq!(x_serialized, x_reserialized);
 
 ```bash
 cd crates/gldf-rs-wasm
-trunk serve
-# Open http://127.0.0.1:8080
+# Full build with Bevy 3D loader:
+./scripts/build-wasm-split.sh
+# Serve locally:
+python3 -m http.server 8052 --directory dist
+# Open http://127.0.0.1:8052
 ```
 
 ### Desktop GUI (egui)
@@ -115,6 +131,20 @@ for f in phot_files.iter() {
 ```
 
 ## Release Notes
+
+### 0.3.4 (upcoming)
+- **IFC integration**: Import/export IFC files with STEP parser and GLDF generator
+- **Plugin system**: Extensible architecture with stadium and star sky example plugins
+- **Bevy 3D scene renderer**:
+  - Room, road, parking, and outdoor scenes with scene switching (keys 1-4)
+  - Correct emitter positioning (mm→m conversion for L3D light emitting objects)
+  - Scene-aware mounting: outdoor pole height vs room ceiling clamp
+  - Dynamic light range/intensity scaling based on mounting height
+- **New photometry diagrams**: Cone, Isocandela, Isolux, Floodlight Cartesian (V-H)
+- **Combined multi-variant GLDF support**: Load and inspect multi-variant files with correct file matching
+- **C# / .NET bindings** via uniffi-bindgen-cs
+- **JSON/XML export**: Browser download for exported files
+- **Local CI script**: `scripts/test-ci-locally.sh` for pre-push validation
 
 ### 0.3.3
 - **LDT/IES to GLDF conversion**: New Python bindings for converting photometry files
