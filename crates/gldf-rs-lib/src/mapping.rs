@@ -541,7 +541,12 @@ pub fn get_variant_emitter_data(gldf: &GldfProduct, variant_id: &str) -> Variant
     result
 }
 
-/// Extract mounting information from a GLDF variant
+/// Extract mounting information from a GLDF variant.
+///
+/// When multiple mounting types are present, priority is:
+/// Wall > Ceiling > Ground > WorkingPlane.
+/// Wall is preferred because it carries explicit mounting height.
+/// Supplementary data (pole height, etc.) is still collected from all mountings.
 fn extract_mounting_info(variant: &crate::gldf::product_definitions::Variant) -> MountingInfo {
     let mut info = MountingInfo::default();
 
@@ -549,29 +554,13 @@ fn extract_mounting_info(variant: &crate::gldf::product_definitions::Variant) ->
         return info;
     };
 
-    // Check ceiling mounting
-    if let Some(ceiling) = &mountings.ceiling {
-        info.mounting_type = Some(MountingType::Ceiling);
+    // Collect data from all mounting types, set mounting_type by priority
 
-        // Check for recessed
-        if let Some(recessed) = &ceiling.recessed {
-            info.recessed_depth_mm = Some(recessed.recessed_depth);
-        }
-
-        // Check for pendant
-        if let Some(pendant) = &ceiling.pendant {
-            info.pendant_length_mm = Some(pendant.pendant_length);
-        }
-
-        // Check for surface mounted
-        if ceiling.surface_mounted.is_some() {
-            info.is_surface_mounted = true;
-        }
-    }
-
-    // Check wall mounting (takes precedence if both exist - unusual)
+    // Check wall mounting (highest priority — has explicit mounting height)
     if let Some(wall) = &mountings.wall {
-        info.mounting_type = Some(MountingType::Wall);
+        if info.mounting_type.is_none() {
+            info.mounting_type = Some(MountingType::Wall);
+        }
         info.mounting_height_mm = Some(wall.mounting_height);
 
         if let Some(recessed) = &wall.recessed {
@@ -583,41 +572,61 @@ fn extract_mounting_info(variant: &crate::gldf::product_definitions::Variant) ->
         }
     }
 
+    // Check ceiling mounting
+    if let Some(ceiling) = &mountings.ceiling {
+        if info.mounting_type.is_none() {
+            info.mounting_type = Some(MountingType::Ceiling);
+        }
+
+        if let Some(recessed) = &ceiling.recessed {
+            info.recessed_depth_mm = Some(recessed.recessed_depth);
+        }
+
+        if let Some(pendant) = &ceiling.pendant {
+            info.pendant_length_mm = Some(pendant.pendant_length);
+        }
+
+        if ceiling.surface_mounted.is_some() {
+            info.is_surface_mounted = true;
+        }
+    }
+
     // Check ground mounting
     if let Some(ground) = &mountings.ground {
-        info.mounting_type = Some(MountingType::Ground);
+        if info.mounting_type.is_none() {
+            info.mounting_type = Some(MountingType::Ground);
+        }
 
-        // Pole top
         if let Some(pole_top) = &ground.pole_top {
             info.pole_height_mm = pole_top.get_pole_height();
         }
 
-        // Pole integrated
         if let Some(pole_integrated) = &ground.pole_integrated {
             if info.pole_height_mm.is_none() {
                 info.pole_height_mm = pole_integrated.get_pole_height();
             }
         }
 
-        // Free standing
         if ground.free_standing.is_some() {
             info.is_free_standing = true;
         }
 
-        // Surface mounted on ground
         if ground.surface_mounted.is_some() {
             info.is_surface_mounted = true;
         }
 
-        // Recessed in ground
         if let Some(recessed) = &ground.recessed {
-            info.recessed_depth_mm = Some(recessed.recessed_depth);
+            if info.recessed_depth_mm.is_none() {
+                info.recessed_depth_mm = Some(recessed.recessed_depth);
+            }
         }
     }
 
     // Check working plane
     if let Some(working_plane) = &mountings.working_plane {
-        info.mounting_type = Some(MountingType::WorkingPlane);
+        if info.mounting_type.is_none() {
+            info.mounting_type = Some(MountingType::WorkingPlane);
+        }
 
         if working_plane.free_standing.is_some() {
             info.is_free_standing = true;

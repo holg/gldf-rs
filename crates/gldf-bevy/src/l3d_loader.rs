@@ -218,7 +218,7 @@ fn setup_l3d_model(
     );
 }
 
-/// Update L3D model when data changes
+/// Update L3D model when data or scene settings change
 fn update_l3d_model(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -228,13 +228,20 @@ fn update_l3d_model(
     existing_models: Query<Entity, With<L3dModel>>,
     existing_lights: Query<Entity, With<L3dLight>>,
 ) {
-    if !scene_data.is_changed() {
+    // Respawn when L3D data changes OR when scene type/settings change
+    // (scene type affects mounting position)
+    if !scene_data.is_changed() && !settings.is_changed() {
+        return;
+    }
+    // Skip if no L3D data loaded
+    if scene_data.l3d_data.is_none() {
         return;
     }
     log(&format!(
-        "[L3D] update_l3d_model triggered, has L3D: {}, emitters: {}",
+        "[L3D] update_l3d_model triggered, has L3D: {}, emitters: {}, scene: {:?}",
         scene_data.l3d_data.is_some(),
-        scene_data.emitter_config.len()
+        scene_data.emitter_config.len(),
+        settings.scene_type
     ));
 
     // Remove existing models
@@ -304,19 +311,39 @@ fn spawn_l3d_model(
     // This is applied after coordinate conversion
     let ceiling_flip = Quat::from_rotation_x(std::f32::consts::PI);
 
-    // Position luminaire based on mounting configuration (from GLDF variant)
-    // Falls back to scene type if no mounting info available
+    // Position luminaire based on scene type and mounting configuration
+    let is_room = matches!(settings.scene_type, eulumdat_bevy::SceneType::Room);
     let (luminaire_y, is_ceiling) = if scene_data.mounting.mounting_type.is_some() {
         // Use GLDF mounting info
         let (y, is_ceil) = scene_data.mounting.get_y_position(settings.room_height);
         log(&format!(
-            "[L3D] Using GLDF mounting: type={:?}, recessed={:?}mm, pendant={:?}mm, pole={:?}mm",
+            "[L3D] Using GLDF mounting: type={:?}, recessed={:?}mm, pendant={:?}mm, pole={:?}mm, wall_h={:?}mm",
             scene_data.mounting.mounting_type,
             scene_data.mounting.recessed_depth_mm,
             scene_data.mounting.pendant_length_mm,
-            scene_data.mounting.pole_height_mm
+            scene_data.mounting.pole_height_mm,
+            scene_data.mounting.mounting_height_mm,
         ));
-        (y, is_ceil)
+        if is_room {
+            // Room scene: clamp to room height so luminaire stays visible
+            let clamped_y = y.min(settings.room_height - 0.05);
+            if (clamped_y - y).abs() > 0.01 {
+                log(&format!(
+                    "[L3D] Room: clamped luminaire Y from {:.2}m to {:.2}m (room height {:.2}m)",
+                    y, clamped_y, settings.room_height
+                ));
+            }
+            (clamped_y, is_ceil)
+        } else {
+            // Outdoor scenes (Road, Parking, Outdoor): mount on pole at scene mounting height
+            // The pole is built at settings.mounting_height, so place luminaire there
+            let pole_y = settings.mounting_height;
+            log(&format!(
+                "[L3D] Outdoor: placing luminaire at pole height {:.2}m (GLDF wanted {:.2}m)",
+                pole_y, y
+            ));
+            (pole_y, false)
+        }
     } else {
         // Fallback to scene type
         let y = match settings.scene_type {
@@ -329,12 +356,17 @@ fn spawn_l3d_model(
         )
     };
 
-    // For wall-mounted fixtures, position against the wall
-    let (mount_x, mount_z) = if scene_data.mounting.mounting_type.as_deref() == Some("wall") {
-        // Position near wall (centered on X, at wall edge on Z)
-        (settings.room_width / 2.0, 0.1)
+    // Position luminaire in the scene based on mounting type and scene type
+    let (mount_x, mount_z) = if is_room {
+        if scene_data.mounting.mounting_type.as_deref() == Some("wall") {
+            // Room + wall mount: position against the wall
+            (settings.room_width / 2.0, 0.1)
+        } else {
+            // Room + ceiling/other: center of room
+            (settings.room_width / 2.0, settings.room_length / 2.0)
+        }
     } else {
-        // Center of room
+        // Outdoor scenes: center position (matches pole placement in Parking/Outdoor)
         (settings.room_width / 2.0, settings.room_length / 2.0)
     };
 
@@ -657,12 +689,15 @@ fn spawn_lights_from_emitters(
             flux
         };
 
-        // Bevy uses lumens * some factor for intensity
-        let intensity = final_flux * 50.0;
+        // Scale intensity to Bevy candela — cap to avoid WebGL issues
+        let intensity = (final_flux * 50.0).min(2_000_000.0);
 
-        // Transform position from L3D (Z-up) to Bevy (Y-up)
-        let local_pos = *z_to_y_rotation * emitter.world_position;
+        // Transform position from L3D (Z-up, millimeters) to Bevy (Y-up, meters)
+        let local_pos = *z_to_y_rotation * (emitter.world_position / 1000.0);
         let world_pos = local_pos + *mounting_offset;
+
+        // Light range: must reach the ground from mounting height, plus some margin
+        let light_range = (mounting_offset.y * 3.0).max(30.0);
 
         // In L3D, the default light direction is -Z (downward in Z-up system)
         let rot_x = emitter.world_rotation.x.to_radians();
@@ -688,20 +723,21 @@ fn spawn_lights_from_emitters(
         // Calculate a target point for the spotlight to look at
         let target = world_pos + bevy_dir * 10.0;
 
-        log(&format!("[L3D] *** SPAWN '{}': {:.0} lm, {}K, emerg={}, pos({:.3},{:.3},{:.3}), dir({:.2},{:.2},{:.2})",
+        log(&format!("[L3D] *** SPAWN '{}': {:.0} lm, {}K, emerg={}, pos({:.3},{:.3},{:.3}), dir({:.2},{:.2},{:.2}), range={:.1}m",
             emitter.name,
             final_flux,
             config.and_then(|c| c.color_temperature).unwrap_or(0),
             is_emergency_only,
             world_pos.x, world_pos.y, world_pos.z,
-            bevy_dir.x, bevy_dir.y, bevy_dir.z));
+            bevy_dir.x, bevy_dir.y, bevy_dir.z,
+            light_range));
 
         // Use SpotLight for main directional lighting (pointing down)
         commands.spawn((
             SpotLight {
                 color,
                 intensity,
-                range: 20.0,
+                range: light_range,
                 radius: emitter.size.0.max(emitter.size.1) / 2.0,
                 inner_angle: 0.5, // ~30 degrees
                 outer_angle: 1.2, // ~70 degrees
@@ -717,7 +753,7 @@ fn spawn_lights_from_emitters(
             PointLight {
                 color,
                 intensity: intensity * 0.3, // 30% as ambient fill
-                range: 5.0,
+                range: light_range,
                 radius: 0.02,
                 shadows_enabled: false,
                 ..default()

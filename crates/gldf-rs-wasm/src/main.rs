@@ -77,8 +77,8 @@ pub enum Msg {
     ExportGldf,
     ExportIfc,
     SetDragging(bool),
-    LoadDemo,
-    DemoLoaded(Result<Vec<u8>, String>),
+    LoadDemo(String),
+    DemoLoaded(Result<Vec<u8>, String>, String),
     LoadFromUrl(String),
     UrlLoaded(Result<Vec<u8>, String>, String),
     Select3dVariant(Option<String>),
@@ -262,12 +262,94 @@ impl Component for App {
                     self.readers.remove(&file_name);
                     return true;
                 }
-                // Handle ULD (DIALux) and ROLF (Relux) files - not supported yet
-                else if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
-                    console::log!("ULD/ROLF file conversion is not yet available in this version.");
+                // Handle ULD (DIALux) and ROLF (Relux) files
+                #[cfg(feature = "light-convert")]
+                if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
+                    let fmt_name = if file_name_lower.ends_with(".uld") {
+                        "ULD"
+                    } else {
+                        "ROLF"
+                    };
+                    console::log!("Converting", fmt_name, "to GLDF...");
+                    match light_convert::convert_to_gldf(&data, None) {
+                        Ok(gldf_bytes) => {
+                            console::log!(
+                                fmt_name,
+                                "converted to GLDF successfully, size:",
+                                gldf_bytes.len()
+                            );
+                            match WasmGldfProduct::load_gldf_from_buf_all(gldf_bytes) {
+                                Ok(gldf) => {
+                                    console::log!(
+                                        "GLDF loaded successfully from",
+                                        fmt_name,
+                                        "conversion"
+                                    );
+
+                                    // Clear stale Bevy viewer data before loading new GLDF
+                                    crate::components::clear_l3d_data();
+
+                                    // Clear existing files and add files from converted GLDF
+                                    self.files.clear();
+                                    for buf_file in &gldf.files {
+                                        if let (Some(name), Some(content)) =
+                                            (&buf_file.name, &buf_file.content)
+                                        {
+                                            let file_type = if name.ends_with(".xml") {
+                                                "application/xml"
+                                            } else if name.ends_with(".ldt") {
+                                                "ldc/eulumdat"
+                                            } else if name.ends_with(".ies") {
+                                                "ldc/ies"
+                                            } else if name.ends_with(".l3d") {
+                                                "geo/l3d"
+                                            } else if name.ends_with(".png") {
+                                                "image/png"
+                                            } else if name.ends_with(".jpg")
+                                                || name.ends_with(".jpeg")
+                                            {
+                                                "image/jpeg"
+                                            } else {
+                                                "application/octet-stream"
+                                            };
+                                            self.files.push(FileDetails {
+                                                data: content.clone(),
+                                                file_type: file_type.to_string(),
+                                                name: name.clone(),
+                                            });
+                                            console::log!("  Added file:", name.as_str());
+                                        }
+                                    }
+
+                                    self.loaded_gldf = Some(gldf);
+                                    self.readers.remove(&file_name);
+                                    return true;
+                                }
+                                Err(e) => {
+                                    console::log!(
+                                        "Failed to load converted GLDF:",
+                                        format!("{}", e).as_str()
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            console::log!(
+                                fmt_name,
+                                "conversion failed:",
+                                format!("{}", e).as_str()
+                            );
+                        }
+                    }
+                    self.readers.remove(&file_name);
+                    return true;
+                }
+                #[cfg(not(feature = "light-convert"))]
+                if file_name_lower.ends_with(".uld") || file_name_lower.ends_with(".rolf") {
+                    console::log!("ULD/ROLF file conversion requires the light-convert feature.");
                 }
                 // Handle LDT/IES files - convert to minimal GLDF
-                else if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
+                if file_name_lower.ends_with(".ldt") || file_name_lower.ends_with(".ies") {
                     console::log!("Converting LDT/IES to GLDF...");
                     // Clear stale Bevy viewer data before loading new GLDF
                     crate::components::clear_l3d_data();
@@ -356,8 +438,7 @@ impl Component for App {
             Msg::ExportJson => {
                 if let Some(ref gldf) = self.loaded_gldf {
                     if let Ok(json) = gldf.gldf.to_pretty_json() {
-                        console::log!("Exported JSON:", json.as_str());
-                        // TODO: Trigger download
+                        trigger_text_download(&json, "product.json", "application/json");
                     }
                 }
                 false
@@ -365,8 +446,7 @@ impl Component for App {
             Msg::ExportXml => {
                 if let Some(ref gldf) = self.loaded_gldf {
                     if let Ok(xml) = gldf.gldf.to_xml() {
-                        console::log!("Exported XML:", xml.as_str());
-                        // TODO: Trigger download
+                        trigger_text_download(&xml, "product.xml", "application/xml");
                     }
                 }
                 false
@@ -500,10 +580,12 @@ impl Component for App {
                 self.is_dragging = dragging;
                 true
             }
-            Msg::LoadDemo => {
+            Msg::LoadDemo(filename) => {
                 let link = ctx.link().clone();
+                let url = format!("/{}", filename);
+                let fname = filename.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    let result = gloo::net::http::Request::get("/slv_tria_2.gldf")
+                    let result = gloo::net::http::Request::get(&url)
                         .send()
                         .await
                         .map_err(|e| format!("Network error: {}", e))
@@ -523,11 +605,11 @@ impl Component for App {
                         Err(e) => Err(e),
                     };
 
-                    link.send_message(Msg::DemoLoaded(data));
+                    link.send_message(Msg::DemoLoaded(data, fname));
                 });
                 false
             }
-            Msg::DemoLoaded(result) => {
+            Msg::DemoLoaded(result, filename) => {
                 match result {
                     Ok(data) => {
                         console::log!("Demo loaded:", data.len(), "bytes");
@@ -539,7 +621,7 @@ impl Component for App {
                         self.files.push(FileDetails {
                             data,
                             file_type: "application/gldf".to_string(),
-                            name: "slv_tria_2.gldf".to_string(),
+                            name: filename,
                         });
                     }
                     Err(e) => {
@@ -792,6 +874,31 @@ impl Component for App {
                     { self.view_help_overlay(ctx) }
                 }
             </div>
+        }
+    }
+}
+
+/// Trigger a text file download in the browser
+fn trigger_text_download(content: &str, filename: &str, mime_type: &str) {
+    let array = js_sys::Array::new();
+    array.push(&wasm_bindgen::JsValue::from_str(content));
+    let opts = web_sys::BlobPropertyBag::new();
+    opts.set_type(mime_type);
+    if let Ok(blob) = web_sys::Blob::new_with_str_sequence_and_options(&array, &opts) {
+        if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+            let window = web_sys::window().unwrap();
+            let document = window.document().unwrap();
+            if let Ok(a) = document.create_element("a") {
+                let _ = a.set_attribute("href", &url);
+                let _ = a.set_attribute("download", filename);
+                let _ = a.set_attribute("style", "display: none");
+                let _ = document.body().unwrap().append_child(&a);
+                if let Some(html_a) = a.dyn_ref::<web_sys::HtmlElement>() {
+                    html_a.click();
+                }
+                let _ = document.body().unwrap().remove_child(&a);
+                let _ = web_sys::Url::revoke_object_url(&url);
+            }
         }
     }
 }
@@ -1505,8 +1612,14 @@ impl App {
 
                 <div class="welcome-buttons">
                     <label for="file-upload" class="btn btn-primary">{ "Open File..." }</label>
-                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo)}>
+                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo("slv_tria_2.gldf".into()))}>
                         { "Load SLV Tria 2" }
+                    </button>
+                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo("FLOODLIGHT_MAX_1200W_757_SYM_10_WAL_enriched.gldf".into()))}>
+                        { "Load Ledvance Floodlight Max" }
+                    </button>
+                    <button class="btn btn-secondary" onclick={ctx.link().callback(|_| Msg::LoadDemo("LEDVANCE_FLOODLIGHT_MAX.gldf".into()))}>
+                        { "Load Floodlight Max Combined" }
                     </button>
                 </div>
 
@@ -2896,7 +3009,13 @@ impl App {
                             .as_ref()
                             .map(|n| {
                                 let stored = n.rsplit('/').next().unwrap_or(n);
-                                stored.eq_ignore_ascii_case(&file_def.file_name)
+                                let def_basename = file_def
+                                    .file_name
+                                    .rsplit('/')
+                                    .next()
+                                    .unwrap_or(&file_def.file_name);
+                                stored.eq_ignore_ascii_case(def_basename)
+                                    || n.eq_ignore_ascii_case(&file_def.file_name)
                             })
                             .unwrap_or(false)
                     })
@@ -3036,17 +3155,25 @@ impl App {
             None => return (None, None),
         };
 
-        // Find L3D content
+        // Find L3D content: match by file_id first, then by basename
         let l3d_content = gldf
             .files
             .iter()
             .find(|f| {
+                // Try file_id match first (most reliable)
+                if f.file_id.as_ref() == Some(&mapping.l3d_file_id) {
+                    return true;
+                }
+                // Fall back to basename comparison
                 if let Some(ref name) = f.name {
-                    let stored_name = name.rsplit('/').next().unwrap_or(name);
+                    let stored_basename = name.rsplit('/').next().unwrap_or(name);
                     mapping
                         .l3d_file_name
                         .as_ref()
-                        .map(|n| stored_name.eq_ignore_ascii_case(n))
+                        .map(|n| {
+                            let mapping_basename = n.rsplit('/').next().unwrap_or(n);
+                            stored_basename.eq_ignore_ascii_case(mapping_basename)
+                        })
                         .unwrap_or(false)
                 } else {
                     false
@@ -3054,14 +3181,15 @@ impl App {
             })
             .and_then(|f| f.content.clone());
 
-        // Find LDT content
+        // Find LDT content: match by basename (strip directory from both sides)
         let ldt_content = mapping.ldt_file_name.as_ref().and_then(|ldt_name| {
+            let ldt_basename = ldt_name.rsplit('/').next().unwrap_or(ldt_name);
             gldf.files
                 .iter()
                 .find(|f| {
                     if let Some(ref name) = f.name {
-                        let stored_name = name.rsplit('/').next().unwrap_or(name);
-                        stored_name.eq_ignore_ascii_case(ldt_name)
+                        let stored_basename = name.rsplit('/').next().unwrap_or(name);
+                        stored_basename.eq_ignore_ascii_case(ldt_basename)
                     } else {
                         false
                     }

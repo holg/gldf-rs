@@ -1,7 +1,11 @@
 //! LDT/Eulumdat diagram viewer component with multiple diagram types
 
 use eulumdat::{
-    diagram::{ButterflyDiagram, CartesianDiagram, HeatmapDiagram, PolarDiagram, SvgTheme},
+    diagram::{
+        ButterflyDiagram, CartesianDiagram, ConeDiagram, FloodlightCartesianDiagram,
+        HeatmapDiagram, IsocandelaDiagram, IsoluxDiagram, IsoluxParams, PolarDiagram, SvgTheme,
+        YScale,
+    },
     BugDiagram, Eulumdat, IesParser, PhotometricSummary,
 };
 use gloo::console::log;
@@ -18,6 +22,10 @@ pub enum ViewType {
     Butterfly,
     Bug,
     Lcs,
+    Cone,
+    Isocandela,
+    Isolux,
+    Floodlight,
 }
 
 impl ViewType {
@@ -29,6 +37,10 @@ impl ViewType {
             ViewType::Butterfly => "3D",
             ViewType::Bug => "BUG",
             ViewType::Lcs => "LCS",
+            ViewType::Cone => "Cone",
+            ViewType::Isocandela => "Isocd",
+            ViewType::Isolux => "Isolux",
+            ViewType::Floodlight => "V-H",
         }
     }
 
@@ -40,6 +52,10 @@ impl ViewType {
             ViewType::Butterfly => "🦋",
             ViewType::Bug => "🔦",
             ViewType::Lcs => "📐",
+            ViewType::Cone => "▽",
+            ViewType::Isocandela => "◎",
+            ViewType::Isolux => "▦",
+            ViewType::Floodlight => "⊞",
         }
     }
 
@@ -51,6 +67,10 @@ impl ViewType {
             ViewType::Butterfly,
             ViewType::Bug,
             ViewType::Lcs,
+            ViewType::Cone,
+            ViewType::Isocandela,
+            ViewType::Isolux,
+            ViewType::Floodlight,
         ]
     }
 }
@@ -296,6 +316,30 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view_type: ViewType)
         ViewType::Lcs => {
             let bug = BugDiagram::from_eulumdat(&ldt);
             bug.to_lcs_svg(width.max(510.0), height, &theme)
+        }
+        ViewType::Cone => {
+            let diagram = ConeDiagram::from_eulumdat(&ldt, 8.0);
+            diagram.to_svg(width, height, &theme)
+        }
+        ViewType::Isocandela => {
+            let diagram = IsocandelaDiagram::from_eulumdat(&ldt, width, height);
+            diagram.to_svg(width, height, &theme)
+        }
+        ViewType::Isolux => {
+            let params = IsoluxParams {
+                mounting_height: 8.0,
+                tilt_angle: 0.0,
+                area_half_width: 20.0,
+                area_half_depth: 20.0,
+                grid_resolution: 50,
+            };
+            let diagram = IsoluxDiagram::from_eulumdat(&ldt, width, height, params);
+            diagram.to_svg(width, height, &theme)
+        }
+        ViewType::Floodlight => {
+            let diagram =
+                FloodlightCartesianDiagram::from_eulumdat(&ldt, width, height, YScale::Linear);
+            diagram.to_svg(width, height, &theme)
         }
     }
 }

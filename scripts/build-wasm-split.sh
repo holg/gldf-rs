@@ -410,12 +410,26 @@ if [[ "$BUILD_BEVY" == "true" ]]; then
         else
             sed -i "s/${BEVY_LIBRARY}_bg.wasm/${BEVY_LIBRARY}-${WASM_HASH}_bg.wasm/g" "$DIST_DIR/bevy/${BEVY_LIBRARY}-${JS_HASH}.js"
         fi
+
+        # Generate manifest.json for the inlined bevy-loader.js
+        cat > "$DIST_DIR/bevy/manifest.json" << MANIFESTEOF
+{"js":"${BEVY_LIBRARY}-${JS_HASH}.js","wasm":"${BEVY_LIBRARY}-${WASM_HASH}_bg.wasm"}
+MANIFESTEOF
+        echo "  Generated bevy/manifest.json"
         echo ""
     else
         echo "[$STEP/$TOTAL_STEPS] Bevy files: unchanged, using cached hashes"
         # Extract existing hashes from dist/bevy filenames
         JS_HASH=$(ls "$DIST_DIR/bevy/${BEVY_LIBRARY}"-*.js 2>/dev/null | head -1 | sed "s/.*${BEVY_LIBRARY}-\([^.]*\)\.js/\1/")
         WASM_HASH=$(ls "$DIST_DIR/bevy/${BEVY_LIBRARY}"-*_bg.wasm 2>/dev/null | head -1 | sed "s/.*${BEVY_LIBRARY}-\([^_]*\)_bg\.wasm/\1/")
+
+        # Ensure manifest.json exists even for cached builds
+        if [[ ! -f "$DIST_DIR/bevy/manifest.json" ]]; then
+            cat > "$DIST_DIR/bevy/manifest.json" << MANIFESTEOF
+{"js":"${BEVY_LIBRARY}-${JS_HASH}.js","wasm":"${BEVY_LIBRARY}-${WASM_HASH}_bg.wasm"}
+MANIFESTEOF
+            echo "  Generated bevy/manifest.json (was missing)"
+        fi
     fi
 fi
 ((STEP++))

@@ -337,20 +337,32 @@ pub fn ui_controls_system(
     }
 }
 
-/// Fallback lighting system - adds a bright light if no photometric light exists
+/// Fallback lighting system - adds a bright light if no photometric light exists.
+/// Waits a few frames to give the L3D loader time to spawn its lights first.
 fn ensure_visible_scene(
     mut commands: Commands,
-    settings: Res<SceneSettings>,
-    lights: Query<Entity, With<PointLight>>,
+    _settings: Res<SceneSettings>,
+    point_lights: Query<Entity, With<PointLight>>,
+    spot_lights: Query<Entity, With<SpotLight>>,
+    l3d_lights: Query<Entity, With<l3d_loader::L3dLight>>,
+    mut frame_count: Local<u32>,
 ) {
-    // Only add fallback light if no LDT data and no existing lights
-    if settings.ldt_data.is_none() && lights.is_empty() {
-        log("[Bevy] Adding fallback light (no LDT data)");
-        // Add a bright point light at the center of the room
+    *frame_count += 1;
+    // Wait a few frames for the L3D loader to finish spawning lights
+    if *frame_count < 10 {
+        return;
+    }
+    // Only run the check once (on frame 10)
+    if *frame_count > 10 {
+        return;
+    }
+    // Add fallback light only if no lights exist from any source
+    if point_lights.is_empty() && spot_lights.is_empty() && l3d_lights.is_empty() {
+        log("[Bevy] Adding fallback light (no lights in scene after L3D load)");
         commands.spawn((
             PointLight {
                 color: Color::srgb(1.0, 0.95, 0.9), // Warm white
-                intensity: 100000.0,                // Bright enough to see
+                intensity: 100000.0,
                 radius: 0.1,
                 range: 50.0,
                 shadows_enabled: true,

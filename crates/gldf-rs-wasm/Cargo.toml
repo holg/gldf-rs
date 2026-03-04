@@ -18,9 +18,9 @@ name = "gldf_rs_wasm"
 path = "src/main.rs"
 
 [features]
-default = []
-# Enable ULD/ROLF file conversion (requires unpublished light-convert crate)
-# light-convert = ["dep:light-convert"]
+default = ["light-convert"]
+# Enable ULD/ROLF file conversion
+light-convert = ["dep:light-convert"]
 
 [dependencies]
 # Core library - enable eulumdat for LDT/IES and l3d for geometry export
@@ -47,8 +47,8 @@ wasm-bindgen-futures.workspace = true
 yew.workspace = true
 zip.workspace = true
 
-# Unified lighting file conversion (ULD, ROLF -> GLDF) - optional, not published
-# light-convert = { workspace = true, optional = true }
+# Unified lighting file conversion (ULD, ROLF -> GLDF)
+light-convert = { workspace = true, optional = true }
 
 [dependencies.web-sys]
 workspace = true
