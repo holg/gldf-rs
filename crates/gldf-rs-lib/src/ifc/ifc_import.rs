@@ -152,7 +152,7 @@ pub struct ImportedPhotometry {
     pub c_angles: Vec<f64>,
     /// Gamma angles
     pub gamma_angles: Vec<f64>,
-    /// Intensity values [c_plane][gamma]
+    /// Intensity values \[c_plane\]\[gamma\]
     pub intensities: Vec<Vec<f64>>,
 }
 

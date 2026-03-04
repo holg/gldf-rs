@@ -1229,7 +1229,7 @@ impl StepWriter {
     /// Add comprehensive electrical device properties (Pset_ElectricalDeviceCommon)
     ///
     /// Full support for Electrical Information Exchange MVD (SPARKIE).
-    /// See: https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/Pset_ElectricalDeviceCommon.htm
+    /// See: <https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/Pset_ElectricalDeviceCommon.htm>
     pub fn add_electrical_device_pset(
         &mut self,
         element: EntityRef,

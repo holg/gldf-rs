@@ -195,7 +195,7 @@ impl InsulationStandardClass {
 /// Comprehensive electrical device properties for Pset_ElectricalDeviceCommon
 ///
 /// Based on IFC4.3 specification and SPARKIE MVD requirements.
-/// See: https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/Pset_ElectricalDeviceCommon.htm
+/// See: <https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/Pset_ElectricalDeviceCommon.htm>
 #[derive(Debug, Clone, Default)]
 pub struct ElectricalDeviceProperties {
     /// Rated current in Amperes (A)
