@@ -9,11 +9,14 @@ members = [
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
-    "crates/gldf-stadium-plugin",
+    # gldf-stadium-plugin is parked: it still pulls crates.io Bevy 0.18,
+    # which conflicts with gldf-bevy's `photometric_proposal` fork
+    # (Bevy 0.19-dev). Re-add once stadium is migrated to the same fork.
+    # "crates/gldf-stadium-plugin",
 ]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.4.0"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "AGPL-3.0-or-later"
@@ -22,7 +25,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.3.3", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }
@@ -81,12 +84,33 @@ bevy = { version = "0.18", default-features = false, features = [
     "zstd_rust",
 ] }
 
-# eulumdat-bevy for lighting plugins
-eulumdat-bevy = "0.5.0"
+# eulumdat-bevy for lighting plugins.
+# Path-dep into the local eulumdat-rs workspace so we get exactly one
+# eulumdat-bevy + one eulumdat in the graph. The local eulumdat-bevy
+# pins Bevy to a custom fork branch (`photometric_proposal`); gldf-bevy
+# matches that pin so the whole graph rides on one Bevy version too.
+# Flip back to a published `eulumdat-bevy = "0.7.x"` once that ships.
+eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 
-# Photometric data
-eulumdat = "0.5.0"
+# Photometric data — local path so the upcoming 0.7 release rides along
+# without a crates.io publish. Pure-eulumdat has no Bevy dep so this
+# would be safe even with a mixed graph; we keep the path consistent
+# with eulumdat-bevy above.
+eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
+# Family-shared i18n. The viewer's UI chrome (sidebar nav, toolbar
+# buttons, headings, etc.) is translated via the `extra` flat-key
+# section added in eulumdat-i18n 0.6.1. Same path-dep caveat as
+# `eulumdat` above — flip back to crates.io for release.
+eulumdat-i18n = { path = "../eulumdat-rs/crates/eulumdat-i18n" }
 l3d_rs = "0.2.3"
+
+# ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
+# `cfb 0.10` which pins `uuid = ^1` to 1.19.0; the local Bevy fork
+# (photometric_proposal, 0.19-dev) needs `uuid ^1.21.0`, and Cargo
+# can't satisfy both with a single uuid version. Live ULD work lives
+# in `../light-other-rs` (on the `light-other` branch). Re-enable
+# once the `uld` feature is rebound to that crate.
+# uld-rs = { path = "../uld-rs", features = ["gldf"] }
 
 # File dialogs (native)
 rfd = "0.15"
@@ -95,16 +119,22 @@ rfd = "0.15"
 gloo = "0.11"
 gloo-file = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
-wasm-bindgen = "0.2"
+# Pinned to match cargo-leptos 0.3.6's bundled wasm-bindgen-cli (0.2.114).
+# Bumping requires `cargo install -f wasm-bindgen-cli --version <new>`
+# on the dev box; pin upgrades wait until that's coordinated.
+wasm-bindgen = "=0.2.114"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
 web-sys = "0.3"
 yew = { version = "0.22", features = ["csr"] }
 
-# Leptos (for SSR-capable WASM)
+# Leptos stack — 0.8.x. Each consumer picks the features it needs
+# (csr/hydrate for the wasm bundle, ssr for a server binary).
 console_error_panic_hook = "0.1"
-leptos = { version = "0.7", features = ["csr"] }
-leptos_router = "0.7"
+leptos = { version = "0.8", default-features = false }
+leptos_axum = { version = "0.8", default-features = false }
+leptos_meta = { version = "0.8", default-features = false }
+leptos_router = { version = "0.8", default-features = false }
 
 # Python
 pyo3 = { version = "0.24", features = ["extension-module", "abi3-py38"] }
@@ -119,3 +149,6 @@ log = "0.4"
 
 # Build utilities
 version_check = "0.9"
+
+# [patch.crates-io] removed — eulumdat-bevy is now path-dep'd above, so
+# crates.io eulumdat never enters the graph and there's nothing to patch.

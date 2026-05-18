@@ -3,19 +3,30 @@
 use crate::state::{use_gldf, GldfAction};
 use yew::prelude::*;
 
-/// File content types available in GLDF
+/// File content types — `(canonical XSD value, human label)` pairs.
+///
+/// The canonical strings come from `crate::i18n::xsd_enums::CONTENT_TYPES`
+/// (the literal `<xs:enumeration value="…"/>` set). The previous local
+/// list had two typos that produced schema-invalid output:
+/// `"spectrum/txt"` should be `"spectrum/text"`, and `"sensor/sens-ldt"`
+/// should be `"sensor/sensldt"`. Always source the value through the
+/// shared canonical table to avoid drifting again.
 const CONTENT_TYPES: &[(&str, &str)] = &[
     ("ldc/eulumdat", "Eulumdat (LDC)"),
     ("ldc/ies", "IES (LDC)"),
-    ("geo/l3d", "L3D Geometry"),
-    ("geo/m3d", "M3D Geometry"),
-    ("geo/r3d", "R3D Geometry"),
+    ("ldc/iesxml", "IES XML (LDC)"),
     ("image/png", "PNG Image"),
     ("image/jpg", "JPEG Image"),
     ("image/svg", "SVG Image"),
+    ("geo/l3d", "L3D Geometry"),
+    ("geo/r3d", "R3D Geometry"),
+    ("geo/m3d", "M3D Geometry"),
     ("document/pdf", "PDF Document"),
-    ("spectrum/txt", "Spectrum File"),
-    ("sensor/sens-ldt", "Sensor LDT"),
+    ("symbol/dxf", "Symbol (DXF)"),
+    ("symbol/svg", "Symbol (SVG)"),
+    ("sensor/sensxml", "Sensor XML"),
+    ("sensor/sensldt", "Sensor LDT"),
+    ("spectrum/text", "Spectrum (text)"),
     ("other", "Other"),
 ];
 

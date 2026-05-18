@@ -286,7 +286,7 @@ fn spawn_ifc_model(
             color: Color::srgb(1.0, 0.98, 0.95),
             intensity: 50000.0,
             range: 20.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(0.0, size.y.max(2.0) + 1.0, 0.0),

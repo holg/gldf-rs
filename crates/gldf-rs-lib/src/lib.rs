@@ -57,6 +57,10 @@ pub use gldf::*;
 pub mod editable;
 pub use editable::{EditableGldf, EditableGldfStats};
 
+/// Fix-up utilities for legacy / non-conforming GLDF archives.
+pub mod fix;
+pub use fix::fix_legacy_content_types;
+
 /// Validation engine for GLDF files
 pub mod validation;
 pub use validation::{ValidationError, ValidationLevel, ValidationResult};
@@ -110,6 +114,49 @@ use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use zip::ZipArchive;
+
+/// Target GLDF schema revision when serializing a `GldfProduct`.
+///
+/// rc.4 introduced backwards-compatible spelling fixes (the corrected
+/// `RatedChromaticityCoordinateValues` element name and `Fluorescent`
+/// enum values), keeping the old forms as deprecated aliases. The
+/// internal model always stores the rc.4-correct form; this enum picks
+/// which spelling lands in the output XML so producers can keep shipping
+/// rc.3-validating files until consumers catch up.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GldfSchemaVersion {
+    /// Output the rc.3 spellings (`RatedChromacityCoordinateValues`,
+    /// `Flourescent Triphosphor`, `Flourescent Halophosphate`). Use this
+    /// for compatibility with consumers pinned to the pre-rc.4 schema.
+    Rc3,
+    /// Output the rc.4-corrected spellings. This is the default and
+    /// validates against both rc.4 and rc.3 (rc.4 keeps the old forms
+    /// as deprecated aliases, but the corrected forms are also accepted
+    /// by older consumers since the deprecation runs the other way).
+    #[default]
+    Rc4,
+}
+
+/// Rewrite rc.4-canonical spellings back to their rc.3 typo'd forms.
+///
+/// The rc.4 schema kept both spellings valid via `<xs:choice>` wrappers
+/// and deprecated-form enum aliases, so this rewrite is needed only for
+/// consumers that haven't bumped to rc.4 yet. Pure string replacement —
+/// the substrings we replace don't appear anywhere except as element
+/// names (`<RatedChromaticityCoordinateValues>` open/close tags) and as
+/// the literal enum values inside `<Cie97LampType>...</Cie97LampType>`
+/// element bodies, so global replace is safe.
+fn downconvert_rc4_to_rc3(xml: &str) -> String {
+    xml
+        // Element name (rc.4 only added this; rc.3 only knew the typo'd form)
+        .replace(
+            "RatedChromaticityCoordinateValues",
+            "RatedChromacityCoordinateValues",
+        )
+        // Cie97LampType enum values
+        .replace("Fluorescent Triphosphor", "Flourescent Triphosphor")
+        .replace("Fluorescent Halophosphate", "Flourescent Halophosphate")
+}
 
 impl GldfProduct {
     pub fn detach(&mut self) -> anyhow::Result<()> {
@@ -183,7 +230,16 @@ impl GldfProduct {
         let cleaned_str = Self::remove_bom(xml_str);
         let re = Regex::new(r"<Root .*?>").unwrap();
         // well we are lazy for now and simple replace the root element with a generic one
-        re.replace_all(&cleaned_str, "<Root>").to_string()
+        let cleaned = re.replace_all(&cleaned_str, "<Root>").to_string();
+        // Upconvert rc.3 typo'd forms to the rc.4 corrected spellings
+        // before the serde-XML pass sees them. The element name is
+        // already covered by `serde(alias = ...)` on the field, so this
+        // step only matters for the enum string values inside
+        // `<Cie97LampType>...</Cie97LampType>` element bodies — those
+        // arrive as plain `String`, no alias machinery applies.
+        cleaned
+            .replace("Flourescent Triphosphor", "Fluorescent Triphosphor")
+            .replace("Flourescent Halophosphate", "Fluorescent Halophosphate")
     }
 
     /// a helper function to load a XML String and return the GldfProduct struct
@@ -294,10 +350,33 @@ impl GldfProduct {
         GldfProduct::from_json(&json_str).context("Failed to parse JSON content")
     }
 
-    /// represent the GldfProduct as XML String
+    /// Represent the GldfProduct as an XML string targeting the rc.4
+    /// schema (the default). Internal model always stores the rc.4
+    /// canonical form (`RatedChromaticityCoordinateValues`,
+    /// `Fluorescent Triphosphor`, etc.), so the rc.4 path is a straight
+    /// serialize. For rc.3 output use [`Self::to_xml_with_schema`].
     pub fn to_xml(&self) -> anyhow::Result<String> {
+        self.to_xml_with_schema(GldfSchemaVersion::Rc4)
+    }
+
+    /// Serialize as XML targeting a specific GLDF schema revision.
+    ///
+    /// **rc.4** (default) writes the corrected element names and enum
+    /// values (`RatedChromaticityCoordinateValues`,
+    /// `Fluorescent Triphosphor`, `Fluorescent Halophosphate`).
+    ///
+    /// **rc.3** rewrites those back to the historical typo'd forms
+    /// (`RatedChromacityCoordinateValues`, `Flourescent Triphosphor`,
+    /// `Flourescent Halophosphate`) so files validate against the
+    /// pre-rc.4 XSD that some downstream tools still use. The conversion
+    /// is a pure string-replace pass on the serialized XML — no
+    /// duplicate types or feature flags involved.
+    pub fn to_xml_with_schema(&self, version: GldfSchemaVersion) -> anyhow::Result<String> {
         let xml_str = quick_xml::se::to_string(&self)?;
-        // Add XML declaration
+        let xml_str = match version {
+            GldfSchemaVersion::Rc4 => xml_str,
+            GldfSchemaVersion::Rc3 => downconvert_rc4_to_rc3(&xml_str),
+        };
         Ok(format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{}",
             xml_str

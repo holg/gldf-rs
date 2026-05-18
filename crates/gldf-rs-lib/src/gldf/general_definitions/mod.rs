@@ -40,8 +40,15 @@ fn is_emitters_empty(emitters: &Option<Emitters>) -> bool {
 /// The GeneralDefinitions struct describes the general definitions of the GLDF file
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeneralDefinitions {
-    /// A collection of files referenced in the GLDF file.
-    #[serde(rename = "Files")]
+    /// A collection of files referenced in the GLDF file. The XSD makes
+    /// `Files` itself optional (`minOccurs="0"`), but when present it
+    /// requires at least one `File` child — so emitting an empty Files
+    /// element is invalid. Skip serialization when there are no files.
+    #[serde(
+        rename = "Files",
+        default,
+        skip_serializing_if = "files::files_is_empty"
+    )]
     pub files: Files,
 
     /// A collection of sensor definitions.

@@ -107,11 +107,19 @@ pub fn render_light_sources(ui: &mut egui::Ui, app: &GldfViewerApp) {
                         );
                     });
 
-                    ui.label(egui::RichText::new(&ls.name.value).strong());
+                    let name_text = ls
+                        .name
+                        .locale
+                        .first()
+                        .map(|l| l.value.as_str())
+                        .unwrap_or("");
+                    ui.label(egui::RichText::new(name_text).strong());
 
                     if let Some(ref desc) = ls.description {
-                        if !desc.value.is_empty() {
-                            ui.label(egui::RichText::new(&desc.value).weak());
+                        if let Some(loc) = desc.locale.first() {
+                            if !loc.value.is_empty() {
+                                ui.label(egui::RichText::new(&loc.value).weak());
+                            }
                         }
                     }
                 });

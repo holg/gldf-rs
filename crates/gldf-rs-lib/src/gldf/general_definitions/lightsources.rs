@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::electrical::{ControlGearReference, EnergyLabels, PowerRange, Voltage};
 use super::geometries::Rotation;
-use super::{Locale, LocaleFoo};
+use super::LocaleFoo;
 
 /// Represents a factor used to adjust flux values for various parameters.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,8 +84,15 @@ pub struct Cie1931ColorAppearance {
 }
 
 /// Represents rated chromaticity coordinate values.
+///
+/// The XSD up to rc.3 spelled this element `RatedChromacityCoordinateValues`
+/// (note the missing `ti`). rc.4 introduces the corrected
+/// `RatedChromaticityCoordinateValues` element name and marks the old form
+/// as deprecated for removal in 2.0.0. Both spellings remain valid against
+/// rc.4. Internally we always store the corrected form; the rc.3 export
+/// path rewrites the element name back via a string post-process step.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RatedChromacityCoordinateValues {
+pub struct RatedChromaticityCoordinateValues {
     /// The X value of the rated chromaticity coordinate.
     #[serde(rename = "X")]
     pub x: f64,
@@ -94,6 +101,16 @@ pub struct RatedChromacityCoordinateValues {
     #[serde(rename = "Y")]
     pub y: f64,
 }
+
+/// Backwards-compatible alias preserving the rc.3 type name. New code
+/// should use [`RatedChromaticityCoordinateValues`]; this alias avoids
+/// breaking external consumers that referenced the typo'd name through
+/// the public API.
+#[deprecated(
+    since = "0.4.0",
+    note = "renamed to RatedChromaticityCoordinateValues per rc.4 typo cleanup; will be removed in a future major release"
+)]
+pub type RatedChromacityCoordinateValues = RatedChromaticityCoordinateValues;
 
 /// Represents data conforming to the IES TM-30-15 method.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,11 +170,18 @@ pub struct ColorInformation {
     pub maintained_color_tolerance: Option<String>,
 
     /// The rated chromaticity coordinate values of the light source.
+    ///
+    /// On serialize we emit the rc.4-corrected element name
+    /// `RatedChromaticityCoordinateValues`; on deserialize we accept
+    /// either spelling via the `alias` (rc.3 files in the wild) and the
+    /// rc.4 corrected form. rc.3 export wraps `to_xml()` in a downconvert
+    /// pass that rewrites the element name back.
     #[serde(
-        rename = "RatedChromacityCoordinateValues",
+        rename = "RatedChromaticityCoordinateValues",
+        alias = "RatedChromacityCoordinateValues",
         skip_serializing_if = "Option::is_none"
     )]
-    pub rated_chromacity_coordinate_values: Option<RatedChromacityCoordinateValues>,
+    pub rated_chromaticity_coordinate_values: Option<RatedChromaticityCoordinateValues>,
 
     /// The Television Lighting Consistency Index (TLCI) indicating color rendering accuracy.
     #[serde(rename = "TLCI", skip_serializing_if = "Option::is_none")]
@@ -191,9 +215,12 @@ pub struct CieLampMaintenanceFactor {
     #[serde(rename = "LampLumenMaintenanceFactor")]
     pub lamp_lumen_maintenance_factor: f64,
 
-    /// The lamp survival factor.
+    /// The lamp survival factor (LSF, IEC "Lamp Burnout"). XSD type is
+    /// `xs:double` clamped to [0, 1] — this used to be `i32` here, which
+    /// silently rejected real-world files like full_demo.gldf carrying
+    /// `0.86`.
     #[serde(rename = "LampSurvivalFactor")]
-    pub lamp_survival_factor: i32,
+    pub lamp_survival_factor: f64,
 }
 
 /// Represents a collection of CIE lamp maintenance factors.
@@ -250,9 +277,11 @@ pub struct LightSourceMaintenance {
     )]
     pub led_maintenance_factor: Option<LedMaintenanceFactor>,
 
-    /// The lamp survival factor.
+    /// The lamp survival factor at end of `lifetime`. XSD type is
+    /// `xs:double` clamped to [0, 1] — was `i32` in older gldf-rs
+    /// versions, which silently rejected real-world files.
     #[serde(rename = "LampSurvivalFactor", skip_serializing_if = "Option::is_none")]
-    pub lamp_survival_factor: Option<i32>,
+    pub lamp_survival_factor: Option<f64>,
 }
 
 /// Represents a reference to a spectrum.
@@ -284,6 +313,17 @@ pub struct ImageReference {
 }
 
 /// Represents a changeable light source in the GLDF data structure.
+///
+/// Field order matches the XSD `ChangeableLightSource` complexType
+/// sequence (gldf-1.0.0-rc-3.xsd lines 927–1463). Most fields mirror
+/// `FixedLightSource`; the differences:
+/// - `RatedInputPower` is required (i.e. `f64`, not `Option<f64>`)
+/// - `RatedLuminousFlux` is required (`i32`, not `Option`)
+/// - No `GTIN`, `EnergyLabels`, `SpectrumReference` directly — wait,
+///   actually the XSD does have them; this struct previously omitted
+///   nearly every field, which silently dropped them on round-trip.
+/// The full field set was added so files like full_demo.gldf survive
+/// parse → serialize without losing data.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChangeableLightSource {
     /// The unique identifier for the changeable light source.
@@ -291,16 +331,20 @@ pub struct ChangeableLightSource {
     pub id: String,
 
     /// The localized name of the changeable light source.
+    ///
+    /// XSD declares `Name` as `type="Locale"` (the multi-locale complex type).
     #[serde(rename = "Name", default)]
-    pub name: Locale,
+    pub name: LocaleFoo,
 
     /// The localized description of the changeable light source.
+    ///
+    /// XSD declares `Description` as `type="Locale"` (the multi-locale complex type).
     #[serde(
         rename = "Description",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub description: Option<Locale>,
+    pub description: Option<LocaleFoo>,
 
     /// The manufacturer of the changeable light source.
     #[serde(
@@ -309,6 +353,110 @@ pub struct ChangeableLightSource {
         skip_serializing_if = "Option::is_none"
     )]
     pub manufacturer: Option<String>,
+
+    /// Global Trade Item Number (GTIN) of the changeable light source.
+    #[serde(rename = "GTIN", default, skip_serializing_if = "Option::is_none")]
+    pub gtin: Option<String>,
+
+    /// Rated input power of the changeable light source. XSD-required.
+    #[serde(
+        rename = "RatedInputPower",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rated_input_power: Option<f64>,
+
+    /// Rated input voltage / current type / frequency.
+    #[serde(
+        rename = "RatedInputVoltage",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rated_input_voltage: Option<Voltage>,
+
+    /// Power range (lower / upper / default), for dimmable light sources.
+    #[serde(
+        rename = "PowerRange",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub power_range: Option<PowerRange>,
+
+    /// Position of usage hint (Horizontal / Vertical / etc.).
+    #[serde(
+        rename = "LightSourcePositionOfUsage",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub light_source_position_of_usage: Option<String>,
+
+    /// Energy efficiency labels (per region).
+    #[serde(
+        rename = "EnergyLabels",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub energy_labels: Option<EnergyLabels>,
+
+    /// Spectrum reference (points at a `<Spectrum>` definition).
+    #[serde(
+        rename = "SpectrumReference",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub spectrum_reference: Option<SpectrumReference>,
+
+    /// Active power table (flux factors at different driving levels).
+    #[serde(
+        rename = "ActivePowerTable",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub active_power_table: Option<ActivePowerTable>,
+
+    /// Color information (CRI, CCT, chromaticity coords, MacAdam steps).
+    #[serde(
+        rename = "ColorInformation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub color_information: Option<ColorInformation>,
+
+    /// Image references for this light source.
+    #[serde(
+        rename = "LightSourceImages",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub light_source_images: Option<Images>,
+
+    /// ZVEI code (Zentralverband Elektrotechnik- und Elektronikindustrie).
+    #[serde(rename = "ZVEI", default, skip_serializing_if = "Option::is_none")]
+    pub zvei: Option<String>,
+
+    /// Socket type (E27, GU10, G9, etc.). See IEC 60061:2018.
+    #[serde(rename = "Socket", default, skip_serializing_if = "Option::is_none")]
+    pub socket: Option<String>,
+
+    /// ILCOS code (Light Source Code Of Standardization, IEC 61231:2010).
+    #[serde(rename = "ILCOS", default, skip_serializing_if = "Option::is_none")]
+    pub ilcos: Option<String>,
+
+    /// Rated luminous flux in lumens. XSD declares this required.
+    #[serde(
+        rename = "RatedLuminousFlux",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rated_luminous_flux: Option<i32>,
+
+    /// Rated luminous flux for an RGB channel set.
+    #[serde(
+        rename = "RatedLuminousFluxRGB",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rated_luminous_flux_rgb: Option<i32>,
 
     /// The photometric reference data associated with the changeable light source.
     #[serde(
@@ -450,8 +598,10 @@ pub struct ChangeableLightEmitter {
     pub emergency_behaviour: Option<String>,
 
     /// The localized name of the changeable light emitter.
+    ///
+    /// XSD declares `Name` as `type="Locale"` (the multi-locale complex type).
     #[serde(rename = "Name", skip_serializing_if = "Option::is_none")]
-    pub name: Option<Locale>,
+    pub name: Option<LocaleFoo>,
 
     /// The rotation of the light emitter.
     #[serde(rename = "Rotation", skip_serializing_if = "Option::is_none")]

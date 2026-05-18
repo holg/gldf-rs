@@ -1239,6 +1239,902 @@ label {
     margin-bottom: 12px;
 }
 
+/* Per-variant photometry section. Each variant gets a card; inside it,
+   one or more photometry sub-cards (the existing `.photometry-card`).
+   The header shows the variant chip label + a small id tag for clarity
+   when SKUs share the same product number. */
+.variant-photometry-card {
+    background: var(--bg-elevated, var(--bg-card));
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 14px 4px;
+    margin-bottom: 16px;
+}
+
+.variant-photometry-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.variant-id-tag {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono, monospace);
+    padding: 2px 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+/* Photometry-card header row — the photometry id plus a filename badge
+   identifying the actual LDT/IES file the id resolves to. */
+.photometry-card-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.photometry-card-header h3 {
+    margin: 0;
+}
+
+.photometry-file-badge {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono, monospace);
+    padding: 2px 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+/* Emergency-behaviour tag in the photometry card header. Distinguishes
+   normal / combined / emergency-only emitters; the emergency-only tag
+   tells the user why the Calc column and download are suppressed. */
+.emergency-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+
+.emergency-tag.emergency-emergencyonly {
+    color: #b91c1c;
+    border-color: rgba(185, 28, 28, 0.5);
+    background: rgba(254, 226, 226, 0.4);
+}
+
+.emergency-tag.emergency-combined {
+    color: #b45309;
+    border-color: rgba(180, 83, 9, 0.5);
+    background: rgba(254, 243, 199, 0.4);
+}
+
+/* Resolved-values row — lumens/watts pills surfaced at the top of each
+   photometry card so the recomputed efficacy is traceable. */
+.photometry-resolved {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.photometry-resolved-pill {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+
+.photometry-resolved-pill.lumens {
+    color: var(--accent-yellow, #f59e0b);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.photometry-resolved-pill.watts {
+    color: var(--accent-blue, #3b82f6);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Per-variant download bar — sits beneath each photometry sub-card and
+   exports the patched LDT in the chosen format. The select carries the
+   format choice; the click handler reads its value via DOM so we don't
+   need to thread state through the App reducer. */
+.photometry-download-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 14px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm, 4px);
+}
+
+.photometry-download-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.photometry-download-select {
+    font-size: 12px;
+    padding: 3px 6px;
+    min-width: 160px;
+}
+
+.photometry-download-btn {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--accent-blue, #3b82f6);
+    background: var(--accent-blue, #3b82f6);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.photometry-download-btn:hover {
+    filter: brightness(1.1);
+}
+
+.photometry-download-hint {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+}
+
+/* Language bars — document-locale banner + viewer-translation picker. */
+.language-bars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: stretch;
+    margin-bottom: 12px;
+}
+
+.language-bars > .language-banner {
+    flex: 1 1 auto;
+}
+
+.ui-language-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.ui-language-bar-icon {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.ui-language-bar-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.ui-language-bar-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+/* Applications editor — non-canonical entries (not in XSD enum). */
+.application-tag.non-canonical {
+    border: 1px dashed var(--accent-orange, #e67e22);
+}
+
+.non-canonical-flag {
+    color: var(--accent-orange, #e67e22);
+    font-weight: 600;
+}
+
+.application-checkbox-row:hover {
+    background: var(--bg-secondary);
+}
+
+/* Applications "varies" view — union tree with per-leaf variant chips. */
+.application-tree-varies .application-tree-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.application-tree-row.varies {
+    border-left: 2px solid var(--accent-orange, #e67e22);
+    padding-left: 6px;
+    margin: 2px 0;
+}
+
+.application-leaf-content {
+    flex: 1 1 auto;
+}
+
+.application-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.application-chips .all-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--accent-blue);
+    color: white;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 12px;
+}
+
+/* DescriptiveAttributes aggregation — Electrical / Mechanical / etc. */
+.aggregate-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.aggregate-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-blue);
+}
+
+.aggregate-row.varies {
+    border-left-color: var(--accent-orange, #e67e22);
+    align-items: flex-start;
+}
+
+.aggregate-row-label {
+    flex: 0 0 200px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.aggregate-row-value {
+    flex: 1 1 auto;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.varies-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    background: var(--accent-orange, #e67e22);
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 3px;
+}
+
+.aggregate-row-buckets {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.aggregate-bucket {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.bucket-value {
+    flex: 0 0 auto;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.bucket-chips {
+    flex: 1 1 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.variant-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-blue);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.variant-chip:hover {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+}
+
+/* Scope picker — appears at the top of Electrical/Mechanical/Applications
+   editors when the document has variants. Lets the user pick which scope
+   (Product default vs a specific Variant) the form below targets. */
+.scope-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 4px);
+}
+
+.scope-picker-label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.scope-picker-select {
+    min-width: 220px;
+    padding: 4px 6px;
+    font-size: 13px;
+}
+
+.scope-picker-hint {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* Inheritance banner — shown in the Applications editor when the user
+   selects a variant that has no explicit Applications block. Emphasises
+   that toggling a checkbox creates an override. */
+.inheritance-banner {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    background: rgba(252, 211, 77, 0.18);
+    border: 1px solid rgba(252, 211, 77, 0.5);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+/* Electrical viewer: per-variant power & supply section. Sits below the
+   aggregated grid (SafetyClass / IPCode / etc.) and surfaces the numbers
+   an electrician scans for at install: connected load, voltage, dimming
+   range, energy label, and the control gear (driver) record. */
+.electrical-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 24px 0 4px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.electrical-variants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+}
+
+.electrical-variant-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+}
+
+.electrical-variant-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+}
+
+.electrical-variant-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-blue, #3b82f6);
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+}
+
+.electrical-variant-name:hover {
+    text-decoration: underline;
+}
+
+.electrical-variant-id {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono, monospace);
+}
+
+.electrical-variant-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.electrical-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.electrical-stat-label {
+    flex: 0 0 130px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.electrical-stat-value {
+    flex: 1;
+    color: var(--text-primary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.electrical-stat-value.highlight {
+    font-weight: 700;
+    color: var(--accent-blue, #3b82f6);
+    font-size: 14px;
+}
+
+.dimming-pill,
+.energy-label-pill {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: var(--bg-elevated, var(--bg-card));
+    border: 1px solid var(--border-color);
+}
+
+.energy-label-pill {
+    color: var(--accent-yellow, #f59e0b);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.electrical-stat.electrical-gear {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.electrical-stat.electrical-gear .electrical-stat-label {
+    flex: none;
+}
+
+.electrical-gear-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.control-gear-chip {
+    background: var(--bg-elevated, var(--bg-card));
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.control-gear-chip-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.control-gear-chip-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.control-gear-chip-id {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono, monospace);
+}
+
+.control-gear-chip-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.control-gear-meta {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.control-gear-meta.dimmable {
+    color: var(--accent-blue, #3b82f6);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.control-gear-meta.colorctrl {
+    color: #a855f7;
+    border-color: rgba(168, 85, 247, 0.4);
+}
+
+.control-gear-meta.standby {
+    color: var(--accent-yellow, #f59e0b);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.control-gear-meta.interfaces {
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+}
+
+.control-gear-meta.energy {
+    color: var(--accent-yellow, #f59e0b);
+    border-color: rgba(245, 158, 11, 0.4);
+    font-weight: 600;
+}
+
+/* Mounting & installation per-variant section on the Mechanical viewer.
+   Reuses the .electrical-variant-card container; the difference is the
+   inner structure: sub-sections per mounting branch (Ceiling / Wall /
+   Ground / WorkingPlane), each listing the relevant install dimensions.
+   The cutout pill is highlighted because that's the installer's
+   "what-hole-do-I-cut" answer. */
+.mount-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mount-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-elevated, var(--bg-card));
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.mount-section-icon {
+    font-size: 14px;
+}
+
+.mount-section-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-right: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mount-section-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.mount-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mount-detail-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: lowercase;
+}
+
+.cutout-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+}
+
+.cutout-pill.rectangular,
+.cutout-pill.circular {
+    color: var(--accent-blue, #3b82f6);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* XSD-violation banner. Surfaces every closed-enum value in the loaded
+   GLDF that's outside the schema's <xs:enumeration> set. Persistent
+   across page navigation; dismissable per file. The list renders up to
+   6 rows + a "+N more" line so the banner stays a banner, not a
+   full-page modal. */
+.xsd-violations-banner {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: rgba(252, 211, 77, 0.18);
+    border: 1px solid rgba(217, 119, 6, 0.6);
+    border-left-width: 4px;
+    border-radius: var(--radius-sm, 4px);
+}
+
+.xsd-violations-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.xsd-violations-icon {
+    font-size: 16px;
+}
+
+.xsd-violations-title {
+    flex: 1;
+}
+
+.xsd-violations-dismiss {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 0 6px;
+    line-height: 1;
+}
+
+.xsd-violations-dismiss:hover {
+    color: var(--text-primary);
+}
+
+.xsd-violations-list {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.xsd-violation-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 200px) minmax(120px, 1fr) 2fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11px;
+    padding: 2px 0;
+}
+
+.xsd-violation-field {
+    color: var(--accent-blue, #3b82f6);
+    font-family: var(--font-mono, monospace);
+    font-weight: 600;
+}
+
+.xsd-violation-value {
+    color: #b91c1c;
+    font-family: var(--font-mono, monospace);
+}
+
+.xsd-violation-path {
+    color: var(--text-tertiary);
+    font-family: var(--font-mono, monospace);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.xsd-violation-more {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-style: italic;
+    padding: 4px 0;
+}
+
+/* Document dashboard — Header sidebar in viewer mode. */
+.document-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+}
+
+.dashboard-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+}
+
+.dashboard-card-header h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+}
+
+.dashboard-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 6px;
+    margin: 0;
+}
+
+.dashboard-list dt {
+    font-size: 12px;
+    color: var(--text-secondary);
+    align-self: baseline;
+}
+
+.dashboard-list dd {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.dashboard-list dd.code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.dashboard-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.schema-link {
+    color: var(--accent-blue);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.schema-link:hover {
+    text-decoration: underline;
+}
+
+/* Photometry sections — visual grouping for the read-only view. */
+.photometry-section {
+    margin: 14px 0;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-blue);
+}
+
+.photometry-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin: 0 0 6px;
+}
+
+.photometry-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-color-subtle, transparent);
+}
+
+.photometry-row:last-child {
+    border-bottom: none;
+}
+
+.photometry-row-label {
+    flex: 0 0 180px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.photometry-row-value {
+    flex: 1 1 auto;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.photometry-row.mismatch {
+    background: rgba(255, 165, 0, 0.06);
+    border-radius: 4px;
+    padding-left: 6px;
+}
+
+.photometry-row-value.dual {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.photometry-row-value .dual-pair {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.photometry-row-value .cell-tag {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: white;
+}
+
+.photometry-row-value .cell-tag.gldf {
+    background: var(--accent-blue);
+}
+
+.photometry-row-value .cell-tag.calc {
+    background: var(--accent-orange, #e67e22);
+}
+
+.photometry-mismatch-flag {
+    color: var(--accent-orange, #e67e22);
+    margin-left: 4px;
+}
+
 /* JSON/Code Display */
 .code-block {
     background: var(--bg-input);

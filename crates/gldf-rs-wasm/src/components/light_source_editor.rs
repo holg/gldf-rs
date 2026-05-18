@@ -1,6 +1,8 @@
 //! Light source editor component for GLDF files
 
-use crate::state::use_gldf;
+use crate::components::LocaleFooEditor;
+use crate::state::{use_gldf, GldfAction, GldfContext};
+use gldf_rs::gldf::LocaleFoo;
 use yew::prelude::*;
 
 /// Light source editor component
@@ -82,15 +84,7 @@ fn fixed_light_sources_panel() -> Html {
                 <p class="empty-message">{ "No fixed light sources defined." }</p>
             } else {
                 <div class="light-source-cards">
-                    { for fixed_sources.iter().map(|source| {
-                        let name = source.name.locale.first()
-                            .map(|l| l.value.clone())
-                            .unwrap_or_else(|| "(No name)".to_string());
-                        let description = source.description.as_ref()
-                            .and_then(|d| d.locale.first())
-                            .map(|l| l.value.clone())
-                            .unwrap_or_default();
-
+                    { for fixed_sources.iter().enumerate().map(|(idx, source)| {
                         html! {
                             <div class="light-source-card" key={source.id.clone()}>
                                 <div class="card-header">
@@ -98,10 +92,17 @@ fn fixed_light_sources_panel() -> Html {
                                     <span class="card-type">{ "Fixed" }</span>
                                 </div>
                                 <div class="card-body">
-                                    <h4>{ name }</h4>
-                                    if !description.is_empty() {
-                                        <p class="description">{ description }</p>
-                                    }
+                                    <LocaleFooEditor
+                                        label="Name"
+                                        value={source.name.clone()}
+                                        onchange={dispatch_set_fls_name(&gldf, idx)}
+                                    />
+                                    <LocaleFooEditor
+                                        label="Description"
+                                        value={source.description.clone().unwrap_or_default()}
+                                        onchange={dispatch_set_fls_description(&gldf, idx)}
+                                        multiline=true
+                                    />
                                     if let Some(manufacturer) = &source.manufacturer {
                                         <div class="detail">
                                             <span class="label">{ "Manufacturer:" }</span>
@@ -133,10 +134,15 @@ fn fixed_light_sources_panel() -> Html {
                                                 <span class="value">{ format!("{} K", cct) }</span>
                                             </div>
                                         }
+                                        if let Some(range) = &color_info.color_temperature_adjusting_range {
+                                            if let (Some(lo), Some(hi)) = (range.lower, range.upper) {
+                                                <div class="detail">
+                                                    <span class="label">{ "CCT Range:" }</span>
+                                                    <span class="value">{ format!("{}–{} K", lo, hi) }</span>
+                                                </div>
+                                            }
+                                        }
                                     }
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn-edit" disabled=true title="Editing coming soon">{ "Edit" }</button>
                                 </div>
                             </div>
                         }
@@ -166,12 +172,7 @@ fn changeable_light_sources_panel() -> Html {
                 <p class="empty-message">{ "No changeable light sources defined." }</p>
             } else {
                 <div class="light-source-cards">
-                    { for changeable_sources.iter().map(|source| {
-                        let name = source.name.value.clone();
-                        let description = source.description.as_ref()
-                            .map(|d| d.value.clone())
-                            .unwrap_or_default();
-
+                    { for changeable_sources.iter().enumerate().map(|(idx, source)| {
                         html! {
                             <div class="light-source-card" key={source.id.clone()}>
                                 <div class="card-header">
@@ -179,10 +180,17 @@ fn changeable_light_sources_panel() -> Html {
                                     <span class="card-type changeable">{ "Changeable" }</span>
                                 </div>
                                 <div class="card-body">
-                                    <h4>{ name }</h4>
-                                    if !description.is_empty() {
-                                        <p class="description">{ description }</p>
-                                    }
+                                    <LocaleFooEditor
+                                        label="Name"
+                                        value={source.name.clone()}
+                                        onchange={dispatch_set_cls_name(&gldf, idx)}
+                                    />
+                                    <LocaleFooEditor
+                                        label="Description"
+                                        value={source.description.clone().unwrap_or_default()}
+                                        onchange={dispatch_set_cls_description(&gldf, idx)}
+                                        multiline=true
+                                    />
                                     if let Some(manufacturer) = &source.manufacturer {
                                         <div class="detail">
                                             <span class="label">{ "Manufacturer:" }</span>
@@ -196,9 +204,6 @@ fn changeable_light_sources_panel() -> Html {
                                         </div>
                                     }
                                 </div>
-                                <div class="card-actions">
-                                    <button class="btn-edit" disabled=true title="Editing coming soon">{ "Edit" }</button>
-                                </div>
                             </div>
                         }
                     })}
@@ -207,4 +212,29 @@ fn changeable_light_sources_panel() -> Html {
             <button class="btn-add" disabled=true title="Adding coming soon">{ "+ Add Changeable Light Source" }</button>
         </div>
     }
+}
+
+// --- Dispatch helpers for FixedLightSource LocaleFoo edits ---
+
+fn dispatch_set_fls_name(gldf: &GldfContext, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| gldf.dispatch(GldfAction::SetFixedLightSourceName(idx, v)))
+}
+fn dispatch_set_fls_description(gldf: &GldfContext, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| {
+        gldf.dispatch(GldfAction::SetFixedLightSourceDescription(idx, v))
+    })
+}
+fn dispatch_set_cls_name(gldf: &GldfContext, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| {
+        gldf.dispatch(GldfAction::SetChangeableLightSourceName(idx, v))
+    })
+}
+fn dispatch_set_cls_description(gldf: &GldfContext, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| {
+        gldf.dispatch(GldfAction::SetChangeableLightSourceDescription(idx, v))
+    })
 }

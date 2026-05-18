@@ -705,7 +705,8 @@ impl GldfToIfc {
                     let name = changeable
                         .name
                         .as_ref()
-                        .map(|n| n.value.clone())
+                        .and_then(|n| n.locale.first())
+                        .map(|l| l.value.clone())
                         .unwrap_or_else(|| emitter.id.clone());
 
                     let photometry_id = changeable.photometry_reference.photometry_id.clone();

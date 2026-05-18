@@ -269,7 +269,9 @@ pub fn poll_gldf_changes(
                 if let Some(ldt) = load_ldt_from_storage() {
                     log("[Bevy] Loaded LDT, updating settings");
                     scene_data.ldt_data = Some(ldt.clone());
-                    settings.ldt_data = Some(ldt);
+                    // eulumdat-bevy renamed `ldt_data` → `ldc_data` (LDC =
+                    // light distribution curve, the format-agnostic name).
+                    settings.ldc_data = Some(ldt);
                 } else {
                     log("[Bevy] No LDT data in storage");
                 }
@@ -365,7 +367,7 @@ fn ensure_visible_scene(
                 intensity: 100000.0,
                 radius: 0.1,
                 range: 50.0,
-                shadows_enabled: true,
+                shadow_maps_enabled: true,
                 ..default()
             },
             Transform::from_xyz(2.0, 2.5, 2.5),
@@ -398,7 +400,7 @@ pub fn run_on_canvas(canvas_selector: &str) {
     // Disable show_luminaire since we have L3D model
     let has_l3d = l3d_data.is_some();
     let settings = SceneSettings {
-        ldt_data: ldt_data.clone(),
+        ldc_data: ldt_data.clone(),
         show_luminaire: !has_l3d, // Don't show fake luminaire if we have L3D
         ..default()
     };
