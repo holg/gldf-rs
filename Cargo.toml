@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "AGPL-3.0-or-later"
@@ -22,7 +22,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.3.3", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.3.4", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }
@@ -82,10 +82,15 @@ bevy = { version = "0.18", default-features = false, features = [
 ] }
 
 # eulumdat-bevy for lighting plugins
-eulumdat-bevy = "0.5.0"
+# Note: 0.6.0 is the latest published; 0.7.x pending publish. Pins to
+# eulumdat ^0.6.0, so leaves a graph mismatch with `eulumdat = "0.7"`
+# below — only gldf-bevy is affected and is not part of the 0.3.4
+# crates.io release.
+eulumdat-bevy = "0.6.0"
 
 # Photometric data
-eulumdat = "0.5.0"
+eulumdat = "0.7"
+eulumdat-i18n = "0.7"
 l3d_rs = "0.2.3"
 
 # File dialogs (native)

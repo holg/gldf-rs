@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-05-18
+
+### Added
+
+- **IFC integration**: Import/export IFC files with STEP parser and GLDF generator
+- **Plugin system**: Extensible architecture with stadium and star sky example plugins
+- **Bevy 3D scene renderer**: Room, road, parking, and outdoor scenes with scene switching (keys 1-4); correct emitter positioning (mm→m for L3D); scene-aware mounting (outdoor pole height vs room ceiling clamp); dynamic light range/intensity scaling based on mounting height
+- **New photometry diagrams**: Cone, Isocandela, Isolux, Floodlight Cartesian (V-H)
+- **Combined multi-variant GLDF support**: Load and inspect multi-variant files with correct file matching
+- **C# / .NET bindings** via uniffi-bindgen-cs
+- **JSON/XML export**: Browser download for exported files
+- **Local CI script**: `scripts/test-ci-locally.sh` for pre-push validation
+
+### Changed
+
+- **eulumdat**: bumped workspace dep to 0.7
+- **eulumdat-i18n**: added at 0.7 for viewer i18n support
+
 ## [0.3.3] - 2024-12-16
 
 ### Added

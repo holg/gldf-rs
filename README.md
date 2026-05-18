@@ -132,7 +132,7 @@ for f in phot_files.iter() {
 
 ## Release Notes
 
-### 0.3.4 (upcoming)
+### 0.3.4
 - **IFC integration**: Import/export IFC files with STEP parser and GLDF generator
 - **Plugin system**: Extensible architecture with stadium and star sky example plugins
 - **Bevy 3D scene renderer**:
