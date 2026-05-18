@@ -624,8 +624,10 @@ fn spawn_lights_from_emitters(
         return;
     }
 
-    // Get default light properties from LDT data
-    let (default_color, default_flux) = if let Some(ref ldt) = settings.ldt_data {
+    // Get default light properties from LDT data. eulumdat-bevy renamed
+    // `ldt_data` → `ldc_data` (format-agnostic LDC = light distribution
+    // curve); the binding still points at an `Eulumdat`.
+    let (default_color, default_flux) = if let Some(ref ldt) = settings.ldc_data {
         let lamp = ldt.lamp_sets.first();
         let color_temp = lamp
             .map(|l| parse_color_temperature(&l.color_appearance))
@@ -741,7 +743,7 @@ fn spawn_lights_from_emitters(
                 radius: emitter.size.0.max(emitter.size.1) / 2.0,
                 inner_angle: 0.5, // ~30 degrees
                 outer_angle: 1.2, // ~70 degrees
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_translation(world_pos).looking_at(target, Vec3::X),
@@ -755,7 +757,7 @@ fn spawn_lights_from_emitters(
                 intensity: intensity * 0.3, // 30% as ambient fill
                 range: light_range,
                 radius: 0.02,
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_translation(world_pos),

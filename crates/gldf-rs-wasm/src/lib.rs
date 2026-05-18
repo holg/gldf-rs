@@ -4,5 +4,6 @@
 
 pub mod components;
 pub mod draw_l3d;
+pub mod i18n;
 pub mod state;
 pub mod utils;

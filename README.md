@@ -132,6 +132,13 @@ for f in phot_files.iter() {
 
 ## Release Notes
 
+### 0.4.0
+- **rc.3 ↔ rc.4 schema versioning**: new `GldfSchemaVersion` enum and `to_xml_with_schema()` method. Internal model stores the rc.4-canonical form; rc.3 export rewrites typo'd element/enum names back for pre-rc.4 consumers.
+- **`fix` module**: `fix_legacy_content_types` rewrites legacy `contentType="geometry/l3d"` archives to the XSD-canonical `geo/l3d` form.
+- **`validation` submodule split**: now `validation/{engine,canonical,xsd_enums}` — adds closed-XSD-enum value validation (IK ratings, IP codes, etc.) on top of the schema-rule engine. Public surface unchanged.
+- **rc.4 typo cleanup**: `RatedChromaticityCoordinateValues` (was `RatedChromacityCoordinateValues`, kept as deprecated alias); `Cie97LampType` enum: `Fluorescent ...` (was `Flourescent ...`). Both forms parse.
+- **XSD compliance fixes**: `RectangularCutout` now serializes Width/Length/Depth as child elements; empty `<Files/>` is omitted.
+
 ### 0.3.4
 - **IFC integration**: Import/export IFC files with STEP parser and GLDF generator
 - **Plugin system**: Extensible architecture with stadium and star sky example plugins

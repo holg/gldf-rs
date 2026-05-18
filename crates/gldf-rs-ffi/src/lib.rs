@@ -289,9 +289,15 @@ impl GldfEngine {
             }
 
             for changeable in &ls.changeable_light_source {
+                let name = changeable
+                    .name
+                    .locale
+                    .first()
+                    .map(|l| l.value.clone())
+                    .unwrap_or_default();
                 result.push(GldfLightSource {
                     id: changeable.id.clone(),
-                    name: changeable.name.value.clone(),
+                    name,
                     light_source_type: "changeable".to_string(),
                 });
             }

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-19
+
+### Added
+
+- **rc.3 ↔ rc.4 schema versioning**: new `GldfSchemaVersion` enum and `to_xml_with_schema()` method. Internal model always stores the rc.4-canonical form; rc.3 export rewrites the typo'd element names and enum values back for compatibility with pre-rc.4 consumers.
+- **`fix` module**: `fix_legacy_content_types` rewrites legacy `contentType="geometry/l3d"` archives to the XSD-canonical `geo/l3d` form, including moving embedded files between zip folders.
+- **`validation` submodule split**: `validation.rs` is now `validation/` with `engine` (schema-rule validator), `canonical` (closed-XSD-enum value validation), and `xsd_enums` (canonical value tables for IK ratings, IP codes, etc.). Public surface (`ValidationError`, `ValidationLevel`, `ValidationResult`) re-exported flat — no breaking change.
+- **IFC integration improvements** and viewer locale handling.
+
+### Changed
+
+- **`RatedChromaticityCoordinateValues`**: renamed from `RatedChromacityCoordinateValues` per rc.4 typo cleanup. Old name kept as deprecated type alias.
+- **`Cie97LampType` enum values**: `Fluorescent Triphosphor` / `Fluorescent Halophosphate` replace the rc.3-typo'd `Flourescent ...` spellings. Both forms parse; rc.4 is written by default.
+
+### Fixed
+
+- **`RectangularCutout` XSD compliance**: `Width`, `Length`, `Depth` now serialize as child elements (per XSD) rather than attributes.
+- **Empty `<Files/>` skip**: omit the element when no files are present, matching XSD `minOccurs=1` constraint on `<File>` children.
+
 ## [0.3.4] - 2026-05-18
 
 ### Added

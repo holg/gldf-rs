@@ -18,9 +18,13 @@ name = "gldf_rs_wasm"
 path = "src/main.rs"
 
 [features]
+# `uld-rs` was the legacy sibling crate (parked at workspace level —
+# its `cfb` dep pinned `uuid` to a version incompatible with the local
+# Bevy fork). Live ULD/ROLF work lives in `../light-other-rs`. The
+# `uld` feature is currently a no-op; rewire it to the new crate when
+# bringing ULD support back.
 default = []
-# Enable ULD/ROLF file conversion (requires light-other-rs)
-# light-convert = ["dep:light-convert"]
+# uld = ["dep:uld-rs"]  # parked: see workspace Cargo.toml
 
 [dependencies]
 # Core library - enable eulumdat for LDT/IES and l3d for geometry export
@@ -32,6 +36,7 @@ anyhow.workspace = true
 # Utilities
 base64.workspace = true
 eulumdat.workspace = true
+eulumdat-i18n.workspace = true
 gloo.workspace = true
 
 # WASM
@@ -47,9 +52,8 @@ wasm-bindgen-futures.workspace = true
 yew.workspace = true
 zip.workspace = true
 
-# Unified lighting file conversion (ULD, ROLF -> GLDF)
-# Requires light-other-rs; enable on the light-other branch
-# light-convert = { workspace = true, optional = true }
+# ULD file conversion (ULD -> GLDF) — parked, see [features] note above.
+# uld-rs = { workspace = true, optional = true }
 
 [dependencies.web-sys]
 workspace = true

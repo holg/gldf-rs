@@ -46,3 +46,19 @@ pub struct Files {
     #[serde(rename = "File", default)]
     pub file: Vec<File>,
 }
+
+impl Files {
+    /// Whether the collection has zero file entries. Used to skip
+    /// serialization of an empty `<Files/>` element (XSD requires at
+    /// least one `<File>` child if Files is present).
+    pub fn is_empty(&self) -> bool {
+        self.file.is_empty()
+    }
+}
+
+/// Free function used by `serde(skip_serializing_if = ...)` because the
+/// macro takes a path-string and resolves it at expansion time without
+/// `&self`. Forwards to [`Files::is_empty`].
+pub(crate) fn files_is_empty(f: &Files) -> bool {
+    f.is_empty()
+}

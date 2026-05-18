@@ -9,11 +9,14 @@ members = [
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
-    "crates/gldf-stadium-plugin",
+    # gldf-stadium-plugin is parked: it still pulls crates.io Bevy 0.18,
+    # which conflicts with gldf-bevy's `photometric_proposal` fork
+    # (Bevy 0.19-dev). Re-add once stadium is migrated to the same fork.
+    # "crates/gldf-stadium-plugin",
 ]
 
 [workspace.package]
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "AGPL-3.0-or-later"
@@ -22,7 +25,7 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.3.4", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }
@@ -84,7 +87,7 @@ bevy = { version = "0.18", default-features = false, features = [
 # eulumdat-bevy for lighting plugins
 # Note: 0.6.0 is the latest published; 0.7.x pending publish. Pins to
 # eulumdat ^0.6.0, so leaves a graph mismatch with `eulumdat = "0.7"`
-# below — only gldf-bevy is affected and is not part of the 0.3.4
+# below — only gldf-bevy is affected and is not part of the 0.4.0
 # crates.io release.
 eulumdat-bevy = "0.6.0"
 
@@ -93,6 +96,14 @@ eulumdat = "0.7"
 eulumdat-i18n = "0.7"
 l3d_rs = "0.2.3"
 
+# ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
+# `cfb 0.10` which pins `uuid = ^1` to 1.19.0; the local Bevy fork
+# (photometric_proposal, 0.19-dev) needs `uuid ^1.21.0`, and Cargo
+# can't satisfy both with a single uuid version. Live ULD work lives
+# in `../light-other-rs` (on the `light-other` branch). Re-enable
+# once the `uld` feature is rebound to that crate.
+# uld-rs = { path = "../uld-rs", features = ["gldf"] }
+
 # File dialogs (native)
 rfd = "0.15"
 
@@ -100,16 +111,22 @@ rfd = "0.15"
 gloo = "0.11"
 gloo-file = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
-wasm-bindgen = "0.2"
+# Pinned to match cargo-leptos 0.3.6's bundled wasm-bindgen-cli (0.2.114).
+# Bumping requires `cargo install -f wasm-bindgen-cli --version <new>`
+# on the dev box; pin upgrades wait until that's coordinated.
+wasm-bindgen = "=0.2.114"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
 web-sys = "0.3"
 yew = { version = "0.22", features = ["csr"] }
 
-# Leptos (for SSR-capable WASM)
+# Leptos stack — 0.8.x. Each consumer picks the features it needs
+# (csr/hydrate for the wasm bundle, ssr for a server binary).
 console_error_panic_hook = "0.1"
-leptos = { version = "0.7", features = ["csr"] }
-leptos_router = "0.7"
+leptos = { version = "0.8", default-features = false }
+leptos_axum = { version = "0.8", default-features = false }
+leptos_meta = { version = "0.8", default-features = false }
+leptos_router = { version = "0.8", default-features = false }
 
 # Python
 pyo3 = { version = "0.24", features = ["extension-module", "abi3-py38"] }
@@ -124,3 +141,6 @@ log = "0.4"
 
 # Build utilities
 version_check = "0.9"
+
+# [patch.crates-io] removed — eulumdat-bevy is now path-dep'd above, so
+# crates.io eulumdat never enters the graph and there's nothing to patch.

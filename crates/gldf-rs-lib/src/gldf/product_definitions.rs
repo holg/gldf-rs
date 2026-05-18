@@ -163,42 +163,51 @@ pub struct ProductMetaData {
 }
 
 /// Represents a rectangular cutout.
+///
+/// XSD shape (gldf-1.0.0-rc-3.xsd line 3845..): `<RectangularCutout>`
+/// is a sequence of three required **child elements** — `<Width>`,
+/// `<Length>`, `<Depth>` (each xs:int, mm, ≥ 0). They are NOT
+/// attributes; emitting them as `@Width` etc. produces invalid XML
+/// that the schema rejects.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RectangularCutout {
-    /// The width of the rectangular cutout.
-    #[serde(rename = "@Width", default)]
+    /// The width of the rectangular cutout (mm).
+    #[serde(rename = "Width", default)]
     pub width: i32,
 
-    /// The length of the rectangular cutout.
-    #[serde(rename = "@Length", default)]
+    /// The length of the rectangular cutout (mm).
+    #[serde(rename = "Length", default)]
     pub length: i32,
 
-    /// The depth of the rectangular cutout.
-    #[serde(rename = "@Depth", default)]
+    /// The depth of the rectangular cutout (mm).
+    #[serde(rename = "Depth", default)]
     pub depth: i32,
 }
 
 /// Represents a circular cutout.
+///
+/// XSD shape: `<CircularCutout>` is a sequence of two required child
+/// elements — `<Diameter>` and `<Depth>` (xs:int, mm). Same correction
+/// as `RectangularCutout`: child elements, not attributes.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CircularCutout {
-    /// The diameter of the circular cutout.
-    #[serde(rename = "@Diameter", default)]
+    /// The diameter of the circular cutout (mm).
+    #[serde(rename = "Diameter", default)]
     pub diameter: i32,
 
-    /// The depth of the circular cutout.
-    #[serde(rename = "@Depth", default)]
+    /// The depth of the circular cutout (mm).
+    #[serde(rename = "Depth", default)]
     pub depth: i32,
 }
 
 /// Represents a recessed luminaire.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recessed {
-    /// The recessed depth in mm.
-    #[serde(
-        rename = "@recessedDepth",
-        default,
-        skip_serializing_if = "is_zero_i32"
-    )]
+    /// The recessed depth in mm. XSD declares this attribute as
+    /// `use="required"`, so we always serialize it (even when zero —
+    /// `0` is a valid "unknown / not specified" value for consumers
+    /// that need a placeholder).
+    #[serde(rename = "@recessedDepth", default)]
     pub recessed_depth: i32,
 
     /// The rectangular cutout details for the recessed luminaire.
@@ -216,10 +225,6 @@ pub struct Recessed {
         skip_serializing_if = "Option::is_none"
     )]
     pub circular_cutout: Option<CircularCutout>,
-}
-
-fn is_zero_i32(val: &i32) -> bool {
-    *val == 0
 }
 
 /// Represents a surface-mounted luminaire.
@@ -249,6 +254,11 @@ pub struct Ceiling {
 }
 
 /// Luminaire on the Wall
+///
+/// Per XSD `Wall` is a `sequence { Recessed?, SurfaceMounted? }` with a
+/// required `@mountingHeight`. There is no `<Depth>` element at this
+/// level — depth-of-cutout values live inside `Recessed > RectangularCutout
+/// > Depth` or `Recessed > CircularCutout > Depth`.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wall {
     /// The mounting height in mm
@@ -264,9 +274,6 @@ pub struct Wall {
         skip_serializing_if = "Option::is_none"
     )]
     pub surface_mounted: Option<SurfaceMounted>,
-    /// The depth in mm
-    #[serde(rename = "Depth", default)]
-    pub depth: i32,
 }
 
 /// FreeStanding Luminaire
@@ -354,14 +361,48 @@ pub struct Mountings {
     pub ground: Option<Ground>,
 }
 
-/// EmitterReference
+/// Bare emitter reference — used at `Variant > Geometry > EmitterReference`
+/// (the no-3D-geometry choice branch). XSD shape: empty element with a
+/// single `@emitterId` attribute. No child elements.
+///
+/// Distinct from [`EmitterReference`], which is the *nested* form inside
+/// `ModelGeometryReference` and requires a `<EmitterObjectExternalName>`
+/// text child. They share the XML element name but not the structure;
+/// modeling them as one Rust type was a long-running source of XSD
+/// violations (either an empty `<EmitterObjectExternalName/>` got
+/// emitted in the bare branch, or a required child got dropped in the
+/// nested branch). Splitting them is the durable fix.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmitterReferenceBare {
+    /// The emitter id
+    #[serde(rename = "@emitterId")]
+    pub emitter_id: String,
+}
+
+/// Nested emitter reference — used inside
+/// `Variant > Geometry > ModelGeometryReference > EmitterReference`.
+/// XSD shape: a sequence with a required `<EmitterObjectExternalName>`
+/// child plus required `@emitterId` and optional `@targetModelType`.
+///
+/// `target_model_type` distinguishes between l3d / m3d / r3d when a
+/// variant ships multiple 3D model types with different emitter object
+/// names. Most files don't set it.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmitterReference {
     /// The emitter id
     #[serde(rename = "@emitterId")]
     pub emitter_id: String,
-    /// The external name of the emitter
-    #[serde(rename = "EmitterObjectExternalName")]
+    /// Optional 3D model type marker (l3d / m3d / r3d) — only needed
+    /// when the variant references multiple model formats.
+    #[serde(
+        rename = "@targetModelType",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub target_model_type: Option<String>,
+    /// Name of the emitter object inside the referenced 3D geometry.
+    /// XSD requires this child element; it always emits.
+    #[serde(rename = "EmitterObjectExternalName", default)]
     pub emitter_object_external_name: String,
 }
 
@@ -404,9 +445,23 @@ pub struct GeometryReferences {
     pub model_geometry_reference: Option<ModelGeometryReference>,
 }
 
-/// Geometry
+/// Geometry — XSD `Variant > Geometry` is an `xs:choice` of three branches:
+/// `EmitterReference`, `SimpleGeometryReference`, `ModelGeometryReference`.
+/// The `EmitterReference` branch here is the *bare* form (just
+/// `@emitterId`), used when a luminaire has emitters defined but no
+/// L3D / cuboid model. The `<EmitterReference>` inside
+/// `ModelGeometryReference` is structurally different — see
+/// [`EmitterReferenceBare`] vs [`EmitterReference`].
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Geometry {
+    /// Emitter reference (used when there is no 3D geometry to attach;
+    /// the variant still needs to point at its emitter(s)).
+    #[serde(
+        rename = "EmitterReference",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub emitter_reference: Vec<EmitterReferenceBare>,
     /// The simple geometry reference
     #[serde(
         rename = "SimpleGeometryReference",
@@ -1008,8 +1063,10 @@ pub struct Property {
     #[serde(rename = "@id", default)]
     pub id: String,
     /// The locale information for the property.
+    ///
+    /// XSD declares `Name` as `type="Locale"` (the multi-locale complex type).
     #[serde(rename = "Name", default)]
-    pub name: Locale,
+    pub name: LocaleFoo,
     /// The source of the property.
     #[serde(rename = "PropertySource", default)]
     pub property_source: String,

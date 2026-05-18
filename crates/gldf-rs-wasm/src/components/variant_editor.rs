@@ -1,7 +1,9 @@
 //! Variant editor component for GLDF files
 
-use crate::state::use_gldf;
+use crate::components::LocaleFooEditor;
+use crate::state::{use_gldf, GldfAction};
 use gldf_rs::gldf::product_definitions::{Ceiling, Ground, Mountings, Wall};
+use gldf_rs::gldf::LocaleFoo;
 use yew::prelude::*;
 
 /// Render mounting details for Ceiling type
@@ -46,9 +48,6 @@ fn render_wall_details(wall: &Wall) -> Html {
     }
     if wall.surface_mounted.is_some() {
         details.push("Surface mounted".to_string());
-    }
-    if wall.depth > 0 {
-        details.push(format!("Depth: {}mm", wall.depth));
     }
 
     html! {
@@ -142,47 +141,12 @@ pub fn variant_editor() -> Html {
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
 
-    let product_meta = &gldf.product.product_definitions.product_meta_data;
-
     html! {
         <div class="editor-section variant-editor">
-            <h2>{ "Product & Variants" }</h2>
+            <h2>{ "Variants" }</h2>
             <p class="section-description">
-                { "Product variants with mounting configurations." }
+                { "Per-SKU variants. Each entry overrides ProductMetaData for one article number / GTIN. Document-level metadata lives under Product Metadata → Identity." }
             </p>
-
-            // Product Metadata Section
-            if let Some(meta) = product_meta {
-                <div class="product-metadata-card">
-                    <h3>{ "Product Metadata" }</h3>
-                    <div class="metadata-grid">
-                        if let Some(name) = &meta.name {
-                            if let Some(locale) = name.locale.first() {
-                                <div class="meta-item">
-                                    <span class="label">{ "Product Name:" }</span>
-                                    <span class="value">{ &locale.value }</span>
-                                </div>
-                            }
-                        }
-                        if let Some(number) = &meta.product_number {
-                            if let Some(locale) = number.locale.first() {
-                                <div class="meta-item">
-                                    <span class="label">{ "Product Number:" }</span>
-                                    <span class="value">{ &locale.value }</span>
-                                </div>
-                            }
-                        }
-                        if let Some(desc) = &meta.description {
-                            if let Some(locale) = desc.locale.first() {
-                                <div class="meta-item wide">
-                                    <span class="label">{ "Description:" }</span>
-                                    <span class="value">{ &locale.value }</span>
-                                </div>
-                            }
-                        }
-                    </div>
-                </div>
-            }
 
             // Variants Section
             <div class="variants-section">
@@ -193,16 +157,11 @@ pub fn variant_editor() -> Html {
                 } else {
                     <div class="variant-cards">
                         { for variants.iter().enumerate().map(|(idx, variant)| {
-                            let name = variant.name.as_ref()
-                                .and_then(|n| n.locale.first())
+                            let active_lang = gldf.active_language.as_str();
+                            let name_for_header = variant.name.as_ref()
+                                .and_then(|n| n.locale.iter().find(|l| l.language == active_lang).or_else(|| n.locale.first()))
                                 .map(|l| l.value.clone())
                                 .unwrap_or_else(|| "(No name)".to_string());
-                            let product_number = variant.product_number.as_ref()
-                                .and_then(|n| n.locale.first())
-                                .map(|l| l.value.clone());
-                            let description = variant.description.as_ref()
-                                .and_then(|d| d.locale.first())
-                                .map(|l| l.value.clone());
 
                             let is_expanded = *selected_variant == Some(idx);
                             let selected_variant = selected_variant.clone();
@@ -218,7 +177,7 @@ pub fn variant_editor() -> Html {
                                 <div class={classes!("variant-card", is_expanded.then_some("expanded"))} key={variant.id.clone()}>
                                     <div class="card-header" onclick={on_toggle.clone()}>
                                         <span class="card-id">{ &variant.id }</span>
-                                        <span class="card-name">{ &name }</span>
+                                        <span class="card-name">{ &name_for_header }</span>
                                         if let Some(order) = &variant.sort_order {
                                             <span class="sort-order">{ format!("#{}", order) }</span>
                                         }
@@ -227,20 +186,30 @@ pub fn variant_editor() -> Html {
 
                                     if is_expanded {
                                         <div class="card-body">
-                                            // Basic info
+                                            // Editable LocaleFoo fields
                                             <div class="variant-info">
-                                                if let Some(pn) = product_number {
-                                                    <div class="detail">
-                                                        <span class="label">{ "Product Number:" }</span>
-                                                        <span class="value">{ pn }</span>
-                                                    </div>
-                                                }
-                                                if let Some(desc) = description {
-                                                    <div class="detail wide">
-                                                        <span class="label">{ "Description:" }</span>
-                                                        <span class="value">{ desc }</span>
-                                                    </div>
-                                                }
+                                                <LocaleFooEditor
+                                                    label="Variant Name"
+                                                    value={variant.name.clone().unwrap_or_default()}
+                                                    onchange={dispatch_set_variant_name(&gldf, idx)}
+                                                />
+                                                <LocaleFooEditor
+                                                    label="Product Number"
+                                                    value={variant.product_number.clone().unwrap_or_default()}
+                                                    onchange={dispatch_set_variant_product_number(&gldf, idx)}
+                                                />
+                                                <LocaleFooEditor
+                                                    label="Description"
+                                                    value={variant.description.clone().unwrap_or_default()}
+                                                    onchange={dispatch_set_variant_description(&gldf, idx)}
+                                                    multiline=true
+                                                />
+                                                <LocaleFooEditor
+                                                    label="Tender Text"
+                                                    value={variant.tender_text.clone().unwrap_or_default()}
+                                                    onchange={dispatch_set_variant_tender_text(&gldf, idx)}
+                                                    multiline=true
+                                                />
                                                 if let Some(gtin) = &variant.gtin {
                                                     <div class="detail">
                                                         <span class="label">{ "GTIN:" }</span>
@@ -249,6 +218,7 @@ pub fn variant_editor() -> Html {
                                                 }
                                             </div>
 
+                                            // (Mountings, geometry, emitter refs are read-only for now.)
                                             // Mountings section with full details
                                             if let Some(ref mountings) = variant.mountings {
                                                 { render_mountings(mountings) }
@@ -303,4 +273,25 @@ pub fn variant_editor() -> Html {
             </div>
         </div>
     }
+}
+
+// --- Dispatch helpers for per-variant LocaleFoo edits ---
+
+type GldfCtx = crate::state::GldfContext;
+
+fn dispatch_set_variant_name(gldf: &GldfCtx, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| gldf.dispatch(GldfAction::SetVariantName(idx, v)))
+}
+fn dispatch_set_variant_description(gldf: &GldfCtx, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| gldf.dispatch(GldfAction::SetVariantDescription(idx, v)))
+}
+fn dispatch_set_variant_product_number(gldf: &GldfCtx, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| gldf.dispatch(GldfAction::SetVariantProductNumber(idx, v)))
+}
+fn dispatch_set_variant_tender_text(gldf: &GldfCtx, idx: usize) -> Callback<LocaleFoo> {
+    let gldf = gldf.clone();
+    Callback::from(move |v: LocaleFoo| gldf.dispatch(GldfAction::SetVariantTenderText(idx, v)))
 }

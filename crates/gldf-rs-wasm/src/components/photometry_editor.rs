@@ -54,8 +54,11 @@ impl CalculatedPhotometry {
     }
 }
 
-/// Parse LDT or IES file content
-fn parse_photometry_file(content: &[u8]) -> Option<Eulumdat> {
+/// Parse LDT or IES file content into an `Eulumdat` struct.
+///
+/// Tries LDT (EULUMDAT) first, then IES. Returns `None` if neither parser
+/// accepts the content.
+pub fn parse_photometry_file(content: &[u8]) -> Option<Eulumdat> {
     // Convert bytes to string
     let content_str = std::str::from_utf8(content).ok()?;
 

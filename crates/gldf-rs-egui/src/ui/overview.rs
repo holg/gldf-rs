@@ -251,7 +251,13 @@ fn render_light_sources_overview(ui: &mut egui::Ui, app: &GldfViewerApp) {
                     ui.horizontal(|ui| {
                         ui.label("💡");
                         ui.vertical(|ui| {
-                            ui.label(&ls.name.value);
+                            let name_text = ls
+                                .name
+                                .locale
+                                .first()
+                                .map(|l| l.value.as_str())
+                                .unwrap_or("");
+                            ui.label(name_text);
                             ui.label(egui::RichText::new(format!("ID: {}", ls.id)).weak().small());
                         });
                     });

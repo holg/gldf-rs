@@ -505,3 +505,249 @@ fn test_star_sky_gldf_with_plugin() {
     println!("  - WASM binary: valid");
     println!("  - JS loader: present");
 }
+
+// ──────────────────────────────────────────────────────────────────
+// rc.3 ↔ rc.4 backwards compatibility tests.
+//
+// rc.4 corrected two long-standing typos: the element name
+// `RatedChromacityCoordinateValues` became `RatedChromaticityCoordinateValues`,
+// and the `Cie97LampType` enum values `Flourescent Triphosphor` /
+// `Flourescent Halophosphate` became `Fluorescent ...`. Both old forms
+// remain valid (rc.4 keeps them as deprecated aliases), so gldf-rs:
+//   - parses either spelling
+//   - stores the rc.4-canonical form internally
+//   - serializes either form on demand via `GldfSchemaVersion`
+// ──────────────────────────────────────────────────────────────────
+
+/// rc.3 input with the typo'd `Flourescent Triphosphor` enum value
+/// parses cleanly and lands in memory as the corrected `Fluorescent
+/// Triphosphor` form. Default-export (rc.4) writes the corrected form;
+/// rc.3-export writes the original typo back.
+#[test]
+fn rc3_flourescent_typo_normalizes_and_round_trips() {
+    use crate::GldfSchemaVersion;
+
+    // Minimal rc.3-shaped product XML carrying the typo'd enum value
+    // inside Cie97LampType (under LightSourceMaintenance).
+    let rc3_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Header>
+        <Manufacturer>Test</Manufacturer>
+        <FormatVersion major="1" minor="0" pre-release="3">1.0.0-rc.3</FormatVersion>
+        <CreationTimeCode>2026-01-01T00:00:00</CreationTimeCode>
+        <CreatedWithApplication>gldf-rs</CreatedWithApplication>
+    </Header>
+    <GeneralDefinitions>
+        <Files />
+        <Photometries />
+        <LightSources>
+            <FixedLightSource id="ls1">
+                <Name><Locale language="en">Test</Locale></Name>
+                <RatedInputPower>10</RatedInputPower>
+                <LightSourceMaintenance>
+                    <Cie97LampType>Flourescent Triphosphor</Cie97LampType>
+                </LightSourceMaintenance>
+            </FixedLightSource>
+        </LightSources>
+    </GeneralDefinitions>
+    <ProductDefinitions />
+</Root>"#;
+
+    let parsed = GldfProduct::from_xml(rc3_xml).expect("rc.3 input parses");
+    let cie = parsed
+        .general_definitions
+        .light_sources
+        .as_ref()
+        .and_then(|ls| ls.fixed_light_source.first())
+        .and_then(|fls| fls.light_source_maintenance.as_ref())
+        .and_then(|m| m.cie97_lamp_type.as_ref())
+        .map(|s| s.as_str());
+
+    // Internal model holds the rc.4-canonical (corrected) spelling.
+    assert_eq!(
+        cie,
+        Some("Fluorescent Triphosphor"),
+        "inbound rc.3 typo must be normalized to the rc.4 form on parse"
+    );
+
+    // rc.4 export emits the corrected spelling.
+    let rc4_out = parsed.to_xml_with_schema(GldfSchemaVersion::Rc4).unwrap();
+    assert!(
+        rc4_out.contains("Fluorescent Triphosphor"),
+        "rc.4 export should contain the corrected spelling"
+    );
+    assert!(
+        !rc4_out.contains("Flourescent Triphosphor"),
+        "rc.4 export must not contain the typo'd form"
+    );
+
+    // rc.3 export rewrites it back so legacy validators still accept it.
+    let rc3_out = parsed.to_xml_with_schema(GldfSchemaVersion::Rc3).unwrap();
+    assert!(
+        rc3_out.contains("Flourescent Triphosphor"),
+        "rc.3 export should restore the typo'd spelling for legacy consumers"
+    );
+    assert!(
+        !rc3_out.contains("Fluorescent Triphosphor"),
+        "rc.3 export must not contain the corrected form"
+    );
+}
+
+/// Diagnostic — dump everything the parser sees from full_demo.gldf, so
+/// we can confirm whether "0 LightSources" in the viewer is a parsing
+/// regression, a viewer-display bug, or a stale bundle on the server.
+/// Always passes; output goes to `cargo test -- --nocapture`.
+#[test]
+fn full_demo_diagnostic_dump() {
+    let bytes = fs::read("../../tests/data/full_demo.gldf").expect("full_demo.gldf");
+    let loaded = GldfProduct::load_gldf_from_buf_all(bytes).expect("parse");
+    let g = &loaded.gldf;
+
+    eprintln!("\n=== full_demo.gldf parser dump ===");
+    eprintln!("manufacturer: {}", g.header.manufacturer);
+    eprintln!("files: {}", g.general_definitions.files.file.len());
+    eprintln!(
+        "photometries: {}",
+        g.general_definitions
+            .photometries
+            .as_ref()
+            .map(|p| p.photometry.len())
+            .unwrap_or(0)
+    );
+    let ls = g.general_definitions.light_sources.as_ref();
+    eprintln!("light_sources block present: {}", ls.is_some());
+    if let Some(ls) = ls {
+        eprintln!("  fixed_light_source: {}", ls.fixed_light_source.len());
+        eprintln!(
+            "  changeable_light_source: {}",
+            ls.changeable_light_source.len()
+        );
+        for c in &ls.changeable_light_source {
+            let chrom = c
+                .color_information
+                .as_ref()
+                .and_then(|ci| ci.rated_chromaticity_coordinate_values.as_ref());
+            eprintln!(
+                "    id={} W={:?} lm={:?} chrom={:?}",
+                c.id,
+                c.rated_input_power,
+                c.rated_luminous_flux,
+                chrom.map(|v| (v.x, v.y))
+            );
+        }
+    }
+    eprintln!(
+        "variants: {}",
+        g.product_definitions
+            .variants
+            .as_ref()
+            .map(|v| v.variant.len())
+            .unwrap_or(0)
+    );
+    eprintln!("=== end dump ===\n");
+}
+
+/// `full_demo.gldf` is the canonical rc.3 fixture with three
+/// `ChangeableLightSource` blocks, each carrying a typo'd
+/// `RatedChromacityCoordinateValues` element under `ColorInformation`.
+/// This test confirms the rebuilt fixture parses cleanly and that both
+/// rc.4 and rc.3 export produce the right element-name spelling for the
+/// chromaticity blocks.
+#[test]
+fn full_demo_round_trips_chromaticity_under_both_schemas() {
+    use crate::GldfSchemaVersion;
+    let bytes = fs::read("../../tests/data/full_demo.gldf").expect("full_demo.gldf must exist");
+    let loaded = GldfProduct::load_gldf_from_buf_all(bytes).expect("load_gldf_from_buf_all");
+    let gldf = &loaded.gldf;
+
+    // Three ChangeableLightSource elements survive the parse (the
+    // pre-rc.3 fixture used <LightSource>, which the parser would have
+    // dropped — fixed by the tmp/full_demo_lightsources_fix.py rewrite).
+    let ls = gldf
+        .general_definitions
+        .light_sources
+        .as_ref()
+        .expect("LightSources block");
+    assert_eq!(
+        ls.changeable_light_source.len(),
+        3,
+        "expected 3 ChangeableLightSource elements after parse"
+    );
+
+    // Each one has a chromaticity block. The internal model carries the
+    // rc.4-canonical spelling (the parser renamed via serde alias).
+    for c in &ls.changeable_light_source {
+        let chrom = c
+            .color_information
+            .as_ref()
+            .and_then(|ci| ci.rated_chromaticity_coordinate_values.as_ref())
+            .unwrap_or_else(|| panic!("ChromaticityCoords missing on {}", c.id));
+        assert!(chrom.x > 0.0 && chrom.y > 0.0);
+    }
+
+    // rc.4 export → corrected element name only.
+    let xml4 = gldf.to_xml_with_schema(GldfSchemaVersion::Rc4).unwrap();
+    assert!(xml4.contains("RatedChromaticityCoordinateValues"));
+    assert!(!xml4.contains("RatedChromacityCoordinateValues"));
+
+    // rc.3 export → typo'd element name only.
+    let xml3 = gldf.to_xml_with_schema(GldfSchemaVersion::Rc3).unwrap();
+    assert!(xml3.contains("RatedChromacityCoordinateValues"));
+    assert!(!xml3.contains("RatedChromaticityCoordinateValues"));
+}
+
+/// rc.3 input with the typo'd `RatedChromacityCoordinateValues` element
+/// parses through the serde alias and round-trips correctly under both
+/// schema targets.
+#[test]
+fn rc3_chromaticity_typo_alias_round_trips() {
+    use crate::GldfSchemaVersion;
+
+    let rc3_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Header>
+        <Manufacturer>Test</Manufacturer>
+        <FormatVersion major="1" minor="0" pre-release="3">1.0.0-rc.3</FormatVersion>
+        <CreationTimeCode>2026-01-01T00:00:00</CreationTimeCode>
+        <CreatedWithApplication>gldf-rs</CreatedWithApplication>
+    </Header>
+    <GeneralDefinitions>
+        <Files />
+        <Photometries />
+        <LightSources>
+            <FixedLightSource id="ls1">
+                <Name><Locale language="en">Test</Locale></Name>
+                <RatedInputPower>10</RatedInputPower>
+                <ColorInformation>
+                    <RatedChromacityCoordinateValues>
+                        <X>0.4</X>
+                        <Y>0.4</Y>
+                    </RatedChromacityCoordinateValues>
+                </ColorInformation>
+            </FixedLightSource>
+        </LightSources>
+    </GeneralDefinitions>
+    <ProductDefinitions />
+</Root>"#;
+
+    let parsed = GldfProduct::from_xml(rc3_xml).expect("rc.3 element name parses via alias");
+    let coord = parsed
+        .general_definitions
+        .light_sources
+        .as_ref()
+        .and_then(|ls| ls.fixed_light_source.first())
+        .and_then(|fls| fls.color_information.as_ref())
+        .and_then(|ci| ci.rated_chromaticity_coordinate_values.as_ref())
+        .map(|v| (v.x, v.y));
+    assert_eq!(coord, Some((0.4, 0.4)));
+
+    // rc.4 export uses the corrected element name.
+    let rc4_out = parsed.to_xml_with_schema(GldfSchemaVersion::Rc4).unwrap();
+    assert!(rc4_out.contains("RatedChromaticityCoordinateValues"));
+    assert!(!rc4_out.contains("RatedChromacityCoordinateValues"));
+
+    // rc.3 export restores the typo'd element name.
+    let rc3_out = parsed.to_xml_with_schema(GldfSchemaVersion::Rc3).unwrap();
+    assert!(rc3_out.contains("RatedChromacityCoordinateValues"));
+    assert!(!rc3_out.contains("RatedChromaticityCoordinateValues"));
+}
