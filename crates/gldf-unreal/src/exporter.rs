@@ -1,8 +1,23 @@
 //! Top-level orchestration: load a GLDF, walk variants, write bundles.
 //!
-//! Phase 2 implements mesh rewriting and emits a minimal `.udatasmith`
-//! per variant with one `<StaticMesh>` referencing the rewritten OBJ.
-//! Phase 3 fills in per-variant IES emission + `<ActorLight>` entries.
+//! For each requested variant we:
+//!
+//! 1. Resolve the L3D bytes from the GLDF (via [`get_first_l3d_with_ldt`]
+//!    with a fallback scan of `buf.files`).
+//! 2. Convert L3D → ASCII FBX 7.4 using `l3d_rs::fbx::export_fbx_ascii`
+//!    (gated by the `fbx-export` feature on `l3d_rs`). The FBX writer
+//!    handles the L3D-meters → UE-centimetres unit conversion itself
+//!    (via FBX `GlobalSettings.UnitScaleFactor=100`), so we don't apply
+//!    any extra coord transform here.
+//! 3. Resolve per-emitter photometry via
+//!    [`build_ies_outputs_for_variant`]; write the IES files.
+//! 4. Emit a minimal `.udatasmith` referencing the FBX as a
+//!    `<StaticMesh>` and each IES as an `<ActorLight type="Spot">`.
+//!
+//! Earlier revisions wrote OBJ instead of FBX. UE 5.7's Datasmith
+//! Importer hangs on external OBJ references (it parses them as
+//! `.udsmesh` binary), so we use FBX which Datasmith handles via its
+//! first-party FBX translator.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +29,6 @@ use crate::datasmith::elements::{
     Actor, ActorChild, ActorLight, ActorMesh, DatasmithDocument, LightType, StaticMesh, Transform,
 };
 use crate::error::{ExportError, Result};
-use crate::mesh::rewrite_obj_to_ue;
 use crate::options::{ExportOptions, VariantSelector};
 use crate::photometry::{build_ies_outputs_for_variant, EmitterIes};
 
@@ -85,27 +99,40 @@ impl Exporter {
         opts: &ExportOptions,
         variant_id: &str,
     ) -> Result<BundleArtifact> {
-        // Phase 2: one L3D, one StaticMesh. Phase 3 extends to per-emitter
-        // IES + ActorLight children.
-        //
-        // Prefer the strict mapping (variant → geometry → L3D file) because
-        // that's what Phase 3's photometry pipeline needs. If the GLDF
-        // doesn't use `<ModelGeometryReference>` (some authoring tools wire
-        // L3D differently), fall back to scanning the file buffer for any
-        // `.l3d` entry.
+        // Resolve the L3D bytes. Prefer the strict mapping (variant →
+        // geometry → L3D file) because that's what the photometry pipeline
+        // also uses. If the GLDF doesn't wire L3D via
+        // `<ModelGeometryReference>` (some authoring tools differ), fall
+        // back to scanning the file buffer for any `.l3d` entry.
         let l3d_bytes: Vec<u8> = get_first_l3d_with_ldt(&self.buf)
             .and_then(|m| m.l3d_content)
             .or_else(|| first_l3d_in_buffer(&self.buf))
             .ok_or(ExportError::NoGeometry)?;
 
-        // Extract the first OBJ asset from the L3D zip via l3d_rs.
-        let (obj_filename, obj_bytes) = extract_first_obj(&l3d_bytes)?;
-        let rewritten = rewrite_obj_to_ue(&obj_bytes, opts.units)?;
+        // Convert L3D → ASCII FBX 7.4 via l3d_rs's fbx-export feature.
+        // The FBX writer reads structure.xml, walks the part/joint
+        // hierarchy, embeds the OBJ mesh data inline as FBX Geometry
+        // nodes, emits LEOs as FBX Light nodes + synthetic emitter
+        // meshes, and applies the L3D→UE unit conversion (meters →
+        // centimetres via GlobalSettings.UnitScaleFactor=100). That
+        // means we do NOT also apply `crate::coords` / `crate::mesh`
+        // transforms here — the FBX writer owns the coord conversion
+        // end-to-end and we'd double-flip if we did.
+        let l3d = l3d_rs::from_buffer(&l3d_bytes);
+        let fbx_text = l3d_rs::fbx::export_fbx_ascii(&l3d)
+            .map_err(|e| ExportError::Internal(format!("FBX export failed: {e}")))?;
+
+        // Choose a stable mesh name + filename. The L3D's
+        // `<GeometryFileDefinition>` typically has a `partName` we could
+        // use, but for v0.0.1 we just use the bundle name — one luminaire
+        // per bundle, one mesh per luminaire.
+        let mesh_name = sanitize_asset_name(&opts.bundle_name);
+        let fbx_filename = format!("{mesh_name}.fbx");
 
         // Write the bundle.
         let mut w = BundleWriter::new(&opts.out_dir, &opts.bundle_name, variant_id, opts.overwrite);
         w.prepare()?;
-        let _obj_path = w.write_geometry(&obj_filename, rewritten.as_bytes())?;
+        let _fbx_path = w.write_geometry(&fbx_filename, fbx_text.as_bytes())?;
 
         // Resolve per-emitter photometry for this variant and emit IES files.
         let ies_outputs = build_ies_outputs_for_variant(&self.buf, variant_id)?;
@@ -115,13 +142,9 @@ impl Exporter {
             light_children.push(ActorChild::Light(actor_light));
         }
 
-        // Datasmith document: one StaticMesh + one Actor with one ActorMesh
-        // + N ActorLights.
-        let mesh_name = obj_filename
-            .strip_suffix(".obj")
-            .unwrap_or(&obj_filename)
-            .to_string();
-        let mesh_ref_path = format!("Assets/Geometry/{obj_filename}");
+        // Datasmith document: one StaticMesh referencing the FBX, one
+        // Actor with the mesh + N ActorLights.
+        let mesh_ref_path = format!("Assets/Geometry/{fbx_filename}");
         let mut children = Vec::with_capacity(1 + light_children.len());
         children.push(ActorChild::Mesh(ActorMesh {
             name: "Body".into(),
@@ -256,17 +279,20 @@ fn first_l3d_in_buffer(buf: &FileBufGldf) -> Option<Vec<u8>> {
     })
 }
 
-/// Parse an L3D zip and return `(filename, bytes)` for the first OBJ
-/// asset. Phase 2: we only need the primary geometry. Phase 3 will walk
-/// every part once per-emitter logic lands.
-fn extract_first_obj(l3d_bytes: &[u8]) -> Result<(String, Vec<u8>)> {
-    let l3d = l3d_rs::from_buffer(l3d_bytes);
-    for asset in l3d.file.assets.iter() {
-        if asset.name.to_lowercase().ends_with(".obj") {
-            return Ok((asset.name.clone(), asset.content.clone()));
-        }
-    }
-    Err(ExportError::NoGeometry)
+/// Sanitise a string for use as an asset filename. Replaces anything
+/// outside `[A-Za-z0-9_-]` with `_`. Datasmith and FBX importers tolerate
+/// most characters, but spaces / dots / quotes cause friction in UE's
+/// asset paths.
+fn sanitize_asset_name(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 /// Summary of what `export()` actually wrote, per variant.

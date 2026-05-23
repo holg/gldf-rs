@@ -103,7 +103,13 @@ eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
 # section added in eulumdat-i18n 0.6.1. Same path-dep caveat as
 # `eulumdat` above — flip back to crates.io for release.
 eulumdat-i18n = { path = "../eulumdat-rs/crates/eulumdat-i18n" }
-l3d_rs = "0.2.3"
+# Path-dep into the local l3d-rs workspace so we get the in-progress
+# `fbx-export` feature (a 1400-line ASCII FBX 7.4 writer in
+# crates/l3d_rs/src/fbx.rs that's not yet published). Used by
+# gldf-unreal to emit FBX assets that Unreal Datasmith can ingest.
+# Flip back to a crates.io version once l3d-rs ships an fbx-export
+# release.
+l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
 
 # ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
 # `cfb 0.10` which pins `uuid = ^1` to 1.19.0; the local Bevy fork

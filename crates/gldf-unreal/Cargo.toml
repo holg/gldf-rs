@@ -27,7 +27,7 @@ default = []
 [dependencies]
 gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
 eulumdat.workspace = true
-l3d_rs.workspace = true
+l3d_rs = { workspace = true, features = ["fbx-export"] }
 
 # XML emission
 quick-xml = { workspace = true }

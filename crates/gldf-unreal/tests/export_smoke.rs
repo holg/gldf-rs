@@ -82,12 +82,14 @@ fn alurays_3000mm_first_variant_emits_bundle() {
             .ends_with(".udatasmith"),
         "extension is .udatasmith"
     );
-    // An .obj asset was written under Assets/Geometry/ (possibly in a
-    // subdir — the L3D may use its own internal layout like `geom_1/`).
+    // An .fbx asset was written under Assets/Geometry/. UE 5.7 Datasmith
+    // accepts external FBX via its first-party FBX translator; the OBJ
+    // path hung the importer in an infinite read loop, so we switched
+    // to FBX (produced by l3d_rs's fbx-export feature).
     let geom_dir = b.udatasmith_path.parent().unwrap().join("Assets/Geometry");
     assert!(geom_dir.is_dir());
-    let any_obj = walk_for_extension(&geom_dir, "obj");
-    assert!(any_obj, "an .obj asset was written under Assets/Geometry/");
+    let any_fbx = walk_for_extension(&geom_dir, "fbx");
+    assert!(any_fbx, "an .fbx asset was written under Assets/Geometry/");
 
     // The .udatasmith mentions a StaticMesh referencing the OBJ and at
     // least one ActorLight with an IES ref (Phase 3).
