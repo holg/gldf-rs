@@ -1,0 +1,31 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.0.1",
+  "FriendlyName": "GLDF Importer (Interchange)",
+  "Description": "Native UE 5.7 Interchange translator for GLDF (Global Lighting Data Format) luminaire files. Imports .gldf as UTextureLightProfile + UStaticMesh + AActor assets. Phase 1: IES only.",
+  "Category": "Importers",
+  "CreatedBy": "gldf-rs project",
+  "CreatedByURL": "https://github.com/holg/gldf-rs",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "IsExperimentalVersion": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "GldfImporter",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "Interchange",
+      "Enabled": true
+    }
+  ]
+}

@@ -84,6 +84,42 @@ char *gldf_unreal_last_report_json(void);
  */
 void gldf_unreal_string_free(char *s);
 
+/*
+ Load `gldf_path` and return the first variant's first non-emergency
+ emitter's IES bytes (variant-resolved lumens/watts already patched).
+
+ On success returns 0 and writes:
+ - `*out_buf` = a Rust-allocated `u8` array; caller MUST free via
+   [`gldf_unreal_bytes_free`] passing both the returned pointer AND
+   the returned length.
+ - `*out_len` = length in bytes.
+
+ On failure returns the [`ExportError::code`] and writes a Rust-owned
+ CString to `*out_err`; caller frees via [`gldf_unreal_string_free`].
+
+ # Safety
+ `gldf_path` must be a valid NUL-terminated UTF-8 C string.
+ `out_buf`, `out_len`, `out_err` may be null individually — the caller
+ loses access to that channel if it passes null.
+ */
+int32_t gldf_unreal_first_ies_bytes(const char *gldf_path,
+                                    uint8_t **out_buf,
+                                    uintptr_t *out_len,
+                                    char **out_err);
+
+/*
+ Free a byte buffer previously returned by
+ [`gldf_unreal_first_ies_bytes`] (or any future call documented to
+ hand back a Rust-owned `u8*`). The caller MUST pass back exactly the
+ pointer and length they received — using a different length is
+ undefined behavior (we reconstruct a `Box<[u8]>` to drop it).
+
+ # Safety
+ `ptr` must be a pointer previously returned by this library, paired
+ with the `len` it was returned with, or `ptr` may be NULL.
+ */
+void gldf_unreal_bytes_free(uint8_t *ptr, uintptr_t len);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

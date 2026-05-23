@@ -138,6 +138,120 @@ pub unsafe extern "C" fn gldf_unreal_string_free(s: *mut c_char) {
     let _ = CString::from_raw(s);
 }
 
+// ─── Interchange translator support (Phase 1) ────────────────────────────
+//
+// The UE Interchange translator parses GLDF in-process (inside UE), then
+// hands per-asset bytes back via Interchange's payload callbacks. The C++
+// translator owns the GLDF file path; it asks Rust for individual asset
+// blobs.
+//
+// Phase 1 needs exactly one such call: "give me the IES bytes for the
+// first non-emergency emitter of the first variant." Phase 2/3 add the
+// mesh + multi-emitter + variant walks.
+
+/// Load `gldf_path` and return the first variant's first non-emergency
+/// emitter's IES bytes (variant-resolved lumens/watts already patched).
+///
+/// On success returns 0 and writes:
+/// - `*out_buf` = a Rust-allocated `u8` array; caller MUST free via
+///   [`gldf_unreal_bytes_free`] passing both the returned pointer AND
+///   the returned length.
+/// - `*out_len` = length in bytes.
+///
+/// On failure returns the [`ExportError::code`] and writes a Rust-owned
+/// CString to `*out_err`; caller frees via [`gldf_unreal_string_free`].
+///
+/// # Safety
+/// `gldf_path` must be a valid NUL-terminated UTF-8 C string.
+/// `out_buf`, `out_len`, `out_err` may be null individually — the caller
+/// loses access to that channel if it passes null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_first_ies_bytes(
+    gldf_path: *const c_char,
+    out_buf: *mut *mut u8,
+    out_len: *mut usize,
+    out_err: *mut *mut c_char,
+) -> i32 {
+    if !out_buf.is_null() {
+        *out_buf = std::ptr::null_mut();
+    }
+    if !out_len.is_null() {
+        *out_len = 0;
+    }
+    if !out_err.is_null() {
+        *out_err = std::ptr::null_mut();
+    }
+
+    let result = (|| -> Result<Vec<u8>> {
+        let path = cstr_to_pathbuf(gldf_path, "gldf_path")?;
+        let exporter = Exporter::from_path(&path)?;
+        // First variant.
+        let buf = exporter.file_buf();
+        let variant_id = buf
+            .gldf
+            .product_definitions
+            .variants
+            .as_ref()
+            .and_then(|v| v.variant.first())
+            .map(|v| v.id.clone())
+            .ok_or_else(|| {
+                ExportError::Internal("GLDF has no variants".into())
+            })?;
+        // First non-emergency emitter (build_ies_outputs_for_variant
+        // already filters emergency-only).
+        let outs = crate::photometry::build_ies_outputs_for_variant(buf, &variant_id)?;
+        let first = outs.into_iter().next().ok_or_else(|| {
+            ExportError::Photometry(format!(
+                "variant {variant_id:?} has no non-emergency emitters"
+            ))
+        })?;
+        Ok(first.ies_bytes)
+    })();
+
+    match result {
+        Ok(bytes) => {
+            // Hand ownership to the caller via a leaked Box<[u8]>.
+            let boxed: Box<[u8]> = bytes.into_boxed_slice();
+            let len = boxed.len();
+            let ptr = Box::into_raw(boxed) as *mut u8;
+            if !out_buf.is_null() {
+                *out_buf = ptr;
+            }
+            if !out_len.is_null() {
+                *out_len = len;
+            }
+            0
+        }
+        Err(e) => {
+            let code = e.code();
+            if !out_err.is_null() {
+                if let Ok(cstr) = CString::new(e.to_string()) {
+                    *out_err = cstr.into_raw();
+                }
+            }
+            code
+        }
+    }
+}
+
+/// Free a byte buffer previously returned by
+/// [`gldf_unreal_first_ies_bytes`] (or any future call documented to
+/// hand back a Rust-owned `u8*`). The caller MUST pass back exactly the
+/// pointer and length they received — using a different length is
+/// undefined behavior (we reconstruct a `Box<[u8]>` to drop it).
+///
+/// # Safety
+/// `ptr` must be a pointer previously returned by this library, paired
+/// with the `len` it was returned with, or `ptr` may be NULL.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_bytes_free(ptr: *mut u8, len: usize) {
+    if ptr.is_null() {
+        return;
+    }
+    let slice: *mut [u8] = std::slice::from_raw_parts_mut(ptr, len);
+    let _ = Box::from_raw(slice);
+}
+
 // ─── internal helpers ────────────────────────────────────────────────────
 
 unsafe fn export_impl(
@@ -300,6 +414,81 @@ mod tests {
     fn string_free_handles_null() {
         unsafe { gldf_unreal_string_free(std::ptr::null_mut()) };
         // No assertion needed — just shouldn't crash.
+    }
+
+    #[test]
+    fn bytes_free_handles_null() {
+        unsafe { gldf_unreal_bytes_free(std::ptr::null_mut(), 0) };
+        unsafe { gldf_unreal_bytes_free(std::ptr::null_mut(), 999) };
+        // Both no-ops; mustn't crash on null even with a non-zero len.
+    }
+
+    #[test]
+    fn first_ies_bytes_null_path_errors() {
+        let mut buf: *mut u8 = std::ptr::null_mut();
+        let mut len: usize = 0;
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let code = unsafe {
+            gldf_unreal_first_ies_bytes(
+                std::ptr::null(),
+                &mut buf as *mut *mut u8,
+                &mut len as *mut usize,
+                &mut err as *mut *mut c_char,
+            )
+        };
+        assert_eq!(code, 99, "null path → Internal error code");
+        assert!(buf.is_null());
+        assert_eq!(len, 0);
+        assert!(!err.is_null());
+        unsafe { gldf_unreal_string_free(err) };
+    }
+
+    #[test]
+    fn first_ies_bytes_alurays_round_trip() {
+        // The Phase 1 happy path: load alurays-3000mm.gldf, ask for the
+        // first emitter's IES bytes, expect a non-empty LM-63 blob.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("tests/data/alurays-3000mm.gldf");
+        if !fixture.exists() {
+            eprintln!("skipping: {} not present", fixture.display());
+            return;
+        }
+        let path_c = CString::new(fixture.to_string_lossy().as_bytes()).unwrap();
+
+        let mut buf: *mut u8 = std::ptr::null_mut();
+        let mut len: usize = 0;
+        let mut err: *mut c_char = std::ptr::null_mut();
+
+        let code = unsafe {
+            gldf_unreal_first_ies_bytes(
+                path_c.as_ptr(),
+                &mut buf as *mut *mut u8,
+                &mut len as *mut usize,
+                &mut err as *mut *mut c_char,
+            )
+        };
+        assert_eq!(code, 0, "expected success; err = {err:?}");
+        assert!(!buf.is_null());
+        assert!(len > 0);
+
+        // Copy out before freeing so we can inspect.
+        let bytes: Vec<u8> = unsafe { std::slice::from_raw_parts(buf, len).to_vec() };
+        unsafe { gldf_unreal_bytes_free(buf, len) };
+
+        // LM-63 IES files start with "IESNA:" or "TILT=" / "IES:" — the
+        // gldf-rs photometry pipeline goes through eulumdat's IES
+        // exporter, which writes the modern header.
+        let head: String = bytes
+            .iter()
+            .take(64)
+            .map(|&b| b as char)
+            .collect();
+        assert!(
+            head.contains("IES") || head.contains("TILT="),
+            "expected an IES LM-63 header; got bytes starting with {:?}",
+            head
+        );
     }
 
     #[test]
