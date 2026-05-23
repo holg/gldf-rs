@@ -1,0 +1,31 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.0.1",
+  "FriendlyName": "GLDF Rs Importer (scaffold)",
+  "Description": "Editor-side scaffold that calls the Rust gldf-unreal staticlib to import GLDF luminaire files via Datasmith. Untested against UE 5.4 — see TESTING.md for first-build steps.",
+  "Category": "Importers",
+  "CreatedBy": "gldf-rs project",
+  "CreatedByURL": "https://github.com/holg/gldf-rs",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "IsExperimentalVersion": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "GldfRsImporter",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "DatasmithImporter",
+      "Enabled": true
+    }
+  ]
+}
