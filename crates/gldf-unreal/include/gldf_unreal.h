@@ -40,6 +40,50 @@ typedef struct GldfUnrealOpts {
   const char *variants_csv;
 } GldfUnrealOpts;
 
+/*
+ Layout MUST match `GldfMeshHeader` in the generated C header.
+ */
+typedef struct GldfMeshHeader {
+  uint32_t vertex_count;
+  /*
+   0 when the source OBJ has no `vn` lines.
+   */
+  uint32_t normal_count;
+  /*
+   0 when the source OBJ has no `vt` lines.
+   */
+  uint32_t uv_count;
+  uint32_t polygon_count;
+  /*
+   Sum of all polygons' corner counts.
+   */
+  uint32_t corner_count;
+  uint32_t material_group_count;
+} GldfMeshHeader;
+
+/*
+ One face corner, flattened for C. `normal_idx` / `uv_idx` are -1 when
+ the source face token had no normal / uv. `polygon_idx` says which
+ polygon (0-based) this corner belongs to so the C++ side can rebuild
+ the n-gon grouping without a second indirection array.
+ */
+typedef struct GldfMeshCorner {
+  uint32_t position_idx;
+  int32_t normal_idx;
+  int32_t uv_idx;
+  uint32_t polygon_idx;
+} GldfMeshCorner;
+
+/*
+ One polygon: a contiguous run in the corners array + its material
+ group index (into the per-handle material-group name list).
+ */
+typedef struct GldfMeshPolygon {
+  uint32_t corner_offset;
+  uint32_t corner_count;
+  uint32_t material_group_idx;
+} GldfMeshPolygon;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -119,6 +163,62 @@ int32_t gldf_unreal_first_ies_bytes(const char *gldf_path,
  with the `len` it was returned with, or `ptr` may be NULL.
  */
 void gldf_unreal_bytes_free(uint8_t *ptr, uintptr_t len);
+
+/*
+ Open the first mesh of the first variant of the GLDF at `gldf_path`.
+
+ On success returns a non-zero handle and fills `*out_header`. On
+ failure returns 0 and writes a Rust-owned error string to `*out_err`
+ (caller frees via [`gldf_unreal_string_free`]).
+
+ The handle owns the parsed mesh until [`gldf_unreal_mesh_close`].
+
+ # Safety
+ `gldf_path` must be a valid NUL-terminated UTF-8 C string.
+ `out_header` / `out_err` may individually be null.
+ */
+uint64_t gldf_unreal_first_mesh_open(const char *gldf_path,
+                                     struct GldfMeshHeader *out_header,
+                                     char **out_err);
+
+/*
+ Borrow read-only pointers into a handle's mesh arrays. Pointers stay
+ valid until [`gldf_unreal_mesh_close`] on the same handle.
+
+ `*out_normals` / `*out_uvs` are set to null when the source had no
+ normals / UVs (`normal_count` / `uv_count` == 0 in the header).
+
+ Returns 0 on success, non-zero if the handle is unknown.
+
+ # Safety
+ `handle` must be a live handle from [`gldf_unreal_first_mesh_open`].
+ The out-pointers may individually be null (that channel is skipped).
+ */
+int32_t gldf_unreal_mesh_borrow(uint64_t handle,
+                                const float **out_positions,
+                                const float **out_normals,
+                                const float **out_uvs,
+                                const struct GldfMeshCorner **out_corners,
+                                const struct GldfMeshPolygon **out_polygons);
+
+/*
+ Return the `group_idx`-th material-group name for a handle, as a
+ Rust-owned CString (caller frees via [`gldf_unreal_string_free`]).
+ Returns null if the handle or index is invalid.
+
+ # Safety
+ `handle` must be a live handle from [`gldf_unreal_first_mesh_open`].
+ */
+char *gldf_unreal_mesh_material_group(uint64_t handle, uint32_t group_idx);
+
+/*
+ Drop a mesh handle and free its arrays. No-op if the handle is unknown
+ or zero.
+
+ # Safety
+ `handle` must be a handle from [`gldf_unreal_first_mesh_open`] or 0.
+ */
+void gldf_unreal_mesh_close(uint64_t handle);
 
 #ifdef __cplusplus
 }  // extern "C"
