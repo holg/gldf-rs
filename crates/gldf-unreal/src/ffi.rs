@@ -37,6 +37,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use gldf_rs::GldfProduct;
+
 use crate::error::{ExportError, Result};
 use crate::exporter::{ExportReport, Exporter};
 use crate::mesh_payload::{build_first_mesh_for_variant, GldfMeshData};
@@ -543,6 +545,257 @@ pub unsafe extern "C" fn gldf_unreal_mesh_close(handle: u64) {
     }
 }
 
+// ─── Interchange variant table (Phase 3a) ────────────────────────────────
+//
+// The translator needs every variant's primary-emitter photometry so it
+// can emit one IES asset + light per variant and wire the variant
+// dropdown. Handle pattern again (variable IES bytes per variant):
+//
+//   1. gldf_unreal_variants_open(path) parses the GLDF, resolves each
+//      variant's first non-emergency emitter (photometry id, lumens,
+//      watts, cct + IES bytes), returns a handle + variant count.
+//   2. gldf_unreal_variant_info(handle, idx, *out) fills a POD with the
+//      scalar fields (counts, lumens, watts, cct) for variant idx.
+//   3. gldf_unreal_variant_string(handle, idx, field) returns a string
+//      field (variant id / photometry id) as a Rust CString
+//      (caller frees via gldf_unreal_string_free).
+//   4. gldf_unreal_variant_ies(handle, idx, *out_ptr, *out_len) borrows
+//      that variant's IES bytes (valid until close()).
+//   5. gldf_unreal_variants_close(handle).
+
+/// One resolved variant's scalar data. `*_present` flags distinguish
+/// "0" from "absent" for the optional photometric values.
+#[repr(C)]
+pub struct GldfVariantInfo {
+    pub lumens: i32,
+    pub lumens_present: u8,
+    pub watts: f64,
+    pub watts_present: u8,
+    pub cct: i32,
+    pub cct_present: u8,
+    pub ies_len: u32,
+}
+
+/// String-field selector for [`gldf_unreal_variant_string`].
+pub const GLDF_VARIANT_FIELD_ID: u32 = 0;
+pub const GLDF_VARIANT_FIELD_PHOTOMETRY_ID: u32 = 1;
+
+struct VariantEntry {
+    variant_id: String,
+    photometry_id: String,
+    lumens: Option<i32>,
+    watts: Option<f64>,
+    cct: Option<i32>,
+    ies_bytes: Vec<u8>,
+}
+
+struct VariantTable {
+    entries: Vec<VariantEntry>,
+}
+
+static VARIANT_REGISTRY: Mutex<Option<HashMap<u64, Box<VariantTable>>>> = Mutex::new(None);
+static VARIANT_NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Open the variant table for the GLDF at `gldf_path`. Resolves each
+/// variant's first non-emergency emitter's IES + photometric scalars.
+///
+/// Returns a non-zero handle + writes `*out_variant_count` on success;
+/// 0 + `*out_err` on failure. Free via [`gldf_unreal_variants_close`].
+///
+/// # Safety
+/// `gldf_path` is a NUL-terminated UTF-8 C string; out-pointers may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variants_open(
+    gldf_path: *const c_char,
+    out_variant_count: *mut u32,
+    out_err: *mut *mut c_char,
+) -> u64 {
+    if !out_variant_count.is_null() {
+        *out_variant_count = 0;
+    }
+    if !out_err.is_null() {
+        *out_err = std::ptr::null_mut();
+    }
+
+    let result = (|| -> Result<VariantTable> {
+        let path = cstr_to_pathbuf(gldf_path, "gldf_path")?;
+        let exporter = Exporter::from_path(&path)?;
+        let buf = exporter.file_buf();
+        let gldf = &buf.gldf;
+
+        let variants: Vec<String> = gldf
+            .product_definitions
+            .variants
+            .as_ref()
+            .map(|v| v.variant.iter().map(|x| x.id.clone()).collect())
+            .unwrap_or_default();
+
+        let mut entries = Vec::with_capacity(variants.len());
+        for vid in &variants {
+            // First non-emergency emitter for this variant.
+            let outs = crate::photometry::build_ies_outputs_for_variant(buf, vid)?;
+            let Some(first) = outs.into_iter().next() else {
+                // No usable emitter; skip this variant.
+                continue;
+            };
+            let cct = first
+                .light_source_id
+                .as_ref()
+                .and_then(|id| lookup_cct(gldf, id));
+            entries.push(VariantEntry {
+                variant_id: vid.clone(),
+                photometry_id: first.photometry_id,
+                lumens: first.lumens,
+                watts: first.watts,
+                cct,
+                ies_bytes: first.ies_bytes,
+            });
+        }
+        Ok(VariantTable { entries })
+    })();
+
+    match result {
+        Ok(table) => {
+            if !out_variant_count.is_null() {
+                *out_variant_count = table.entries.len() as u32;
+            }
+            let id = VARIANT_NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            VARIANT_REGISTRY
+                .lock()
+                .unwrap()
+                .get_or_insert_with(HashMap::new)
+                .insert(id, Box::new(table));
+            id
+        }
+        Err(e) => {
+            if !out_err.is_null() {
+                if let Ok(cstr) = CString::new(e.to_string()) {
+                    *out_err = cstr.into_raw();
+                }
+            }
+            0
+        }
+    }
+}
+
+/// Fill `*out` with variant `idx`'s scalar data. Returns 0 on success,
+/// non-zero if the handle or index is invalid.
+///
+/// # Safety
+/// `handle` must be live; `out` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_info(
+    handle: u64,
+    idx: u32,
+    out: *mut GldfVariantInfo,
+) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return 1 };
+    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(e) = table.entries.get(idx as usize) else {
+        return 1;
+    };
+    if !out.is_null() {
+        *out = GldfVariantInfo {
+            lumens: e.lumens.unwrap_or(0),
+            lumens_present: e.lumens.is_some() as u8,
+            watts: e.watts.unwrap_or(0.0),
+            watts_present: e.watts.is_some() as u8,
+            cct: e.cct.unwrap_or(0),
+            cct_present: e.cct.is_some() as u8,
+            ies_len: e.ies_bytes.len() as u32,
+        };
+    }
+    0
+}
+
+/// Return a string field (`GLDF_VARIANT_FIELD_*`) for variant `idx` as a
+/// Rust CString (caller frees via [`gldf_unreal_string_free`]). Null on
+/// invalid handle / index / field.
+///
+/// # Safety
+/// `handle` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_string(
+    handle: u64,
+    idx: u32,
+    field: u32,
+) -> *mut c_char {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else {
+        return std::ptr::null_mut();
+    };
+    let Some(table) = map.get(&handle) else {
+        return std::ptr::null_mut();
+    };
+    let Some(e) = table.entries.get(idx as usize) else {
+        return std::ptr::null_mut();
+    };
+    let s = match field {
+        GLDF_VARIANT_FIELD_ID => &e.variant_id,
+        GLDF_VARIANT_FIELD_PHOTOMETRY_ID => &e.photometry_id,
+        _ => return std::ptr::null_mut(),
+    };
+    match CString::new(s.as_str()) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Borrow variant `idx`'s IES bytes. `*out_ptr` valid until close().
+/// Returns 0 on success, non-zero on invalid handle/index.
+///
+/// # Safety
+/// `handle` must be live; out-pointers may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_ies(
+    handle: u64,
+    idx: u32,
+    out_ptr: *mut *const u8,
+    out_len: *mut u32,
+) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return 1 };
+    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(e) = table.entries.get(idx as usize) else {
+        return 1;
+    };
+    if !out_ptr.is_null() {
+        *out_ptr = e.ies_bytes.as_ptr();
+    }
+    if !out_len.is_null() {
+        *out_len = e.ies_bytes.len() as u32;
+    }
+    0
+}
+
+/// Drop a variant-table handle. No-op on zero / unknown.
+///
+/// # Safety
+/// `handle` must be from [`gldf_unreal_variants_open`] or 0.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variants_close(handle: u64) {
+    if handle == 0 {
+        return;
+    }
+    let mut guard = VARIANT_REGISTRY.lock().unwrap();
+    if let Some(map) = guard.as_mut() {
+        map.remove(&handle);
+    }
+}
+
+/// Inline CCT lookup (mirrors exporter::lookup_color_temperature_k, kept
+/// local to avoid widening that fn's visibility).
+fn lookup_cct(gldf: &GldfProduct, light_source_id: &str) -> Option<i32> {
+    let ls = gldf.general_definitions.light_sources.as_ref()?;
+    ls.fixed_light_source
+        .iter()
+        .find(|s| s.id == light_source_id)?
+        .color_information
+        .as_ref()
+        .and_then(|ci| ci.correlated_color_temperature)
+}
+
 // ─── internal helpers ────────────────────────────────────────────────────
 
 unsafe fn export_impl(
@@ -938,5 +1191,127 @@ mod tests {
             )
         };
         assert_eq!(code2, 1, "borrow after close → error");
+    }
+
+    // ─── variant table (Phase 3a) ────────────────────────────────────────
+
+    #[test]
+    fn variants_open_null_path_returns_zero() {
+        let mut count: u32 = 7;
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let h = unsafe {
+            gldf_unreal_variants_open(
+                std::ptr::null(),
+                &mut count as *mut u32,
+                &mut err as *mut *mut c_char,
+            )
+        };
+        assert_eq!(h, 0);
+        assert_eq!(count, 0);
+        assert!(!err.is_null());
+        unsafe { gldf_unreal_string_free(err) };
+    }
+
+    #[test]
+    fn variants_close_handles_zero_and_unknown() {
+        unsafe { gldf_unreal_variants_close(0) };
+        unsafe { gldf_unreal_variants_close(987_654) };
+    }
+
+    #[test]
+    fn slv_tria2_variant_table() {
+        // SLV Tria 2: distinct narrow/middle/wide photometries with
+        // distinct lumens (1600 / 7800 / 7800) and distinct IES bytes.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("tests/data/SLV - Tria 2.gldf");
+        if !fixture.exists() {
+            eprintln!("skipping: {} not present", fixture.display());
+            return;
+        }
+        let path_c = CString::new(fixture.to_string_lossy().as_bytes()).unwrap();
+
+        let mut count: u32 = 0;
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let handle = unsafe {
+            gldf_unreal_variants_open(
+                path_c.as_ptr(),
+                &mut count as *mut u32,
+                &mut err as *mut *mut c_char,
+            )
+        };
+        assert_ne!(handle, 0, "expected variant handle; err = {err:?}");
+        assert!(count >= 1, "SLV should resolve at least one variant");
+
+        // Collect per-variant scalars + photometry id + IES length.
+        let mut seen_photometry_ids = std::collections::HashSet::new();
+        let mut seen_lumens = std::collections::HashSet::new();
+        for i in 0..count {
+            let mut info = GldfVariantInfo {
+                lumens: 0,
+                lumens_present: 0,
+                watts: 0.0,
+                watts_present: 0,
+                cct: 0,
+                cct_present: 0,
+                ies_len: 0,
+            };
+            let rc = unsafe { gldf_unreal_variant_info(handle, i, &mut info as *mut _) };
+            assert_eq!(rc, 0, "variant_info({i}) ok");
+            assert!(info.ies_len > 0, "variant {i} has IES bytes");
+
+            // Photometry id string.
+            let pid_ptr =
+                unsafe { gldf_unreal_variant_string(handle, i, GLDF_VARIANT_FIELD_PHOTOMETRY_ID) };
+            assert!(!pid_ptr.is_null());
+            let pid = unsafe { CStr::from_ptr(pid_ptr) }.to_str().unwrap().to_owned();
+            unsafe { gldf_unreal_string_free(pid_ptr) };
+            seen_photometry_ids.insert(pid);
+
+            if info.lumens_present != 0 {
+                seen_lumens.insert(info.lumens);
+            }
+
+            // IES bytes borrow → looks like LM-63.
+            let mut ies_ptr: *const u8 = std::ptr::null();
+            let mut ies_len: u32 = 0;
+            let brc = unsafe {
+                gldf_unreal_variant_ies(
+                    handle,
+                    i,
+                    &mut ies_ptr as *mut *const u8,
+                    &mut ies_len as *mut u32,
+                )
+            };
+            assert_eq!(brc, 0);
+            assert!(!ies_ptr.is_null());
+            assert_eq!(ies_len, info.ies_len);
+        }
+
+        // The headline SLV property: multiple distinct beams.
+        assert!(
+            seen_photometry_ids.len() >= 2,
+            "expected ≥2 distinct photometries (narrow/middle/wide), got {:?}",
+            seen_photometry_ids
+        );
+        eprintln!(
+            "[SLV variants] count={count}, photometries={:?}, lumens={:?}",
+            seen_photometry_ids, seen_lumens
+        );
+
+        unsafe { gldf_unreal_variants_close(handle) };
+
+        // After close, info should fail.
+        let mut info2 = GldfVariantInfo {
+            lumens: 0,
+            lumens_present: 0,
+            watts: 0.0,
+            watts_present: 0,
+            cct: 0,
+            cct_present: 0,
+            ies_len: 0,
+        };
+        let rc2 = unsafe { gldf_unreal_variant_info(handle, 0, &mut info2 as *mut _) };
+        assert_eq!(rc2, 1, "info after close → error");
     }
 }

@@ -14,6 +14,13 @@
 #include <stddef.h>
 
 /*
+ String-field selector for [`gldf_unreal_variant_string`].
+ */
+#define GLDF_VARIANT_FIELD_ID 0
+
+#define GLDF_VARIANT_FIELD_PHOTOMETRY_ID 1
+
+/*
  Layout MUST match `GldfUnrealOpts` in the generated C header. Any field
  reorder is a breaking ABI change.
  */
@@ -83,6 +90,20 @@ typedef struct GldfMeshPolygon {
   uint32_t corner_count;
   uint32_t material_group_idx;
 } GldfMeshPolygon;
+
+/*
+ One resolved variant's scalar data. `*_present` flags distinguish
+ "0" from "absent" for the optional photometric values.
+ */
+typedef struct GldfVariantInfo {
+  int32_t lumens;
+  uint8_t lumens_present;
+  double watts;
+  uint8_t watts_present;
+  int32_t cct;
+  uint8_t cct_present;
+  uint32_t ies_len;
+} GldfVariantInfo;
 
 #ifdef __cplusplus
 extern "C" {
@@ -219,6 +240,59 @@ char *gldf_unreal_mesh_material_group(uint64_t handle, uint32_t group_idx);
  `handle` must be a handle from [`gldf_unreal_first_mesh_open`] or 0.
  */
 void gldf_unreal_mesh_close(uint64_t handle);
+
+/*
+ Open the variant table for the GLDF at `gldf_path`. Resolves each
+ variant's first non-emergency emitter's IES + photometric scalars.
+
+ Returns a non-zero handle + writes `*out_variant_count` on success;
+ 0 + `*out_err` on failure. Free via [`gldf_unreal_variants_close`].
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string; out-pointers may be null.
+ */
+uint64_t gldf_unreal_variants_open(const char *gldf_path,
+                                   uint32_t *out_variant_count,
+                                   char **out_err);
+
+/*
+ Fill `*out` with variant `idx`'s scalar data. Returns 0 on success,
+ non-zero if the handle or index is invalid.
+
+ # Safety
+ `handle` must be live; `out` may be null.
+ */
+int32_t gldf_unreal_variant_info(uint64_t handle, uint32_t idx, struct GldfVariantInfo *out);
+
+/*
+ Return a string field (`GLDF_VARIANT_FIELD_*`) for variant `idx` as a
+ Rust CString (caller frees via [`gldf_unreal_string_free`]). Null on
+ invalid handle / index / field.
+
+ # Safety
+ `handle` must be live.
+ */
+char *gldf_unreal_variant_string(uint64_t handle, uint32_t idx, uint32_t field);
+
+/*
+ Borrow variant `idx`'s IES bytes. `*out_ptr` valid until close().
+ Returns 0 on success, non-zero on invalid handle/index.
+
+ # Safety
+ `handle` must be live; out-pointers may be null.
+ */
+int32_t gldf_unreal_variant_ies(uint64_t handle,
+                                uint32_t idx,
+                                const uint8_t **out_ptr,
+                                uint32_t *out_len);
+
+/*
+ Drop a variant-table handle. No-op on zero / unknown.
+
+ # Safety
+ `handle` must be from [`gldf_unreal_variants_open`] or 0.
+ */
+void gldf_unreal_variants_close(uint64_t handle);
 
 #ifdef __cplusplus
 }  // extern "C"
