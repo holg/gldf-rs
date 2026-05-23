@@ -81,6 +81,15 @@ pub mod convert;
 #[cfg(feature = "eulumdat")]
 pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
 
+/// Photometric file export and variant-aware LDT patching
+#[cfg(feature = "eulumdat")]
+pub mod photometry;
+#[cfg(feature = "eulumdat")]
+pub use photometry::{
+    export_photometry, patch_ldt_for_variant, resolve_variant_photometries,
+    PhotometryExportFormat, VariantPhotometryResolution,
+};
+
 /// IFC (Industry Foundation Classes) integration for BIM interoperability
 pub mod ifc;
 pub use ifc::{

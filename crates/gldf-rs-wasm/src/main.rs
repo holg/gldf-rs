@@ -1159,179 +1159,8 @@ fn variant_chip_label(variant: &gldf_rs::gldf::product_definitions::Variant) -> 
     variant.id.clone()
 }
 
-/// Resolved photometry for a single variant — what `lumens / watts` actually
-/// works out to, given the per-variant overrides scattered across the GLDF
-/// document tree.
-///
-/// The XSD chain is:
-///   Variant.geometry.{simple|model|bare}_emitter_reference[].emitter_id
-///     → GeneralDefinitions.emitters[].emitter (matched by id)
-///       → Emitter.fixed_light_emitter[] / changeable_light_emitter[]
-///         → photometry_reference.photometry_id  (which LDT shape)
-///         → light_source_reference.fixed_light_source_id  (FixedLight only)
-///         → rated_luminous_flux  (variant-level lumens override)
-///       → GeneralDefinitions.light_sources.fixed_light_source[]  (by id)
-///         → rated_input_power  (the wattage we want)
-///
-/// `lumens` / `watts` may be `None` when the file simply doesn't carry them
-/// at the resolved level. In that case the LDT-native value remains the
-/// fallback (handled by callers).
-#[derive(Debug, Clone)]
-struct VariantPhotometryResolution {
-    /// Photometry id this emitter resolves to (the LDT shape).
-    photometry_id: String,
-    /// Variant-level rated luminous flux, if `FixedLightEmitter.RatedLuminousFlux`
-    /// or `ChangeableLightEmitter`'s nominal flux is set.
-    ///
-    /// For `EmergencyOnly` emitters the XSD's `RatedLuminousFlux` is the
-    /// emergency-mode flux (because those emitters have no normal mode), so
-    /// we don't surface it as a "normal-operation" lumens override —
-    /// `lumens` stays `None` for that case to avoid claiming `100 lm / 81 W
-    /// = 1.2 lm/W` as the variant's efficacy.
-    lumens: Option<i32>,
-    /// Variant-level rated input power, walked through the
-    /// `LightSourceReference` to the `FixedLightSource.RatedInputPower`.
-    /// Suppressed for `EmergencyOnly` emitters (same reason as `lumens`).
-    watts: Option<f64>,
-    /// Light source id that supplied the wattage (for display / tooltip).
-    light_source_id: Option<String>,
-    /// `FixedLightEmitter.@emergencyBehaviour` — `None` (no attribute),
-    /// `"None"` (explicit normal), `"Combined"` (normal + emergency), or
-    /// `"EmergencyOnly"`. Drives a tag in the viewer card and suppresses
-    /// the calc/patch for `EmergencyOnly`.
-    emergency_behaviour: Option<String>,
-    /// `FixedLightEmitter.ControlGearReference.@controlGearId` — points at
-    /// the driver in `GeneralDefinitions/ControlGears`. Used by the
-    /// Electrical viewer to render driver details (standby power, dimming,
-    /// interfaces) per variant.
-    control_gear_id: Option<String>,
-}
-
-impl VariantPhotometryResolution {
-    /// `true` when this emitter only operates during emergency conditions.
-    /// The viewer skips the calc column and the patch for these — emergency
-    /// flux against full-load wattage produces a meaningless ratio.
-    fn is_emergency_only(&self) -> bool {
-        matches!(self.emergency_behaviour.as_deref(), Some("EmergencyOnly"))
-    }
-}
-
-/// Resolve every emitter chain on a single variant to its
-/// `(photometry_id, lumens, watts)` tuple. A variant can carry multiple
-/// emitters (multi-emitter floodlights, mixed direct/indirect, etc.), which
-/// is why the return is a `Vec`.
-///
-/// Walks all three emitter-reference branches the XSD allows:
-/// `Variant > Geometry > EmitterReference` (bare, no 3D),
-/// `... > SimpleGeometryReference` (with @emitterId),
-/// `... > ModelGeometryReference > EmitterReference` (the nested form).
-fn resolve_variant_photometries(
-    product: &gldf_rs::gldf::product_definitions::ProductDefinitions,
-    variant: &gldf_rs::gldf::product_definitions::Variant,
-    general: &gldf_rs::gldf::general_definitions::GeneralDefinitions,
-) -> Vec<VariantPhotometryResolution> {
-    let _ = product; // Reserved for future use (Equipment lookups, etc.)
-
-    let mut emitter_ids: Vec<String> = Vec::new();
-    if let Some(ref geom) = variant.geometry {
-        // Bare branch
-        for er in &geom.emitter_reference {
-            emitter_ids.push(er.emitter_id.clone());
-        }
-        // Simple geometry branch
-        if let Some(ref sgr) = geom.simple_geometry_reference {
-            emitter_ids.push(sgr.emitter_id.clone());
-        }
-        // Model geometry branch (nested EmitterReference list)
-        if let Some(ref mgr) = geom.model_geometry_reference {
-            for er in &mgr.emitter_reference {
-                emitter_ids.push(er.emitter_id.clone());
-            }
-        }
-    }
-
-    let emitters = match general.emitters.as_ref() {
-        Some(e) => &e.emitter,
-        None => return Vec::new(),
-    };
-    let light_sources = general.light_sources.as_ref();
-
-    let mut out = Vec::new();
-    for eid in &emitter_ids {
-        let Some(emitter) = emitters.iter().find(|e| &e.id == eid) else {
-            continue;
-        };
-        // FixedLightEmitter: variant-level lumens + light_source_reference for watts.
-        for fle in &emitter.fixed_light_emitter {
-            let photometry_id = fle.photometry_reference.photometry_id.clone();
-            let is_emergency_only =
-                matches!(fle.emergency_behaviour.as_deref(), Some("EmergencyOnly"));
-            // For EmergencyOnly emitters, RatedLuminousFlux is the emergency
-            // flux and there is no normal-mode wattage on the
-            // light_source_reference (the LightSource it points at carries
-            // the *full-load* W, not the emergency W). Pairing those two
-            // gives a meaningless ratio (100 lm / 81 W ≈ 1.2 lm/W on the
-            // SLV Tria 2). Skip the override entirely; the LDT-native calc
-            // is similarly off but the viewer suppresses Calc for these.
-            let lumens = if is_emergency_only {
-                None
-            } else {
-                fle.rated_luminous_flux
-            };
-            let (light_source_id, watts) = if is_emergency_only {
-                (
-                    fle.light_source_reference.fixed_light_source_id.clone(),
-                    None,
-                )
-            } else {
-                match (
-                    fle.light_source_reference.fixed_light_source_id.as_ref(),
-                    light_sources,
-                ) {
-                    (Some(ls_id), Some(ls)) => {
-                        let watts = ls
-                            .fixed_light_source
-                            .iter()
-                            .find(|s| &s.id == ls_id)
-                            .and_then(|s| s.rated_input_power);
-                        (Some(ls_id.clone()), watts)
-                    }
-                    _ => (None, None),
-                }
-            };
-            out.push(VariantPhotometryResolution {
-                photometry_id,
-                lumens,
-                watts,
-                light_source_id,
-                emergency_behaviour: fle.emergency_behaviour.clone(),
-                control_gear_id: fle
-                    .control_gear_reference
-                    .as_ref()
-                    .map(|cgr| cgr.control_gear_id.clone()),
-            });
-        }
-        // ChangeableLightEmitter has no light_source_reference at the emitter
-        // level (the XSD pairs Changeable bulbs with control gear via
-        // Equipment, not at the emitter). For phase 1 we surface them with
-        // photometry_id only — wattage shows as None and the calc falls back
-        // to the LDT value, which is the right behaviour for replaceable bulbs.
-        for cle in &emitter.changeable_light_emitter {
-            out.push(VariantPhotometryResolution {
-                photometry_id: cle.photometry_reference.photometry_id.clone(),
-                lumens: None,
-                watts: None,
-                light_source_id: None,
-                emergency_behaviour: cle.emergency_behaviour.clone(),
-                // ChangeableLightEmitter has no ControlGearReference at
-                // the emitter level (the XSD wires gear via Equipment for
-                // replaceable bulbs). Phase 1 leaves this None.
-                control_gear_id: None,
-            });
-        }
-    }
-    out
-}
+/// Re-export of the variant photometry resolver now living in `gldf-rs`.
+use gldf_rs::resolve_variant_photometries;
 
 /// Aggregated electrical info for a single variant — the headline numbers
 /// an electrician needs at install time. Built by walking the same emitter
@@ -1777,134 +1606,9 @@ fn render_variant_mounting_card(
     })
 }
 
-/// Export format for per-variant photometry downloads. LDT/IES are the
-/// industry-standard photometric formats; ATLA JSON/XML carry richer
-/// metadata (lossless-ish round-trip via the eulumdat-rs atla module). The
-/// dropdown in the photometry card defaults to whichever matches the source
-/// file's extension — note in the UI that round-tripping LDT→IES (or
-/// vice-versa) loses some details, so prefer the source format when the
-/// downstream tool accepts it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PhotometryExportFormat {
-    Ldt,
-    Ies,
-    AtlaJson,
-    AtlaXml,
-}
-
-impl PhotometryExportFormat {
-    fn extension(self) -> &'static str {
-        match self {
-            PhotometryExportFormat::Ldt => "ldt",
-            PhotometryExportFormat::Ies => "ies",
-            PhotometryExportFormat::AtlaJson => "json",
-            PhotometryExportFormat::AtlaXml => "xml",
-        }
-    }
-    fn mime(self) -> &'static str {
-        match self {
-            PhotometryExportFormat::Ldt | PhotometryExportFormat::Ies => "text/plain",
-            PhotometryExportFormat::AtlaJson => "application/json",
-            PhotometryExportFormat::AtlaXml => "application/xml",
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            PhotometryExportFormat::Ldt => "LDT (EULUMDAT)",
-            PhotometryExportFormat::Ies => "IES",
-            PhotometryExportFormat::AtlaJson => "ATLA JSON",
-            PhotometryExportFormat::AtlaXml => "ATLA XML",
-        }
-    }
-    fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "ldt" => Some(Self::Ldt),
-            "ies" => Some(Self::Ies),
-            "atla_json" => Some(Self::AtlaJson),
-            "atla_xml" => Some(Self::AtlaXml),
-            _ => None,
-        }
-    }
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Ldt => "ldt",
-            Self::Ies => "ies",
-            Self::AtlaJson => "atla_json",
-            Self::AtlaXml => "atla_xml",
-        }
-    }
-    /// Smart default based on the source filename's extension. LDT input →
-    /// LDT output; IES input → IES output. JSON/XML never auto-default
-    /// (they're explicit user choices when the input is one of the
-    /// industry formats).
-    fn default_for_source(filename: Option<&str>) -> Self {
-        let lower = filename.map(|n| n.to_lowercase()).unwrap_or_default();
-        if lower.ends_with(".ies") {
-            Self::Ies
-        } else {
-            Self::Ldt
-        }
-    }
-}
-
-/// Render the chosen format from a parsed `Eulumdat`. Returns the bytes and
-/// the recommended filename suffix (without leading dot).
-///
-/// All four formats round-trip the *patched* `Eulumdat` object, so a 50W
-/// variant downloaded as IES carries the 50W wattage even when the source
-/// LDT had 0 W. ATLA JSON/XML are particularly attractive when the
-/// downstream tool can consume them — they preserve fields LDT/IES drop.
-fn export_photometry(ldt: &eulumdat::Eulumdat, format: PhotometryExportFormat) -> Option<Vec<u8>> {
-    match format {
-        PhotometryExportFormat::Ldt => Some(ldt.to_ldt().into_bytes()),
-        PhotometryExportFormat::Ies => Some(eulumdat::IesExporter::export(ldt).into_bytes()),
-        PhotometryExportFormat::AtlaJson => {
-            let doc = eulumdat::atla::LuminaireOpticalData::from(ldt);
-            eulumdat::atla::json::write(&doc)
-                .ok()
-                .map(String::into_bytes)
-        }
-        PhotometryExportFormat::AtlaXml => {
-            let doc = eulumdat::atla::LuminaireOpticalData::from(ldt);
-            eulumdat::atla::xml::write(&doc)
-                .ok()
-                .map(String::into_bytes)
-        }
-    }
-}
-
-/// Re-emit an LDT with the variant-resolved lumens / watts patched onto
-/// `lamp_sets[0]`. This is what makes the embedded LdtViewer (and any
-/// downstream eulumdat consumer) report the correct lm/W instead of the
-/// LDT-native 0.0 lm/W.
-///
-/// Why patch `[0]` only: most LDT fixtures carry one lamp_set; multi-set
-/// LDTs (stacked driver options) are rare and the GLDF variant model
-/// already disambiguates them via per-variant references, so each variant
-/// effectively pins one lamp_set anyway.
-///
-/// Returns `None` when the bytes don't parse as LDT, or when neither
-/// override is supplied (no work to do — caller should keep the original).
-fn patch_ldt_for_variant(
-    raw_bytes: &[u8],
-    lumens: Option<i32>,
-    watts: Option<f64>,
-) -> Option<Vec<u8>> {
-    if lumens.is_none() && watts.is_none() {
-        return None;
-    }
-    let s = std::str::from_utf8(raw_bytes).ok()?;
-    let mut ldt = eulumdat::Eulumdat::parse(s).ok()?;
-    if let Some(set) = ldt.lamp_sets.first_mut() {
-        if let Some(w) = watts {
-            set.wattage_with_ballast = w;
-        }
-        if let Some(lm) = lumens {
-            set.total_luminous_flux = lm as f64;
-        }
-    }
-    Some(ldt.to_ldt().into_bytes())
-}
+/// Re-export of the photometry export types now living in `gldf-rs`.
+/// Kept here as a `use` so the existing call sites resolve unchanged.
+use gldf_rs::{export_photometry, patch_ldt_for_variant, PhotometryExportFormat};
 
 /// `localStorage` key used by both the toolbar picker (App level) and the
 /// editor-side state. Keep in sync with `state::UI_LANGUAGE_STORAGE_KEY`.
@@ -2740,12 +2444,12 @@ impl App {
                 <div class="sidebar-header">
                     <h1>
                         <span class="icon">{ "💡" }</span>
-                        { "GLDF Viewer" }
+                        { t("gldf.app.title") }
                     </h1>
                 </div>
 
                 <div class="sidebar-section">
-                    <div class="sidebar-section-title">{ "Viewer" }</div>
+                    <div class="sidebar-section-title">{ t("gldf.sidebar.viewer") }</div>
                     <ul class="sidebar-nav">
                         { self.nav_item(ctx, NavItem::Overview, "📊", &t("gldf.nav.overview"), None, has_file) }
                         { self.nav_item(ctx, NavItem::RawData, "{ }", &t("gldf.nav.raw_data"), None, has_file) }
@@ -2758,7 +2462,7 @@ impl App {
                 </div>
 
                 <div class="sidebar-section">
-                    <div class="sidebar-section-title">{ "Document" }</div>
+                    <div class="sidebar-section-title">{ t("gldf.sidebar.document") }</div>
                     <ul class="sidebar-nav">
                         { self.nav_item(ctx, NavItem::Header, "📄", &t("gldf.nav.header"), None, has_file) }
                         { self.nav_item(ctx, NavItem::Electrical, "⚡", &t("gldf.nav.electrical"), None, has_file) }
@@ -2770,7 +2474,7 @@ impl App {
                 </div>
 
                 <div class="sidebar-section">
-                    <div class="sidebar-section-title">{ "Definitions" }</div>
+                    <div class="sidebar-section-title">{ t("gldf.sidebar.definitions") }</div>
                     <ul class="sidebar-nav">
                         { self.nav_item(ctx, NavItem::Files, "📁", &t("gldf.nav.files"), Some(files_count), has_file) }
                         { self.nav_item(ctx, NavItem::LightSources, "💡", &t("gldf.nav.light_sources"), Some(light_sources_count), has_file) }
@@ -2781,11 +2485,11 @@ impl App {
 
                 // Links section at bottom
                 <div style="margin-top: auto; padding: 16px;">
-                    <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px;">{ "Resources" }</div>
+                    <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px;">{ t("gldf.sidebar.resources") }</div>
                     <a href="https://github.com/holg/gldf-rs" target="_blank" style="display: block; font-size: 12px; margin-bottom: 4px;">{ "gldf-rs (GitHub)" }</a>
                     <a href="https://gldf.io" target="_blank" style="display: block; font-size: 12px; margin-bottom: 4px;">{ "GLDF.io" }</a>
                     <a href="https://eulumdat.icu/" target="_blank" style="display: block; font-size: 12px; margin-bottom: 8px;">{ "QLumEdit" }</a>
-                    <p class="privacy-note">{ "All processing is local" }</p>
+                    <p class="privacy-note">{ t("gldf.sidebar.privacy_note") }</p>
                 </div>
             </div>
         }
@@ -2849,13 +2553,13 @@ impl App {
                 ondragleave={ondragleave}
             >
                 <div class="welcome-icon">{ "💡" }</div>
-                <h1 class="welcome-title">{ "GLDF Viewer" }</h1>
-                <p class="welcome-subtitle">{ "Global Lighting Data Format" }</p>
+                <h1 class="welcome-title">{ t("gldf.app.title") }</h1>
+                <p class="welcome-subtitle">{ t("gldf.welcome.subtitle") }</p>
 
                 <div class="welcome-divider"></div>
 
-                <p class="welcome-instructions">{ "Drop a GLDF, LDT, or IES file here" }</p>
-                <p class="welcome-or">{ "or" }</p>
+                <p class="welcome-instructions">{ t("gldf.welcome.drop_hint") }</p>
+                <p class="welcome-or">{ t("gldf.welcome.or") }</p>
 
                 <div class="welcome-buttons">
                     <label for="file-upload" class="btn btn-primary">{ t("gldf.welcome.open_file") }</label>
@@ -2886,7 +2590,7 @@ impl App {
 
                 <div style="margin-top: 32px; max-width: 400px;">
                     <p class="privacy-note" style="text-align: center;">
-                        { "All processing happens locally in your browser - no data is uploaded." }
+                        { t("gldf.welcome.privacy_note") }
                     </p>
                 </div>
             </div>
