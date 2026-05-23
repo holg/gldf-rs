@@ -68,6 +68,35 @@ The transform is a Y-negating uniform scale: `M = diag(s, -s, s, 1)`, where
 `det(M) < 0`, so `mesh::rewrite_obj_to_ue` reverses index order on every
 face and negates the Y component of vertex normals.
 
+## Why a separate FFI surface (and not just UniFFI)?
+
+The workspace already has `crates/gldf-rs-ffi/` which uses **UniFFI** to
+generate idiomatic bindings for Swift, Kotlin, Python, and C# from a
+single Rust source. UniFFI is excellent for managed-language consumers
+(`bindings/csharp/` ships on NuGet). It is **not** a clean fit for an
+Unreal Engine **C++** plugin: UniFFI's "scaffolding" C header is full of
+runtime types (`RustBuffer`, `ForeignBytes`, error-handling structs)
+that an Unreal `.Build.cs` author would have to reverse-engineer, and
+the UniFFI runtime would have to be dragged into the plugin binary.
+
+So `gldf-unreal` ships a **deliberately tiny, hand-curated C ABI**
+(4 functions, one POD struct — see below) that maps 1:1 to what an UE
+editor menu action needs to call. It links the same gldf-rs-lib core as
+`gldf-rs-ffi`; nothing is parsed or computed twice.
+
+### What is reused from `gldf-rs-ffi` (and what isn't, and why)
+
+| Concern | `gldf-rs-ffi` provides | What `gldf-unreal` uses | Why |
+|---|---|---|---|
+| GLDF parsing | `GldfEngine`, `gldf_to_json`, etc. (UniFFI) | `gldf_rs::GldfProduct::load_gldf_from_buf_all` (lib-level) | We need the full `FileBufGldf` (parsed product + raw bundled file bytes) to look up LDT bytes by photometry id. The UniFFI surface flattens those into DTOs. |
+| L3D geometry | `parse_l3d`, `L3dScene`, `L3dScenePart` | `l3d_rs::from_buffer` (lib-level) | We need the raw OBJ bytes (`L3dAsset.content`) for the text-level rewrite; the UniFFI structs expose them too, but going through the lib avoids a UniFFI round-trip. |
+| Photometry | `parse_eulumdat` (returns flat `EulumdatData`) | `gldf_rs::photometry::*` + `eulumdat::Eulumdat::parse` | We need the typed `Eulumdat` back for re-serialization via `export_photometry`; the UniFFI DTO discards the internal model. |
+| Variant resolution | (none in UniFFI yet) | `gldf_rs::resolve_variant_photometries` | Lib-level only; the photometry submodule split landed in gldf-rs 0.4.0. |
+| C# / Swift / Kotlin / Python bindings | Generated automatically | Not exposed (yet) | A `#[uniffi::export] fn gldf_to_datasmith(...)` wrapper in `gldf-rs-ffi` that calls `gldf_unreal::export_gldf_to_datasmith` is a ~30-line follow-up if/when those consumers want the Datasmith path. Not blocking v0.0.1. |
+
+The `gldf-unreal` C ABI (`gldf_unreal_export` and three companions) is
+*additive* to `gldf-rs-ffi`, not a replacement.
+
 ## C ABI for the UE plugin
 
 The library compiles as `staticlib` and `cdylib` and ships a committed
