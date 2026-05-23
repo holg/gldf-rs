@@ -9,6 +9,7 @@ members = [
     "crates/gldf-rs-python",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
+    "crates/gldf-unreal",
     # gldf-stadium-plugin is parked: it still pulls crates.io Bevy 0.18,
     # which conflicts with gldf-bevy's `photometric_proposal` fork
     # (Bevy 0.19-dev). Re-add once stadium is migrated to the same fork.

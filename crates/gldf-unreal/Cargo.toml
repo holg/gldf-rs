@@ -1,0 +1,53 @@
+[package]
+name = "gldf-unreal"
+version = "0.0.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GLDF (Global Lighting Data Format) → Unreal Engine Datasmith exporter"
+publish = false
+
+[lib]
+name = "gldf_unreal"
+path = "src/lib.rs"
+crate-type = ["staticlib", "rlib", "cdylib"]
+
+[[bin]]
+name = "gldf-to-datasmith"
+path = "src/bin/gldf-to-datasmith.rs"
+
+[[bin]]
+name = "gen-header"
+path = "src/bin/gen-header.rs"
+
+[features]
+default = []
+
+[dependencies]
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
+eulumdat.workspace = true
+l3d_rs.workspace = true
+
+# XML emission
+quick-xml = { workspace = true }
+serde = { workspace = true }
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Math (kept light; we only need 4x4 affine + Euler)
+glam = "0.29"
+
+# cbindgen is invoked via `cargo run --bin gen-header` (not from build.rs),
+# so it lives in [dependencies] but only the gen-header bin uses it. Regular
+# library builds skip compiling it.
+cbindgen = { version = "0.27", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
