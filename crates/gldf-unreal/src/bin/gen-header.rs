@@ -4,15 +4,36 @@
 //!
 //! The generated header is committed to the repo so downstream UE projects
 //! can vendor it without a Rust toolchain.
-//!
-//! Phase 1 prints a placeholder so the binary compiles; Phase 4 wires up
-//! `cbindgen::Builder` to walk `src/ffi.rs` and emit the header.
 
-fn main() {
-    eprintln!("gen-header phase-1 stub. Phase 4 will:");
-    eprintln!("  cbindgen::Builder::new()");
-    eprintln!("    .with_crate(env!(\"CARGO_MANIFEST_DIR\"))");
-    eprintln!("    .with_config(cbindgen::Config::from_file(\"cbindgen.toml\").unwrap())");
-    eprintln!("    .generate()?");
-    eprintln!("    .write_to_file(\"include/gldf_unreal.h\");");
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config_path = crate_dir.join("cbindgen.toml");
+    let out_path = crate_dir.join("include").join("gldf_unreal.h");
+
+    let config = match cbindgen::Config::from_file(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("failed to read {}: {e}", config_path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let builder = cbindgen::Builder::new()
+        .with_crate(&crate_dir)
+        .with_config(config);
+
+    let bindings = match builder.generate() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("cbindgen failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    bindings.write_to_file(&out_path);
+    println!("wrote {}", out_path.display());
+    ExitCode::SUCCESS
 }
