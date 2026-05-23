@@ -14,8 +14,19 @@
 
 use gldf_rs::mapping::get_first_l3d_with_ldt;
 use gldf_rs::FileBufGldf;
+use l3d_rs::{
+    build_transform, get_scale, mat4_mul, mat4_scale, Geometry, GeometryFileDefinition, Luminaire,
+    Mat4, MAT4_IDENTITY,
+};
 
 use crate::error::{ExportError, Result};
+
+/// `get_scale("mm") = 0.001` converts L3D source units to **metres**.
+/// UE's static-mesh import default is **centimetres**, so we follow the
+/// unit-aware metre scale with this constant to land in cm. Handles
+/// non-mm units (e.g. "in") correctly because `get_scale` already
+/// normalises them to metres first.
+const METERS_TO_UE_CM: f32 = 100.0;
 
 /// One face corner: indices into the position / normal / uv arrays.
 /// Mirrors a single `a/b/c` token of an OBJ `f` line.
@@ -66,32 +77,165 @@ impl GldfMeshData {
     }
 }
 
-/// Resolve the first L3D for `variant_id` (same resolution path the
-/// photometry pipeline uses) and parse its first OBJ asset into
-/// [`GldfMeshData`].
+/// Resolve the first L3D for `variant_id` and assemble its FULL geometry
+/// into one merged [`GldfMeshData`].
+///
+/// L3D luminaires are multi-part assemblies: a root `Geometry` plus child
+/// parts connected through joints, each part referencing its own OBJ at
+/// its own position/rotation, in declared units (mm/in/…). This walks the
+/// whole part tree (same traversal `l3d_rs`'s FBX exporter uses), bakes
+/// each part's accumulated world transform + unit→cm scale into its
+/// vertices, and merges everything into a single mesh in UE-centimetre
+/// scale.
+///
+/// (`variant_id` is accepted for API symmetry with
+/// `photometry::build_ies_outputs_for_variant`; geometry is
+/// variant-invariant in v0 but Phase 3 may wire per-variant parts.)
 pub fn build_first_mesh_for_variant(
     buf: &FileBufGldf,
     _variant_id: &str,
 ) -> Result<GldfMeshData> {
-    // Phase 2 uses the first L3D in the bundle (mesh is variant-invariant
-    // in v0). The variant_id is accepted for API symmetry with
-    // photometry::build_ies_outputs_for_variant and for when Phase 3
-    // wires per-variant geometry.
     let l3d_bytes = get_first_l3d_with_ldt(buf)
         .and_then(|m| m.l3d_content)
         .or_else(|| first_l3d_in_buffer(buf))
         .ok_or(ExportError::NoGeometry)?;
 
     let l3d = l3d_rs::from_buffer(&l3d_bytes);
-    let obj_bytes = l3d
+
+    // Parse the structure to learn the part tree + geometry-file defs.
+    let luminaire = Luminaire::from_xml(&l3d.file.structure)
+        .map_err(|e| ExportError::Internal(format!("L3D structure parse failed: {e}")))?;
+    let defs = &luminaire.geometry_definitions.geometry_file_definition;
+
+    // Snapshot the assets as (name, bytes) so the recursion borrows a
+    // plain slice rather than capturing `l3d` in a closure (which would
+    // tangle lifetimes).
+    let assets: Vec<(&str, &[u8])> = l3d
         .file
         .assets
         .iter()
-        .find(|a| a.name.to_lowercase().ends_with(".obj"))
-        .map(|a| a.content.clone())
-        .ok_or(ExportError::NoGeometry)?;
+        .map(|a| (a.name.as_str(), a.content.as_slice()))
+        .collect();
 
-    parse_obj(&obj_bytes)
+    let mut merged = GldfMeshData::default();
+    collect_geometry(
+        &luminaire.structure.geometry,
+        defs,
+        &MAT4_IDENTITY,
+        &assets,
+        &mut merged,
+    )?;
+
+    if merged.positions.is_empty() || merged.polygons.is_empty() {
+        return Err(ExportError::NoGeometry);
+    }
+    Ok(merged)
+}
+
+/// Recursively walk an L3D `Geometry` (and its joint-connected children),
+/// baking each part's world transform + unit scale into the merged mesh.
+/// Mirrors `l3d_rs`'s FBX exporter `collect_nodes`, but bakes vertices
+/// instead of emitting per-node transforms.
+fn collect_geometry(
+    geo: &Geometry,
+    defs: &[GeometryFileDefinition],
+    parent_world: &Mat4,
+    assets: &[(&str, &[u8])],
+    out: &mut GldfMeshData,
+) -> Result<()> {
+    let local = build_transform(&geo.position, &geo.rotation);
+    let accumulated = mat4_mul(parent_world, &local);
+
+    // This part's mesh, if its GeometryReference resolves to a def + asset.
+    let geom_id = &geo.geometry_reference.geometry_id;
+    if let Some(def) = defs.iter().find(|d| &d.id == geom_id) {
+        let path = format!("{}/{}", def.id, def.filename);
+        // unit → metres (get_scale) → UE centimetres.
+        let unit_scale = get_scale(&def.units) * METERS_TO_UE_CM;
+        let world_scaled = mat4_mul(&accumulated, &mat4_scale(unit_scale));
+
+        if let Some((_, bytes)) = assets.iter().find(|(name, _)| *name == path) {
+            let part = parse_obj(bytes)?;
+            append_transformed(&part, &world_scaled, out);
+        }
+        // Missing asset: skip this part rather than fail the whole import.
+    }
+
+    // Recurse into joint-connected child geometries.
+    if let Some(joints) = &geo.joints {
+        for joint in &joints.joint {
+            let joint_local = build_transform(&joint.position, &joint.rotation);
+            let joint_world = mat4_mul(&accumulated, &joint_local);
+            for child in &joint.geometries.geometry {
+                collect_geometry(child, defs, &joint_world, assets, out)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Append a parsed part to `out`, transforming positions by `world`
+/// (full 4×4, w=1) and normals by its rotation/scale (upper 3×3, w=0).
+/// Index references in the part's polygons are rebased onto `out`'s
+/// current array lengths so the merge stays consistent.
+fn append_transformed(part: &GldfMeshData, world: &Mat4, out: &mut GldfMeshData) {
+    let pos_base = out.positions.len() as u32;
+    let nrm_base = out.normals.len() as u32;
+    let uv_base = out.uvs.len() as u32;
+
+    for p in &part.positions {
+        out.positions.push(transform_point(world, *p));
+    }
+    for n in &part.normals {
+        out.normals.push(normalize3(transform_dir(world, *n)));
+    }
+    for uv in &part.uvs {
+        out.uvs.push(*uv);
+    }
+    for poly in &part.polygons {
+        let corners = poly
+            .corners
+            .iter()
+            .map(|c| MeshCorner {
+                position_idx: c.position_idx + pos_base,
+                normal_idx: c.normal_idx.map(|n| n + nrm_base),
+                uv_idx: c.uv_idx.map(|u| u + uv_base),
+            })
+            .collect();
+        out.polygons.push(MeshPolygon {
+            material_group: poly.material_group.clone(),
+            corners,
+        });
+    }
+}
+
+/// Transform a position by a column-major 4×4 matrix (w = 1).
+fn transform_point(m: &Mat4, p: [f32; 3]) -> [f32; 3] {
+    [
+        m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+        m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+        m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14],
+    ]
+}
+
+/// Transform a direction by the upper-3×3 of a column-major matrix
+/// (w = 0; ignores translation). Good enough for normals under the
+/// rigid+uniform-scale transforms L3D uses (no non-uniform shear).
+fn transform_dir(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
+    [
+        m[0] * v[0] + m[4] * v[1] + m[8] * v[2],
+        m[1] * v[0] + m[5] * v[1] + m[9] * v[2],
+        m[2] * v[0] + m[6] * v[1] + m[10] * v[2],
+    ]
+}
+
+fn normalize3(v: [f32; 3]) -> [f32; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if len > 1e-8 {
+        [v[0] / len, v[1] / len, v[2] / len]
+    } else {
+        v
+    }
 }
 
 /// Scan the GLDF's raw file buffer for the first `.l3d` entry.
@@ -413,14 +557,99 @@ f -3 -2 -1
         assert!(!mesh.positions.is_empty(), "has vertices");
         assert!(!mesh.polygons.is_empty(), "has polygons");
         assert!(mesh.corner_count() >= mesh.polygons.len() * 3);
+
+        // Scale sanity: alurays-3000mm is a 3 m linear pendant. After the
+        // mm→cm conversion its longest axis should be ~300 cm. Compute the
+        // bounding-box extents.
+        let bbox = bounding_extents(&mesh);
+        let max_extent = bbox[0].max(bbox[1]).max(bbox[2]);
+        assert!(
+            max_extent > 100.0 && max_extent < 1000.0,
+            "expected ~300cm longest extent after mm→cm scale, got {max_extent:.1}cm \
+             (bbox = {bbox:?})"
+        );
+
         eprintln!(
-            "[alurays] {} verts, {} normals, {} uvs, {} polys, {} corners, groups={:?}",
+            "[alurays] {} verts, {} normals, {} uvs, {} polys, {} corners, bbox(cm)={:?}, groups={:?}",
             mesh.positions.len(),
             mesh.normals.len(),
             mesh.uvs.len(),
             mesh.polygons.len(),
             mesh.corner_count(),
+            bbox,
             mesh.material_groups(),
         );
+    }
+
+    #[test]
+    fn slv_tria2_assembles_all_parts() {
+        // SLV Tria 2 is a multi-part assembly: a `base` (geom_1) with two
+        // joint branches, each instantiating a connector (geom_2) + head
+        // (geom_3). So the merged mesh must contain MORE geometry than any
+        // single part — the bug we hit (only base.obj imported) would show
+        // far fewer vertices.
+        let Some(p) = fixture("SLV - Tria 2.gldf") else {
+            eprintln!("skipping: fixture missing");
+            return;
+        };
+        let exporter = crate::Exporter::from_path(&p).unwrap();
+        let buf = exporter.file_buf();
+        let vid = buf
+            .gldf
+            .product_definitions
+            .variants
+            .as_ref()
+            .and_then(|v| v.variant.first())
+            .map(|v| v.id.clone())
+            .expect("SLV has a variant");
+
+        let mesh = build_first_mesh_for_variant(buf, &vid).expect("mesh assemble");
+
+        // base.obj alone parsed standalone, for comparison. Use the same
+        // resolution path build_first_mesh_for_variant does (strict
+        // mapping with in-buffer fallback) — SLV's variant doesn't use
+        // ModelGeometryReference so the strict lookup alone returns None.
+        let l3d_bytes = gldf_rs::mapping::get_first_l3d_with_ldt(buf)
+            .and_then(|m| m.l3d_content)
+            .or_else(|| first_l3d_in_buffer(buf))
+            .expect("SLV has L3D");
+        let l3d = l3d_rs::from_buffer(&l3d_bytes);
+        let base_only = l3d
+            .file
+            .assets
+            .iter()
+            .find(|a| a.name == "geom_1/base.obj")
+            .map(|a| parse_obj(&a.content).unwrap())
+            .expect("base.obj present");
+
+        assert!(
+            mesh.positions.len() > base_only.positions.len(),
+            "assembled mesh ({} verts) must exceed base-only ({} verts) — \
+             multi-part walk is working",
+            mesh.positions.len(),
+            base_only.positions.len()
+        );
+
+        let bbox = bounding_extents(&mesh);
+        eprintln!(
+            "[SLV Tria 2] assembled {} verts ({} polys) vs base-only {} verts; bbox(cm)={:?}",
+            mesh.positions.len(),
+            mesh.polygons.len(),
+            base_only.positions.len(),
+            bbox,
+        );
+    }
+
+    /// Axis-aligned bounding-box extents (max - min) per axis.
+    fn bounding_extents(m: &GldfMeshData) -> [f32; 3] {
+        let mut min = [f32::MAX; 3];
+        let mut max = [f32::MIN; 3];
+        for p in &m.positions {
+            for i in 0..3 {
+                min[i] = min[i].min(p[i]);
+                max[i] = max[i].max(p[i]);
+            }
+        }
+        [max[0] - min[0], max[1] - min[1], max[2] - min[2]]
     }
 }
