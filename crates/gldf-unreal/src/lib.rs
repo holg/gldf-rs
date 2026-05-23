@@ -1,24 +1,30 @@
-//! GLDF → Unreal Engine Datasmith exporter.
+//! GLDF → Unreal Engine bridge (Rust core for the UE Interchange plugin).
 //!
 //! Reads a GLDF file (luminaire 3D model + IES/LDT photometry + per-variant
-//! lumens/watts overrides), and emits one `.udatasmith` bundle per variant
-//! that Unreal Engine 5.4+ imports natively via its Datasmith Importer.
+//! lumens/watts overrides) and exposes its contents over a C ABI
+//! (`ffi.rs`) so the UE 5.7 `GldfImporter` Interchange plugin can build
+//! native UE assets (UTextureLightProfile, UStaticMesh, and — Phase 3 — a
+//! variant-aware Blueprint) inside the editor.
 //!
-//! See the crate README for the bundle layout, the C ABI for the UE plugin,
-//! and the licence note.
+//! The Datasmith modules (`datasmith`, `coords`, `mesh`) are the
+//! abandoned first approach — kept compiling for now, slated for clean
+//! removal. See `project_gldf_unreal_datasmith_dead_end` and the plan at
+//! `~/.claude/plans/interchange-gldf-translator.md`.
 
 pub mod error;
 pub mod options;
 pub mod exporter;
 
-// Phase 2+ modules — declared here so the public API surface is stable from
-// the start, even when bodies are stubs.
+// Photometry/mesh extraction consumed by the Interchange FFI.
+pub mod photometry;
+pub mod mesh_payload;
+
+// Datasmith-era modules — abandoned, kept compiling until clean removal.
 pub mod coords;
 pub mod mesh;
-pub mod photometry;
 pub mod datasmith;
 
-// Phase 4 — FFI surface for the Unreal plugin.
+// C ABI surface for the Unreal Interchange plugin.
 pub mod ffi;
 
 pub use error::{ExportError, Result};
