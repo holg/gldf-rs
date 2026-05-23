@@ -14,8 +14,10 @@
 #include "Logging/LogMacros.h"
 #include "Misc/Paths.h"
 #include "Nodes/InterchangeBaseNodeContainer.h"
+#include "Nodes/InterchangeSceneNode.h"
 #include "InterchangeTextureLightProfileNode.h"
 #include "InterchangeMeshNode.h"
+#include "InterchangeLightNode.h"
 
 // Mesh-description building (Phase 2).
 #include "MeshDescription.h"
@@ -41,42 +43,9 @@ static const TCHAR* GGldfMeshPayloadKey = TEXT("mesh:first");
 
 namespace UE::GldfImporter::Private
 {
-    /** Pull the IES bytes for the first non-emergency emitter from the
-     *  GLDF at SourcePath. Returns an empty TArray on any failure
-     *  (logs the cause). */
-    static TArray<uint8> FetchFirstIesBytes(const FString& SourcePath)
-    {
-        TArray<uint8> Result;
-
-        const FTCHARToUTF8 PathUtf8(*SourcePath);
-        uint8* RawBuf = nullptr;
-        uintptr_t RawLen = 0;
-        char* RawErr = nullptr;
-
-        const int32 Code = gldf_unreal_first_ies_bytes(
-            PathUtf8.Get(),
-            &RawBuf,
-            &RawLen,
-            &RawErr);
-
-        if (Code != 0)
-        {
-            const FString Msg = RawErr ? FString(UTF8_TO_TCHAR(RawErr)) : TEXT("(no message)");
-            UE_LOG(LogGldfTranslator, Error,
-                TEXT("gldf_unreal_first_ies_bytes failed (code %d): %s"),
-                Code, *Msg);
-            if (RawErr) { gldf_unreal_string_free(RawErr); }
-            return Result;
-        }
-
-        if (RawBuf && RawLen > 0)
-        {
-            Result.SetNumUninitialized(static_cast<int32>(RawLen));
-            FMemory::Memcpy(Result.GetData(), RawBuf, RawLen);
-        }
-        if (RawBuf) { gldf_unreal_bytes_free(RawBuf, RawLen); }
-        return Result;
-    }
+    // (Phase 1's FetchFirstIesBytes was removed in Phase 3b — IES bytes
+    // now come from the variant table, keyed by variant index, in
+    // GetLightProfilePayloadData.)
 
     // L3D source frame (right-handed Z-up, mm) → UE basis. Mirrors
     // InterchangeOBJTranslator.cpp's PositionToUEBasis/UVToUEBasis: negate
@@ -235,59 +204,61 @@ bool UInterchangeGldfTranslator::Translate(UInterchangeBaseNodeContainer& BaseNo
         return false;
     }
 
-    // Sanity-check that Rust can at least find an emitter. We don't keep
-    // the bytes here — the actual payload is fetched lazily by UE via
-    // GetLightProfilePayloadData() during factory materialization, which
-    // calls FetchFirstIesBytes again. Two reads per import is fine for
-    // Phase 1; Phase 2 will cache via a translator-side member.
-    const TArray<uint8> Bytes = UE::GldfImporter::Private::FetchFirstIesBytes(SourcePath);
-    if (Bytes.Num() == 0)
+    const FString DisplayName = FPaths::GetBaseFilename(SourcePath);
+
+    // ── Resolve all variants (Phase 3a FFI) ──────────────────────────────
+    const uint64 VarHandle = EnsureVariantTable();
+    if (VarHandle == 0 || Variants.Num() == 0)
     {
         UE_LOG(LogGldfTranslator, Warning,
-            TEXT("Translate: no IES bytes resolved from %s; skipping"), *SourcePath);
+            TEXT("Translate: no variants resolved from %s; nothing to import"),
+            *SourcePath);
         return false;
     }
 
-    // Emit one light-profile node. Pattern lifted from
-    // Engine/Plugins/Interchange/Runtime/Source/Import/Private/Gltf/InterchangeGltfTranslator.cpp
-    // (around line 692 in 5.7).
-    UInterchangeTextureLightProfileNode* IesNode =
-        NewObject<UInterchangeTextureLightProfileNode>(&BaseNodeContainer);
+    // ── Emit one IES light-profile node per DISTINCT photometry ──────────
+    // Variants that share a photometry id share one texture node. Each
+    // node's payload key is the Rust variant index whose IES bytes we'll
+    // serve in GetLightProfilePayloadData.
+    TMap<FString, FString> PhotometryToIesUid; // photometry id → node uid
+    for (FGldfTranslatorVariant& V : Variants)
+    {
+        if (const FString* Existing = PhotometryToIesUid.Find(V.PhotometryId))
+        {
+            V.IesNodeUid = *Existing;
+            continue;
+        }
 
-    const FString DisplayName = FPaths::GetBaseFilename(SourcePath);
-    const FString NodeUid = FString::Printf(TEXT("\\LightIES\\Gldf\\%s\\first"), *DisplayName);
+        UInterchangeTextureLightProfileNode* IesNode =
+            NewObject<UInterchangeTextureLightProfileNode>(&BaseNodeContainer);
+        const FString IesUid =
+            FString::Printf(TEXT("\\LightIES\\Gldf\\%s\\%s"), *DisplayName, *V.PhotometryId);
+        const FString IesLabel = FString::Printf(TEXT("%s_%s"), *DisplayName, *V.PhotometryId);
+        BaseNodeContainer.SetupNode(
+            IesNode, IesUid, IesLabel, EInterchangeNodeContainerType::TranslatedAsset);
+        // Payload key = the Rust variant index (as text). Our
+        // GetLightProfilePayloadData parses it and fetches that variant's
+        // IES bytes via gldf_unreal_variant_ies.
+        IesNode->SetPayLoadKey(FString::FromInt(V.RustIndex));
 
-    BaseNodeContainer.SetupNode(
-        IesNode,
-        NodeUid,
-        DisplayName,
-        EInterchangeNodeContainerType::TranslatedAsset);
+        PhotometryToIesUid.Add(V.PhotometryId, IesUid);
+        V.IesNodeUid = IesUid;
 
-    // The payload key tells our GetLightProfilePayloadData callback
-    // which emitter to fetch. In Phase 1 there's only one ("first"),
-    // so the key is just a sentinel — Phase 2+ will encode variant
-    // and emitter indices here.
-    IesNode->SetPayLoadKey(TEXT("first"));
+        UE_LOG(LogGldfTranslator, Log,
+            TEXT("Translate: emitted IES node %s (photometry=%s, variant idx=%d)"),
+            *IesUid, *V.PhotometryId, V.RustIndex);
+    }
 
-    UE_LOG(LogGldfTranslator, Log,
-        TEXT("Translate: emitted IES node %s (%d bytes available)"),
-        *NodeUid, Bytes.Num());
-
-    // ── Phase 2: emit the luminaire mesh node ────────────────────────────
-    const uint64 Handle = EnsureMeshHandle();
-    if (Handle != 0 && MeshHeader.vertex_count > 0 && MeshHeader.polygon_count > 0)
+    // ── Emit the luminaire mesh node (Phase 2) ───────────────────────────
+    FString MeshNodeUid;
+    const uint64 MeshH = EnsureMeshHandle();
+    if (MeshH != 0 && MeshHeader.vertex_count > 0 && MeshHeader.polygon_count > 0)
     {
         UInterchangeMeshNode* MeshNode =
             NewObject<UInterchangeMeshNode>(&BaseNodeContainer);
-
-        const FString MeshNodeUid =
-            FString::Printf(TEXT("\\Mesh\\Gldf\\%s\\body"), *DisplayName);
-
+        MeshNodeUid = FString::Printf(TEXT("\\Mesh\\Gldf\\%s\\body"), *DisplayName);
         BaseNodeContainer.SetupNode(
-            MeshNode,
-            MeshNodeUid,
-            DisplayName,
-            EInterchangeNodeContainerType::TranslatedAsset);
+            MeshNode, MeshNodeUid, DisplayName, EInterchangeNodeContainerType::TranslatedAsset);
 
         MeshNode->SetPayLoadKey(GGldfMeshPayloadKey, EInterchangeMeshPayLoadType::STATIC);
         MeshNode->SetCustomVertexCount(static_cast<int32>(MeshHeader.vertex_count));
@@ -303,14 +274,135 @@ bool UInterchangeGldfTranslator::Translate(UInterchangeBaseNodeContainer& BaseNo
             *MeshNodeUid, MeshHeader.vertex_count, MeshHeader.polygon_count,
             MeshHeader.normal_count > 0 ? 1 : 0);
     }
-    else
+
+    // ── Emit a spot light asset node for the DEFAULT variant (index 0) ───
+    // Phase 3c's component will hot-swap which variant the light shows;
+    // here we wire the default so the import "shines" immediately.
+    const FGldfTranslatorVariant& Default = Variants[0];
+    UInterchangeSpotLightNode* LightNode =
+        NewObject<UInterchangeSpotLightNode>(&BaseNodeContainer);
+    const FString LightNodeUid =
+        FString::Printf(TEXT("\\Light\\Gldf\\%s\\spot"), *DisplayName);
+    BaseNodeContainer.SetupNode(
+        LightNode, LightNodeUid, DisplayName, EInterchangeNodeContainerType::TranslatedAsset);
+
+    LightNode->SetCustomIESTexture(Default.IesNodeUid);
+    LightNode->SetCustomUseIESBrightness(true);
+    if (Default.bHasLumens)
     {
-        UE_LOG(LogGldfTranslator, Warning,
-            TEXT("Translate: no mesh emitted (handle=%llu, verts=%u, polys=%u)"),
-            Handle, MeshHeader.vertex_count, MeshHeader.polygon_count);
+        LightNode->SetCustomIntensity(static_cast<float>(Default.Lumens));
+        LightNode->SetCustomIntensityUnits(EInterchangeLightUnits::Lumens);
+    }
+    if (Default.bHasCct)
+    {
+        LightNode->SetCustomUseTemperature(true);
+        LightNode->SetCustomTemperature(static_cast<float>(Default.Cct));
     }
 
+    UE_LOG(LogGldfTranslator, Log,
+        TEXT("Translate: emitted spot light %s (default variant '%s', %d lm, %dK, IES=%s)"),
+        *LightNodeUid, *Default.VariantId,
+        Default.bHasLumens ? Default.Lumens : -1,
+        Default.bHasCct ? Default.Cct : -1,
+        *Default.IesNodeUid);
+
+    // ── Scene tree: root actor → mesh actor + light actor ────────────────
+    // Pattern from InterchangeOBJTranslator.cpp:1270 (root + per-mesh
+    // actor scene nodes) and the glTF light wiring.
+    UInterchangeSceneNode* RootNode =
+        NewObject<UInterchangeSceneNode>(&BaseNodeContainer);
+    const FString RootUid = FString::Printf(TEXT("\\Scene\\Gldf\\%s\\root"), *DisplayName);
+    BaseNodeContainer.SetupNode(
+        RootNode, RootUid, DisplayName, EInterchangeNodeContainerType::TranslatedScene);
+    RootNode->SetCustomLocalTransform(&BaseNodeContainer, FTransform::Identity);
+
+    if (!MeshNodeUid.IsEmpty())
+    {
+        UInterchangeSceneNode* MeshActorNode =
+            NewObject<UInterchangeSceneNode>(&BaseNodeContainer);
+        const FString MeshActorUid =
+            FString::Printf(TEXT("\\Scene\\Gldf\\%s\\body"), *DisplayName);
+        BaseNodeContainer.SetupNode(
+            MeshActorNode, MeshActorUid, DisplayName,
+            EInterchangeNodeContainerType::TranslatedScene, RootUid);
+        MeshActorNode->SetCustomLocalTransform(&BaseNodeContainer, FTransform::Identity);
+        MeshActorNode->SetCustomAssetInstanceUid(MeshNodeUid);
+    }
+
+    UInterchangeSceneNode* LightActorNode =
+        NewObject<UInterchangeSceneNode>(&BaseNodeContainer);
+    const FString LightActorUid =
+        FString::Printf(TEXT("\\Scene\\Gldf\\%s\\light"), *DisplayName);
+    BaseNodeContainer.SetupNode(
+        LightActorNode, LightActorUid, DisplayName,
+        EInterchangeNodeContainerType::TranslatedScene, RootUid);
+    LightActorNode->SetCustomLocalTransform(&BaseNodeContainer, FTransform::Identity);
+    LightActorNode->SetCustomAssetInstanceUid(LightNodeUid);
+
     return true;
+}
+
+uint64 UInterchangeGldfTranslator::EnsureVariantTable() const
+{
+    if (VariantHandle != 0)
+    {
+        return VariantHandle;
+    }
+    if (bVariantHandleTried)
+    {
+        return 0;
+    }
+    bVariantHandleTried = true;
+
+    const FString SourcePath = GetSourceData() ? GetSourceData()->GetFilename() : FString();
+    if (SourcePath.IsEmpty())
+    {
+        return 0;
+    }
+
+    const FTCHARToUTF8 PathUtf8(*SourcePath);
+    uint32 Count = 0;
+    char* RawErr = nullptr;
+    const uint64 Handle = gldf_unreal_variants_open(PathUtf8.Get(), &Count, &RawErr);
+    if (Handle == 0)
+    {
+        const FString Msg = RawErr ? FString(UTF8_TO_TCHAR(RawErr)) : TEXT("(no message)");
+        UE_LOG(LogGldfTranslator, Warning,
+            TEXT("EnsureVariantTable: gldf_unreal_variants_open failed: %s"), *Msg);
+        if (RawErr) { gldf_unreal_string_free(RawErr); }
+        return 0;
+    }
+
+    Variants.Reset();
+    for (uint32 i = 0; i < Count; ++i)
+    {
+        GldfVariantInfo Info{};
+        if (gldf_unreal_variant_info(Handle, i, &Info) != 0)
+        {
+            continue;
+        }
+        FGldfTranslatorVariant V;
+        V.RustIndex = static_cast<int32>(i);
+        V.Lumens = Info.lumens;
+        V.bHasLumens = Info.lumens_present != 0;
+        V.Cct = Info.cct;
+        V.bHasCct = Info.cct_present != 0;
+
+        if (char* IdRaw = gldf_unreal_variant_string(Handle, i, GLDF_VARIANT_FIELD_ID))
+        {
+            V.VariantId = FString(UTF8_TO_TCHAR(IdRaw));
+            gldf_unreal_string_free(IdRaw);
+        }
+        if (char* PidRaw = gldf_unreal_variant_string(Handle, i, GLDF_VARIANT_FIELD_PHOTOMETRY_ID))
+        {
+            V.PhotometryId = FString(UTF8_TO_TCHAR(PidRaw));
+            gldf_unreal_string_free(PidRaw);
+        }
+        Variants.Add(MoveTemp(V));
+    }
+
+    VariantHandle = Handle;
+    return VariantHandle;
 }
 
 uint64 UInterchangeGldfTranslator::EnsureMeshHandle() const
@@ -359,6 +451,15 @@ void UInterchangeGldfTranslator::ReleaseSource()
     }
     MeshHeader = GldfMeshHeader{};
     bMeshHandleTried = false;
+
+    if (VariantHandle != 0)
+    {
+        gldf_unreal_variants_close(VariantHandle);
+        VariantHandle = 0;
+    }
+    bVariantHandleTried = false;
+    Variants.Reset();
+
     Super::ReleaseSource();
 }
 
@@ -393,21 +494,35 @@ UInterchangeGldfTranslator::GetMeshPayloadData(
 }
 
 TOptional<UE::Interchange::FImportLightProfile>
-UInterchangeGldfTranslator::GetLightProfilePayloadData(const FString& /*PayloadKey*/,
+UInterchangeGldfTranslator::GetLightProfilePayloadData(const FString& PayloadKey,
                                                        TOptional<FString>& /*AlternateTexturePath*/) const
 {
-    const FString SourcePath = GetSourceData() ? GetSourceData()->GetFilename() : FString();
-    if (SourcePath.IsEmpty())
+    // PayloadKey is the Rust variant index (set in Translate when emitting
+    // the IES texture node). Fetch that variant's IES bytes from the
+    // variant-table handle and feed them through FIESConverter.
+    const uint64 Handle = EnsureVariantTable();
+    if (Handle == 0)
     {
+        UE_LOG(LogGldfTranslator, Error, TEXT("GetLightProfilePayloadData: no variant table"));
         return {};
     }
 
-    const TArray<uint8> Bytes = UE::GldfImporter::Private::FetchFirstIesBytes(SourcePath);
-    if (Bytes.Num() == 0)
+    int32 VariantIdx = 0;
+    if (!PayloadKey.IsEmpty())
     {
+        VariantIdx = FCString::Atoi(*PayloadKey);
+    }
+
+    const uint8* IesPtr = nullptr;
+    uint32 IesLen = 0;
+    if (gldf_unreal_variant_ies(Handle, static_cast<uint32>(VariantIdx), &IesPtr, &IesLen) != 0
+        || IesPtr == nullptr || IesLen == 0)
+    {
+        UE_LOG(LogGldfTranslator, Error,
+            TEXT("GetLightProfilePayloadData: no IES for variant idx %d"), VariantIdx);
         return {};
     }
-    return GetLightProfilePayloadData(Bytes.GetData(), static_cast<uint32>(Bytes.Num()));
+    return GetLightProfilePayloadData(IesPtr, IesLen);
 }
 
 TOptional<UE::Interchange::FImportLightProfile>

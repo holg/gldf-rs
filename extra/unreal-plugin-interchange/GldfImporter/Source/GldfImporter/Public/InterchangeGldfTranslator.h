@@ -30,6 +30,25 @@ extern "C" {
 
 #include "InterchangeGldfTranslator.generated.h"
 
+/** One variant's data, read from the Rust variant-table FFI and cached
+ *  C++-side so the translator + payload callbacks don't re-open the
+ *  GLDF repeatedly. Not a USTRUCT — internal to the translator. */
+struct FGldfTranslatorVariant
+{
+    FString VariantId;
+    FString PhotometryId;
+    int32 Lumens = 0;       // 0 if absent
+    bool bHasLumens = false;
+    int32 Cct = 0;          // Kelvin, 0 if absent
+    bool bHasCct = false;
+    /** UID of the UInterchangeTextureLightProfileNode emitted for this
+     *  variant's photometry (may be shared if two variants reuse one). */
+    FString IesNodeUid;
+    /** Index into the Rust variant table — the payload key for fetching
+     *  this variant's IES bytes back in GetLightProfilePayloadData. */
+    int32 RustIndex = 0;
+};
+
 UCLASS(MinimalAPI, BlueprintType)
 class UInterchangeGldfTranslator
     : public UInterchangeTranslatorBase
@@ -114,4 +133,19 @@ private:
      *  file, capturing its header into MeshHeader. Returns 0 on failure
      *  (logs the cause once). */
     uint64 EnsureMeshHandle() const;
+
+    // ── Variant table (Phase 3) ──────────────────────────────────────────
+
+    /** Lazily-opened Rust variant-table handle. 0 = not open. */
+    mutable uint64 VariantHandle = 0;
+    mutable bool bVariantHandleTried = false;
+
+    /** Cached variant data read from the FFI at open time. Index aligns
+     *  with the Rust variant table. */
+    mutable TArray<FGldfTranslatorVariant> Variants;
+
+    /** Open the variant table for our SourceData and populate `Variants`.
+     *  Idempotent; returns the handle (0 on failure). IES-node UIDs are
+     *  filled in later by Translate() as it emits the texture nodes. */
+    uint64 EnsureVariantTable() const;
 };
