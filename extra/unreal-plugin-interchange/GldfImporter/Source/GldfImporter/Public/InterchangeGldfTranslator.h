@@ -1,12 +1,12 @@
 // Interchange translator for GLDF (Global Lighting Data Format).
 //
-// Phase 1 implements ONLY the texture light profile path: walks the GLDF
-// via the Rust gldf-unreal staticlib, finds the first non-emergency
-// emitter's IES bytes, emits one UInterchangeTextureLightProfileNode.
-// UE's built-in UInterchangeTextureFactory materializes the node into a
-// UTextureLightProfile asset — no custom factory needed.
+// Phase 1: emits a UInterchangeTextureLightProfileNode for the first
+// non-emergency emitter's IES (→ UTextureLightProfile asset).
+// Phase 2: also emits a UInterchangeMeshNode for the luminaire body
+// (→ UStaticMesh asset), with mesh data pulled from the Rust
+// gldf-unreal staticlib's mesh handle API.
 //
-// Later phases will add mesh + actor + variant support.
+// Later phases add the variant-aware Blueprint (Phase 3).
 
 #pragma once
 
@@ -18,6 +18,15 @@
 #include "Nodes/InterchangeBaseNodeContainer.h"
 #include "Texture/InterchangeTextureLightProfilePayloadData.h"
 #include "Texture/InterchangeTextureLightProfilePayloadInterface.h"
+#include "Mesh/InterchangeMeshPayload.h"
+#include "Mesh/InterchangeMeshPayloadInterface.h"
+
+// Rust C ABI — for the GldfMeshHeader type used in the cached member
+// below. PublicIncludePaths in GldfImporter.Build.cs points at
+// crates/gldf-unreal/include/.
+extern "C" {
+#include "gldf_unreal.h"
+}
 
 #include "InterchangeGldfTranslator.generated.h"
 
@@ -25,6 +34,7 @@ UCLASS(MinimalAPI, BlueprintType)
 class UInterchangeGldfTranslator
     : public UInterchangeTranslatorBase
     , public IInterchangeTextureLightProfilePayloadInterface
+    , public IInterchangeMeshPayloadInterface
 {
     GENERATED_BODY()
 
@@ -43,33 +53,65 @@ public:
         return EInterchangeTranslatorType::Scenes;
     }
 
-    /** What kinds of UE assets we currently produce. Phase 1 only
-     *  emits a UTextureLightProfile (an IES profile); Phase 2 adds
-     *  Meshes; Phase 3 adds the actor side (which isn't an asset
-     *  type — that's covered via the Scenes translator type above). */
+    /** What kinds of UE assets we currently produce. Phase 1 emits a
+     *  UTextureLightProfile; Phase 2 adds a UStaticMesh. The actor side
+     *  (Phase 3) isn't an asset type — it's covered via the Scenes
+     *  translator type above. */
     virtual EInterchangeTranslatorAssetType GetSupportedAssetTypes() const override
     {
-        return EInterchangeTranslatorAssetType::Textures;
+        return EInterchangeTranslatorAssetType::Textures
+             | EInterchangeTranslatorAssetType::Meshes;
     }
 
-    /** First-pass translation: walks the GLDF, emits one
-     *  UInterchangeTextureLightProfileNode pointing at the first
-     *  non-emergency emitter's IES. */
+    /** Walks the GLDF, emits an IES light-profile node + (Phase 2) a
+     *  mesh node for the luminaire body. */
     virtual bool Translate(UInterchangeBaseNodeContainer& BaseNodeContainer) const override;
+
+    /** Release any cached Rust mesh handle. Called by UE when the
+     *  translator is done with the source. */
+    virtual void ReleaseSource() override;
 
     // IInterchangeTextureLightProfilePayloadInterface ────────────────────
 
-    /** Called by UInterchangeTextureFactory to fetch the raw IES bytes
-     *  for the node we registered in Translate(). Reads the GLDF again
-     *  via the Rust gldf-unreal FFI to obtain the variant-resolved IES.
-     *
-     *  The PayloadKey we set in Translate() identifies which emitter to
-     *  fetch (currently always "first"; future phases will key by
-     *  variant + emitter index). */
+    /** Fetch the raw IES bytes for the node registered in Translate().
+     *  Reads the GLDF via the Rust FFI to obtain the variant-resolved
+     *  IES. PayloadKey identifies which emitter (Phase 1: always
+     *  "first"). */
     virtual TOptional<UE::Interchange::FImportLightProfile>
         GetLightProfilePayloadData(const FString& PayloadKey,
                                    TOptional<FString>& AlternateTexturePath) const override;
 
     virtual TOptional<UE::Interchange::FImportLightProfile>
         GetLightProfilePayloadData(const uint8* Buffer, uint32 BufferLength) const override;
+
+    // IInterchangeMeshPayloadInterface ───────────────────────────────────
+
+    /** Build the FMeshDescription for the luminaire body. Pulls the
+     *  L3D OBJ arrays from the Rust gldf-unreal mesh handle and applies
+     *  UE's coordinate basis (PositionToUEBasis / UVToUEBasis) exactly
+     *  like UE's own InterchangeOBJTranslator. */
+    virtual TOptional<UE::Interchange::FMeshPayloadData>
+        GetMeshPayloadData(const FInterchangeMeshPayLoadKey& PayLoadKey,
+                           const UE::Interchange::FAttributeStorage& PayloadAttributes) const override;
+
+private:
+    /** Lazily-opened Rust mesh handle for the current source file. Opened
+     *  on first need (in Translate or GetMeshPayloadData), released in
+     *  ReleaseSource(). 0 = not open. `mutable` because the payload
+     *  callbacks are const but need to memoize the handle. */
+    mutable uint64 MeshHandle = 0;
+
+    /** Header (counts) captured when MeshHandle was opened. Valid only
+     *  while MeshHandle != 0. */
+    mutable GldfMeshHeader MeshHeader = {};
+
+    /** True once we've tried to open the mesh handle for this source,
+     *  whether or not it succeeded — so we don't retry a failing open on
+     *  every payload callback. */
+    mutable bool bMeshHandleTried = false;
+
+    /** Open (or return the cached) Rust mesh handle for our SourceData's
+     *  file, capturing its header into MeshHeader. Returns 0 on failure
+     *  (logs the cause once). */
+    uint64 EnsureMeshHandle() const;
 };

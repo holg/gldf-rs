@@ -26,8 +26,10 @@ public class GldfImporter : ModuleRules
             "Engine",
             "InterchangeCore",       // UInterchangeTranslatorBase
             "InterchangeEngine",     // UInterchangeManager
-            "InterchangeNodes",      // UInterchangeTextureLightProfileNode + UInterchangeBaseNodeContainer
-            "InterchangeImport",     // IInterchangeTextureLightProfilePayloadInterface, payload data types
+            "InterchangeNodes",      // UInterchangeTextureLightProfileNode + UInterchangeMeshNode
+            "InterchangeImport",     // payload interfaces + FMeshPayloadData
+            "MeshDescription",       // FMeshDescription (mesh payload, Phase 2)
+            "StaticMeshDescription", // FStaticMeshAttributes (Phase 2)
         });
 
         // Private deps — implementation-only.
