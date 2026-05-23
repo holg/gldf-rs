@@ -10,12 +10,10 @@
 #include "InterchangeGldfTranslator.h"
 
 #include "IESConverter.h"
-#include "InterchangeImportLog.h"
 #include "Logging/LogMacros.h"
-#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Nodes/InterchangeBaseNodeContainer.h"
-#include "Texture/InterchangeTextureLightProfileNode.h"
+#include "InterchangeTextureLightProfileNode.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(InterchangeGldfTranslator)
 

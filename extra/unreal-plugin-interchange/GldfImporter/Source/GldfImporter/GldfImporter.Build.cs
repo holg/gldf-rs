@@ -36,6 +36,7 @@ public class GldfImporter : ModuleRules
             "SlateCore",
             "UnrealEd",
             "Projects",              // for IPluginManager (locate our own dir)
+            "IESFile",               // FIESConverter (used in GetLightProfilePayloadData)
         });
 
         // ── locate the gldf-rs workspace ───────────────────────────────────

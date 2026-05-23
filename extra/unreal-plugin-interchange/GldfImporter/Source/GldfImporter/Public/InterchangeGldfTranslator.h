@@ -32,8 +32,21 @@ public:
     /** File extensions this translator registers for. */
     virtual TArray<FString> GetSupportedFormats() const override;
 
-    /** GLDF imports produce a Texture (IES profile) in Phase 1.
-     *  Later phases add Meshes + Scenes; the bitmask will expand. */
+    /** GLDF is a *scene* import (mesh + light + actor in later phases),
+     *  not a pure asset import. UE's file-picker dialog uses this to
+     *  decide whether to offer our extension in scene-import vs
+     *  asset-import contexts. glTF + FBX also return Scenes; the IES
+     *  translator defaults to Assets and is correspondingly only
+     *  offered from asset-import flows. */
+    virtual EInterchangeTranslatorType GetTranslatorType() const override
+    {
+        return EInterchangeTranslatorType::Scenes;
+    }
+
+    /** What kinds of UE assets we currently produce. Phase 1 only
+     *  emits a UTextureLightProfile (an IES profile); Phase 2 adds
+     *  Meshes; Phase 3 adds the actor side (which isn't an asset
+     *  type — that's covered via the Scenes translator type above). */
     virtual EInterchangeTranslatorAssetType GetSupportedAssetTypes() const override
     {
         return EInterchangeTranslatorAssetType::Textures;
