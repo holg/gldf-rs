@@ -381,6 +381,28 @@ bool UInterchangeGldfTranslator::Translate(UInterchangeBaseNodeContainer& BaseNo
     LightActorNode->SetCustomLocalTransform(&BaseNodeContainer, FTransform::Identity);
     LightActorNode->SetCustomAssetInstanceUid(LightNodeUid);
 
+    // ── Diagnostic: dump what we put in the container ────────────────────
+    // Confirms (in the editor log) that our scene nodes exist at hand-off.
+    // If actors don't spawn despite this, the level/scenes pipeline isn't
+    // in the active import stack — a dialog/config issue, not our wiring.
+    {
+        int32 SceneCount = 0, AssetCount = 0, OtherCount = 0;
+        BaseNodeContainer.IterateNodes(
+            [&](const FString& Uid, UInterchangeBaseNode* Node)
+            {
+                const EInterchangeNodeContainerType T = Node->GetNodeContainerType();
+                if (T == EInterchangeNodeContainerType::TranslatedScene) { ++SceneCount; }
+                else if (T == EInterchangeNodeContainerType::TranslatedAsset) { ++AssetCount; }
+                else { ++OtherCount; }
+                UE_LOG(LogGldfTranslator, Log,
+                    TEXT("  node[%d] uid=%s class=%s"),
+                    (int32)T, *Uid, *Node->GetClass()->GetName());
+            });
+        UE_LOG(LogGldfTranslator, Log,
+            TEXT("Translate: container holds %d scene + %d asset + %d other nodes"),
+            SceneCount, AssetCount, OtherCount);
+    }
+
     return true;
 }
 
