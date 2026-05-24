@@ -14,7 +14,7 @@
 #include "Logging/LogMacros.h"
 #include "Misc/Paths.h"
 #include "Nodes/InterchangeBaseNodeContainer.h"
-#include "Nodes/InterchangeSceneNode.h"
+#include "InterchangeSceneNode.h"
 #include "InterchangeTextureLightProfileNode.h"
 #include "InterchangeMeshNode.h"
 #include "InterchangeLightNode.h"
