@@ -275,16 +275,57 @@ bool UInterchangeGldfTranslator::Translate(UInterchangeBaseNodeContainer& BaseNo
             MeshHeader.normal_count > 0 ? 1 : 0);
     }
 
-    // ── Emit a spot light asset node for the DEFAULT variant (index 0) ───
-    // Phase 3c's component will hot-swap which variant the light shows;
-    // here we wire the default so the import "shines" immediately.
+    // ── Emit a light asset node for the DEFAULT variant (index 0) ────────
+    // The L3D LEO shape decides the UE light type: a rectangular emitter
+    // (linear strip / panel) → RectLight sized to the strip; a round or
+    // point emitter → PointLight. Phase 3c's component hot-swaps which
+    // variant the light shows; here we wire the default so the import
+    // "shines" immediately.
+    //
+    // LEO dimensions are in METRES (unlike OBJ mm); ×100 → UE cm.
     const FGldfTranslatorVariant& Default = Variants[0];
-    UInterchangeSpotLightNode* LightNode =
-        NewObject<UInterchangeSpotLightNode>(&BaseNodeContainer);
+
+    GldfLeoShape Shape{};
+    {
+        const FTCHARToUTF8 PathUtf8(*SourcePath);
+        gldf_unreal_first_leo_shape(PathUtf8.Get(), &Shape);
+    }
+    constexpr float MetersToCm = 100.0f;
+
     const FString LightNodeUid =
-        FString::Printf(TEXT("\\Light\\Gldf\\%s\\spot"), *DisplayName);
-    BaseNodeContainer.SetupNode(
-        LightNode, LightNodeUid, DisplayName, EInterchangeNodeContainerType::TranslatedAsset);
+        FString::Printf(TEXT("\\Light\\Gldf\\%s\\emitter"), *DisplayName);
+
+    // Common light setters live on UInterchangeLightNode; keep a base
+    // pointer regardless of the concrete type we create.
+    UInterchangeLightNode* LightNode = nullptr;
+    const TCHAR* LightTypeName = TEXT("Point");
+
+    if (Shape.kind == GLDF_LEO_RECTANGLE)
+    {
+        UInterchangeRectLightNode* RectNode =
+            NewObject<UInterchangeRectLightNode>(&BaseNodeContainer);
+        BaseNodeContainer.SetupNode(
+            RectNode, LightNodeUid, DisplayName,
+            EInterchangeNodeContainerType::TranslatedAsset);
+        RectNode->SetCustomSourceWidth(Shape.dim_a * MetersToCm);
+        RectNode->SetCustomSourceHeight(Shape.dim_b * MetersToCm);
+        LightNode = RectNode;
+        LightTypeName = TEXT("Rect");
+    }
+    else
+    {
+        // Circle or no shape → point light. (A spot would need an aim
+        // direction we don't yet derive; a point emits the IES
+        // distribution from the emitter location, which is closer to a
+        // bare luminaire's behaviour.)
+        UInterchangePointLightNode* PointNode =
+            NewObject<UInterchangePointLightNode>(&BaseNodeContainer);
+        BaseNodeContainer.SetupNode(
+            PointNode, LightNodeUid, DisplayName,
+            EInterchangeNodeContainerType::TranslatedAsset);
+        LightNode = PointNode;
+        LightTypeName = (Shape.kind == GLDF_LEO_CIRCLE) ? TEXT("Point(circle)") : TEXT("Point");
+    }
 
     LightNode->SetCustomIESTexture(Default.IesNodeUid);
     LightNode->SetCustomUseIESBrightness(true);
@@ -300,10 +341,11 @@ bool UInterchangeGldfTranslator::Translate(UInterchangeBaseNodeContainer& BaseNo
     }
 
     UE_LOG(LogGldfTranslator, Log,
-        TEXT("Translate: emitted spot light %s (default variant '%s', %d lm, %dK, IES=%s)"),
-        *LightNodeUid, *Default.VariantId,
+        TEXT("Translate: emitted %s light %s (default '%s', %d lm, %dK, LEO kind=%d %.3fx%.3f m, IES=%s)"),
+        LightTypeName, *LightNodeUid, *Default.VariantId,
         Default.bHasLumens ? Default.Lumens : -1,
         Default.bHasCct ? Default.Cct : -1,
+        Shape.kind, Shape.dim_a, Shape.dim_b,
         *Default.IesNodeUid);
 
     // ── Scene tree: root actor → mesh actor + light actor ────────────────

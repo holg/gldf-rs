@@ -47,6 +47,66 @@ pub struct MeshPolygon {
     pub corners: Vec<MeshCorner>,
 }
 
+/// The shape of an L3D Light Emitting Object (the physical light-emitting
+/// surface), used to choose the UE light type. Dimensions are in metres
+/// (L3D LEO sizes are metres, unlike OBJ vertices which are mm).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LeoShape {
+    /// Rectangular emitter (linear strips, panels). w × h in metres.
+    Rectangle { width_m: f32, height_m: f32 },
+    /// Round emitter (downlights, bollards). Diameter in metres.
+    Circle { diameter_m: f32 },
+    /// No shape declared — treat as a point.
+    Point,
+}
+
+/// Find the first Light Emitting Object's shape in the GLDF's first L3D.
+/// LEOs are geometry (variant-invariant in v0), so one lookup suffices.
+/// Returns `Point` if there's no LEO or no L3D.
+pub fn first_leo_shape(buf: &FileBufGldf) -> LeoShape {
+    let Some(l3d_bytes) = get_first_l3d_with_ldt(buf)
+        .and_then(|m| m.l3d_content)
+        .or_else(|| first_l3d_in_buffer(buf))
+    else {
+        return LeoShape::Point;
+    };
+    let l3d = l3d_rs::from_buffer(&l3d_bytes);
+    let Ok(luminaire) = Luminaire::from_xml(&l3d.file.structure) else {
+        return LeoShape::Point;
+    };
+    find_leo(&luminaire.structure.geometry).unwrap_or(LeoShape::Point)
+}
+
+/// Recursively search a Geometry (and joint children) for the first LEO.
+fn find_leo(geo: &Geometry) -> Option<LeoShape> {
+    if let Some(leos) = &geo.light_emitting_objects {
+        if let Some(leo) = leos.light_emitting_object.first() {
+            if let Some(rect) = leo.rectangle.as_ref() {
+                return Some(LeoShape::Rectangle {
+                    width_m: rect.size_x as f32,
+                    height_m: rect.size_y as f32,
+                });
+            }
+            if let Some(circle) = leo.circle.as_ref() {
+                return Some(LeoShape::Circle {
+                    diameter_m: circle.diameter as f32,
+                });
+            }
+            return Some(LeoShape::Point);
+        }
+    }
+    if let Some(joints) = &geo.joints {
+        for joint in &joints.joint {
+            for child in &joint.geometries.geometry {
+                if let Some(s) = find_leo(child) {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Parsed OBJ mesh in L3D source frame (mm, right-handed Z-up).
 #[derive(Debug, Clone, Default)]
 pub struct GldfMeshData {

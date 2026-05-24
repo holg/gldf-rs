@@ -41,7 +41,7 @@ use gldf_rs::GldfProduct;
 
 use crate::error::{ExportError, Result};
 use crate::exporter::{ExportReport, Exporter};
-use crate::mesh_payload::{build_first_mesh_for_variant, GldfMeshData};
+use crate::mesh_payload::{build_first_mesh_for_variant, first_leo_shape, GldfMeshData, LeoShape};
 use crate::options::{ExportOptions, UnitSystem, VariantSelector};
 
 /// Layout MUST match `GldfUnrealOpts` in the generated C header. Any field
@@ -796,6 +796,75 @@ fn lookup_cct(gldf: &GldfProduct, light_source_id: &str) -> Option<i32> {
         .and_then(|ci| ci.correlated_color_temperature)
 }
 
+// ─── LEO shape → UE light type (Phase 3b.1) ──────────────────────────────
+//
+// The L3D Light Emitting Object's shape decides which UE light the
+// translator emits: a Rectangle → RectLight (linear strips, panels),
+// a Circle → Point/Spot (downlights), nothing → Point. Stateless query
+// (the shape is geometry, variant-invariant in v0) so no handle.
+
+/// `kind`: 0 = Point/none, 1 = Rectangle, 2 = Circle.
+/// For Rectangle, `dim_a`/`dim_b` are width/height in **metres**.
+/// For Circle, `dim_a` is the diameter in metres (`dim_b` unused).
+#[repr(C)]
+pub struct GldfLeoShape {
+    pub kind: u8,
+    pub dim_a: f32,
+    pub dim_b: f32,
+}
+
+pub const GLDF_LEO_POINT: u8 = 0;
+pub const GLDF_LEO_RECTANGLE: u8 = 1;
+pub const GLDF_LEO_CIRCLE: u8 = 2;
+
+/// Query the first LEO shape of the GLDF at `gldf_path`. Always returns 0
+/// and fills `*out` (defaults to Point on any failure — a Point light is
+/// a safe fallback). Returns non-zero only on a null/invalid path.
+///
+/// # Safety
+/// `gldf_path` is a NUL-terminated UTF-8 C string; `out` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_first_leo_shape(
+    gldf_path: *const c_char,
+    out: *mut GldfLeoShape,
+) -> i32 {
+    if out.is_null() {
+        return 1;
+    }
+    // Default to Point so a failure still yields a usable light.
+    *out = GldfLeoShape {
+        kind: GLDF_LEO_POINT,
+        dim_a: 0.0,
+        dim_b: 0.0,
+    };
+
+    let Ok(path) = cstr_to_pathbuf(gldf_path, "gldf_path") else {
+        return 1;
+    };
+    let Ok(exporter) = Exporter::from_path(&path) else {
+        return 0; // keep the Point default
+    };
+
+    match first_leo_shape(exporter.file_buf()) {
+        LeoShape::Rectangle { width_m, height_m } => {
+            *out = GldfLeoShape {
+                kind: GLDF_LEO_RECTANGLE,
+                dim_a: width_m,
+                dim_b: height_m,
+            };
+        }
+        LeoShape::Circle { diameter_m } => {
+            *out = GldfLeoShape {
+                kind: GLDF_LEO_CIRCLE,
+                dim_a: diameter_m,
+                dim_b: 0.0,
+            };
+        }
+        LeoShape::Point => { /* already defaulted */ }
+    }
+    0
+}
+
 // ─── internal helpers ────────────────────────────────────────────────────
 
 unsafe fn export_impl(
@@ -1313,5 +1382,38 @@ mod tests {
         };
         let rc2 = unsafe { gldf_unreal_variant_info(handle, 0, &mut info2 as *mut _) };
         assert_eq!(rc2, 1, "info after close → error");
+    }
+
+    // ─── LEO shape (Phase 3b.1) ──────────────────────────────────────────
+
+    #[test]
+    fn leo_shape_null_out_errors() {
+        let p = CString::new("/nope.gldf").unwrap();
+        let rc = unsafe { gldf_unreal_first_leo_shape(p.as_ptr(), std::ptr::null_mut()) };
+        assert_eq!(rc, 1);
+    }
+
+    #[test]
+    fn leo_shape_alurays_is_rectangle() {
+        // alurays-3500mm LEO = <Rectangle sizeX="3.4" sizeY="0.044"/> (metres).
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("tests/data/alurays-3500mm.gldf");
+        if !fixture.exists() {
+            eprintln!("skipping: {} not present", fixture.display());
+            return;
+        }
+        let path_c = CString::new(fixture.to_string_lossy().as_bytes()).unwrap();
+        let mut shape = GldfLeoShape {
+            kind: 255,
+            dim_a: -1.0,
+            dim_b: -1.0,
+        };
+        let rc = unsafe { gldf_unreal_first_leo_shape(path_c.as_ptr(), &mut shape as *mut _) };
+        assert_eq!(rc, 0);
+        assert_eq!(shape.kind, GLDF_LEO_RECTANGLE, "alurays LEO is a rectangle");
+        assert!((shape.dim_a - 3.4).abs() < 1e-4, "width 3.4 m, got {}", shape.dim_a);
+        assert!((shape.dim_b - 0.044).abs() < 1e-4, "height 0.044 m, got {}", shape.dim_b);
+        eprintln!("[alurays LEO] rect {} x {} m", shape.dim_a, shape.dim_b);
     }
 }

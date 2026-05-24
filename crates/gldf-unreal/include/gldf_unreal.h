@@ -20,6 +20,12 @@
 
 #define GLDF_VARIANT_FIELD_PHOTOMETRY_ID 1
 
+#define GLDF_LEO_POINT 0
+
+#define GLDF_LEO_RECTANGLE 1
+
+#define GLDF_LEO_CIRCLE 2
+
 /*
  Layout MUST match `GldfUnrealOpts` in the generated C header. Any field
  reorder is a breaking ABI change.
@@ -104,6 +110,17 @@ typedef struct GldfVariantInfo {
   uint8_t cct_present;
   uint32_t ies_len;
 } GldfVariantInfo;
+
+/*
+ `kind`: 0 = Point/none, 1 = Rectangle, 2 = Circle.
+ For Rectangle, `dim_a`/`dim_b` are width/height in **metres**.
+ For Circle, `dim_a` is the diameter in metres (`dim_b` unused).
+ */
+typedef struct GldfLeoShape {
+  uint8_t kind;
+  float dim_a;
+  float dim_b;
+} GldfLeoShape;
 
 #ifdef __cplusplus
 extern "C" {
@@ -293,6 +310,16 @@ int32_t gldf_unreal_variant_ies(uint64_t handle,
  `handle` must be from [`gldf_unreal_variants_open`] or 0.
  */
 void gldf_unreal_variants_close(uint64_t handle);
+
+/*
+ Query the first LEO shape of the GLDF at `gldf_path`. Always returns 0
+ and fills `*out` (defaults to Point on any failure — a Point light is
+ a safe fallback). Returns non-zero only on a null/invalid path.
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string; `out` may be null.
+ */
+int32_t gldf_unreal_first_leo_shape(const char *gldf_path, struct GldfLeoShape *out);
 
 #ifdef __cplusplus
 }  // extern "C"
