@@ -6,8 +6,6 @@ of the first non-emergency emitter of the first variant as a
 `UTextureLightProfile` asset. Phase 2 (mesh), 3 (actor + spotlight +
 metadata), and 4 (variants) follow.
 
-See the full plan: `/Users/htr/.claude/plans/interchange-gldf-translator.md`.
-
 > **Status: Phase 1, untested.** First UE build will need to compile.
 > Expect at least one round of "fix missing module dep" or "fix the
 > Interchange API call" on the first build attempt.

@@ -8,8 +8,7 @@
 //!
 //! The Datasmith modules (`datasmith`, `coords`, `mesh`) are the
 //! abandoned first approach — kept compiling for now, slated for clean
-//! removal. See `project_gldf_unreal_datasmith_dead_end` and the plan at
-//! `~/.claude/plans/interchange-gldf-translator.md`.
+//! removal.
 
 pub mod error;
 pub mod options;
