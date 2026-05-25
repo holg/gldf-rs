@@ -200,7 +200,7 @@ for f in phot_files.iter() {
 - Added better documentation
 
 ### 0.1.0
-- Inital Workking Release
+- Initial Working Release
 
 ## License
 
