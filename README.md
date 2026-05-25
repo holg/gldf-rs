@@ -199,6 +199,9 @@ for f in phot_files.iter() {
 - Added support for URL file_types
 - Added better documentation
 
+### 0.1.0
+- Inital Workking Release
+
 ## License
 
 AGPL-3.0-or-later
