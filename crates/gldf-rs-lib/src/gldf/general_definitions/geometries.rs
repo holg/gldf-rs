@@ -53,9 +53,9 @@ pub struct Cuboid {
 /// diameter, and height dimensions.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cylinder {
-    /// The plane of the cylinder.
-    #[serde(rename = "@plane")]
-    pub plane: String,
+    /// The plane of the cylinder. Optional in canonical rc.3 (defaults to `XY`).
+    #[serde(rename = "@plane", default, skip_serializing_if = "Option::is_none")]
+    pub plane: Option<String>,
 
     /// The diameter values for the cylinder.
     #[serde(rename = "Diameter", default)]

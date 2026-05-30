@@ -214,11 +214,19 @@ pub struct Spectrum {
     pub id: String,
 
     /// A reference to the spectrum file.
-    #[serde(rename = "SpectrumFileReference")]
-    pub spectrum_file_reference: SpectrumFileReference,
+    ///
+    /// In canonical GLDF a `<Spectrum>` is a choice: either it carries a
+    /// `<SpectrumFileReference>` (an embedded `.spd` file) **or** a list of inline
+    /// `<Intensity>` entries (the SPD curve directly in XML). Hence this is optional.
+    #[serde(
+        rename = "SpectrumFileReference",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub spectrum_file_reference: Option<SpectrumFileReference>,
 
-    /// The list of intensity values at different wavelengths.
-    #[serde(rename = "Intensity", default)]
+    /// The list of intensity values at different wavelengths (inline SPD curve).
+    #[serde(rename = "Intensity", default, skip_serializing_if = "Vec::is_empty")]
     pub intensity: Vec<Intensity>,
 }
 

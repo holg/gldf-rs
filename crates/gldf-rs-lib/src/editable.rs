@@ -6,8 +6,14 @@
 //! - Modification tracking
 //! - Save/export capabilities
 
+use crate::gldf::general_definitions::files::File;
+use crate::gldf::general_definitions::photometries::{
+    Photometry, PhotometryFileReference, Spectrum, SpectrumFileReference,
+};
+use crate::gldf::header::{Locale, LocaleFoo};
+use crate::gldf::product_definitions::Variant;
 use crate::gldf::GldfProduct;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
 use zip::write::SimpleFileOptions;
@@ -188,7 +194,10 @@ impl EditableGldf {
     }
 
     /// Gets the ZIP path for a file based on its content type and filename.
-    fn get_zip_path_for_file(content_type: &str, file_name: &str) -> String {
+    ///
+    /// `pub(crate)` so other lib entry points (e.g. `GldfProduct::load_gldf_from_buf_all`)
+    /// can resolve a zip-path back to a `<File>` id during load.
+    pub(crate) fn get_zip_path_for_file(content_type: &str, file_name: &str) -> String {
         let folder = match content_type {
             ct if ct.starts_with("ldc") => "ldc",
             ct if ct.starts_with("geo") => "geo",
@@ -233,6 +242,212 @@ impl EditableGldf {
     /// Gets all embedded file IDs.
     pub fn embedded_file_ids(&self) -> Vec<&str> {
         self.embedded_files.keys().map(|s| s.as_str()).collect()
+    }
+
+    // ==================== High-level "drop & link" builders ====================
+    //
+    // These bundle the two halves a referenced file needs: the `<File>` entry
+    // (+ definition) in product.xml AND the embedded bytes. Each generates a
+    // unique id, embeds the bytes, and wires the model references — so a caller
+    // (e.g. a GLDF-builder UI) just drops a file and gets a usable, standard
+    // GLDF back.
+
+    /// Embed a photometry file (`.ies` / `.ldt`) and create its `<File>` +
+    /// `<Photometry>`. Returns the new photometry id (reference it from an
+    /// emitter via `PhotometryReference`).
+    ///
+    /// `content_type` is `ldc/ies` for `.ies`, else `ldc/eulumdat`.
+    pub fn add_photometry_file(&mut self, bytes: Vec<u8>, filename: &str) -> Result<String> {
+        let is_ies = filename.to_lowercase().ends_with(".ies");
+        let content_type = if is_ies { "ldc/ies" } else { "ldc/eulumdat" };
+
+        let file_id = self.product.generate_unique_id("photometryFile");
+        self.product.add_file(File {
+            id: file_id.clone(),
+            content_type: content_type.to_string(),
+            type_attr: "localFileName".to_string(),
+            language: String::new(),
+            file_name: filename.to_string(),
+        })?;
+
+        let photometry_id = self.product.generate_unique_id("photometry");
+        self.product.add_photometry(Photometry {
+            id: photometry_id.clone(),
+            photometry_file_reference: Some(PhotometryFileReference {
+                file_id: file_id.clone(),
+            }),
+            descriptive_photometry: None,
+        })?;
+
+        self.add_embedded_file(&file_id, bytes);
+        Ok(photometry_id)
+    }
+
+    /// Replace the file backing an existing `<Photometry>` entry with new
+    /// bytes — same photometry id, so every `<PhotometryReference>` on an
+    /// emitter stays valid. Removes the old `<File>` entry and its embedded
+    /// bytes; embeds the new file under a fresh file id.
+    ///
+    /// Use this when a placeholder photometry (e.g. one auto-created on the
+    /// start drop with weak IES metadata) needs to be swapped for a curated
+    /// upload without disturbing the rest of the product.
+    ///
+    /// # Errors
+    /// - `photometry_id` doesn't exist.
+    /// - The existing photometry has no `<PhotometryFileReference>` (i.e.
+    ///   it's an inline / descriptive-only photometry — nothing to replace).
+    pub fn replace_photometry_file(
+        &mut self,
+        photometry_id: &str,
+        bytes: Vec<u8>,
+        filename: &str,
+    ) -> Result<()> {
+        let is_ies = filename.to_lowercase().ends_with(".ies");
+        let content_type = if is_ies { "ldc/ies" } else { "ldc/eulumdat" };
+
+        // 1) Find the existing photometry + its old file id.
+        let photometries = self
+            .product
+            .general_definitions
+            .photometries
+            .as_mut()
+            .ok_or_else(|| anyhow!("No photometries to replace"))?;
+        let photometry = photometries
+            .photometry
+            .iter_mut()
+            .find(|p| p.id == photometry_id)
+            .ok_or_else(|| anyhow!("Photometry with id '{}' not found", photometry_id))?;
+        let old_file_id = photometry
+            .photometry_file_reference
+            .as_ref()
+            .ok_or_else(|| anyhow!("Photometry '{}' has no file reference to replace", photometry_id))?
+            .file_id
+            .clone();
+
+        // 2) Mint a new file id and `<File>` entry.
+        let new_file_id = self.product.generate_unique_id("photometryFile");
+        self.product.add_file(File {
+            id: new_file_id.clone(),
+            content_type: content_type.to_string(),
+            type_attr: "localFileName".to_string(),
+            language: String::new(),
+            file_name: filename.to_string(),
+        })?;
+
+        // 3) Point the photometry at the new file id (id unchanged).
+        if let Some(p) = self
+            .product
+            .general_definitions
+            .photometries
+            .as_mut()
+            .and_then(|ps| ps.photometry.iter_mut().find(|p| p.id == photometry_id))
+        {
+            p.photometry_file_reference = Some(PhotometryFileReference {
+                file_id: new_file_id.clone(),
+            });
+        }
+
+        // 4) Remove the old `<File>` entry + its embedded bytes.
+        //    `remove_file` errors if the id is unknown; tolerate that (the
+        //    old file may already have been pruned by hand).
+        let _ = self.product.remove_file(&old_file_id);
+        self.embedded_files.remove(&old_file_id);
+
+        // 5) Embed the new bytes under the new file id.
+        self.add_embedded_file(&new_file_id, bytes);
+        Ok(())
+    }
+
+    /// Embed a spectral power distribution file (`.spd`, contentType
+    /// `spectrum/text`), create its `<File>` + `<Spectrum>` (with
+    /// `SpectrumFileReference`), and link it to the named light source via
+    /// `SpectrumReference`. Returns the new spectrum id.
+    ///
+    /// This is the standard, schema-conformant way to attach spectral data —
+    /// no inline `<Intensity wavelength=…>` and no forked/bundled schema.
+    ///
+    /// # Errors
+    /// `light_source_id` must name an existing Fixed/Changeable light source.
+    pub fn add_spectrum_file(
+        &mut self,
+        bytes: Vec<u8>,
+        filename: &str,
+        light_source_id: &str,
+    ) -> Result<String> {
+        // Validate the target light source up front so we don't half-build.
+        let known = self
+            .product
+            .general_definitions
+            .light_sources
+            .as_ref()
+            .map(|ls| {
+                ls.fixed_light_source.iter().any(|s| s.id == light_source_id)
+                    || ls
+                        .changeable_light_source
+                        .iter()
+                        .any(|s| s.id == light_source_id)
+            })
+            .unwrap_or(false);
+        if !known {
+            return Err(anyhow!(
+                "Cannot link spectrum: no light source with ID '{}'",
+                light_source_id
+            ));
+        }
+
+        let file_id = self.product.generate_unique_id("spectrumFile");
+        self.product.add_file(File {
+            id: file_id.clone(),
+            content_type: "spectrum/text".to_string(),
+            type_attr: "localFileName".to_string(),
+            language: String::new(),
+            file_name: filename.to_string(),
+        })?;
+
+        let spectrum_id = self.product.generate_unique_id("spectrum");
+        self.product.add_spectrum(Spectrum {
+            id: spectrum_id.clone(),
+            spectrum_file_reference: Some(SpectrumFileReference {
+                file_id: file_id.clone(),
+            }),
+            intensity: Vec::new(),
+        })?;
+
+        self.product
+            .add_spectrum_reference_to_light_source(light_source_id, &spectrum_id)?;
+
+        self.add_embedded_file(&file_id, bytes);
+        Ok(spectrum_id)
+    }
+
+    /// Add a fully-specified `Variant`. If its `id` is empty, a unique one is
+    /// generated. Returns the variant id.
+    pub fn add_variant(&mut self, mut variant: Variant) -> Result<String> {
+        if variant.id.is_empty() {
+            variant.id = self.product.generate_unique_id("variant");
+        }
+        let id = variant.id.clone();
+        self.product.add_variant(variant)?;
+        self.is_modified = true;
+        Ok(id)
+    }
+
+    /// Convenience: add a variant with just a display name (English locale).
+    /// Returns the new variant id.
+    pub fn add_variant_simple(&mut self, name: &str) -> Result<String> {
+        let id = self.product.generate_unique_id("variant");
+        self.product.add_variant(Variant {
+            id: id.clone(),
+            name: Some(LocaleFoo {
+                locale: vec![Locale {
+                    language: "en".to_string(),
+                    value: name.to_string(),
+                }],
+            }),
+            ..Default::default()
+        })?;
+        self.is_modified = true;
+        Ok(id)
     }
 
     // ==================== Undo/Redo ====================
@@ -497,6 +712,256 @@ mod tests {
         let removed = editable.remove_embedded_file("test_file");
         assert_eq!(removed, Some(vec![1, 2, 3, 4]));
         assert!(!editable.has_embedded_file("test_file"));
+    }
+
+    /// End-to-end: build a GLDF from an .ies, attach a .spd spectrum linked to
+    /// the light source, add a second photometry + a variant, save, reload,
+    /// and verify the standard-conformant structure (no forked schema).
+    #[cfg(feature = "eulumdat")]
+    #[test]
+    fn test_add_spectrum_photometry_variant_roundtrip() {
+        let ies = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/data/test.ies"),
+        )
+        .expect("test.ies fixture");
+
+        // Base GLDF from one .ies (emits light source id "lightsource_1").
+        let base = crate::ldt_to_gldf(&ies, "test.ies").expect("ldt_to_gldf");
+        let mut editable = EditableGldf::from_product(base.gldf);
+        for bf in base.files {
+            if let (Some(id), Some(c)) = (bf.file_id, bf.content) {
+                editable.add_embedded_file(&id, c);
+            }
+        }
+
+        // Attach a spectral .spd linked to the light source.
+        let spd = b"# minimal SPD\n380 0.0\n780 0.0\n".to_vec();
+        let spectrum_id = editable
+            .add_spectrum_file(spd.clone(), "test.spd", "lightsource_1")
+            .expect("add_spectrum_file");
+
+        // Linking to an unknown source must error (no half-build).
+        assert!(editable
+            .add_spectrum_file(spd, "x.spd", "no_such_source")
+            .is_err());
+
+        // Add a second photometry + a variant.
+        let _phot2 = editable
+            .add_photometry_file(ies.clone(), "second.ies")
+            .expect("add_photometry_file");
+        let variant_id = editable.add_variant_simple("Wide beam").expect("add_variant_simple");
+
+        // Round-trip through the zip.
+        let bytes = editable.save_to_buf().expect("save_to_buf");
+        let reloaded = EditableGldf::from_buf(bytes.clone()).expect("reload");
+        let p = &reloaded.product;
+
+        // 1. Spectrum exists + file is embedded in the spectrum/ folder.
+        let spectrums = p
+            .general_definitions
+            .spectrums
+            .as_ref()
+            .expect("Spectrums present");
+        let spectrum = spectrums
+            .spectrum
+            .iter()
+            .find(|s| s.id == spectrum_id)
+            .expect("our spectrum present");
+        let spd_file_id = &spectrum
+            .spectrum_file_reference
+            .as_ref()
+            .expect("spectrum has a file reference")
+            .file_id;
+        let spd_file = p
+            .general_definitions
+            .files
+            .file
+            .iter()
+            .find(|f| &f.id == spd_file_id)
+            .expect("spectrum <File> present");
+        assert_eq!(spd_file.content_type, "spectrum/text");
+        // the bytes round-tripped into the zip under spectrum/
+        {
+            let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+            assert!(
+                (0..zip.len()).any(|i| zip.by_index(i).unwrap().name().starts_with("spectrum/")),
+                "spectrum/ folder present in the zip"
+            );
+        }
+
+        // 2. The light source carries the SpectrumReference to our spectrum.
+        let ls = p.general_definitions.light_sources.as_ref().unwrap();
+        let fixed = ls
+            .fixed_light_source
+            .iter()
+            .find(|s| s.id == "lightsource_1")
+            .expect("light source");
+        assert_eq!(
+            fixed.spectrum_reference.as_ref().map(|r| r.spectrum_id.as_str()),
+            Some(spectrum_id.as_str()),
+            "light source links our spectrum"
+        );
+
+        // 3. Two photometries + the new variant present.
+        assert_eq!(
+            p.general_definitions.photometries.as_ref().unwrap().photometry.len(),
+            2
+        );
+        assert!(p
+            .product_definitions
+            .variants
+            .as_ref()
+            .unwrap()
+            .variant
+            .iter()
+            .any(|v| v.id == variant_id));
+
+        // 4. Canonical schema URL on output (NOT a bundled local GldfSchema.xsd).
+        let xml = p.to_xml().expect("to_xml");
+        assert!(
+            xml.contains("https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd"),
+            "canonical noNamespaceSchemaLocation"
+        );
+        assert!(!xml.contains("GldfSchema.xsd"), "no bundled local schema ref");
+    }
+
+    /// `rename_fixed_light_source` updates the source id and every reference
+    /// across emitters + equipments. `replace_photometry_file` swaps the file
+    /// behind a photometry without changing the photometry id (so emitter
+    /// PhotometryReference stays valid).
+    #[cfg(feature = "eulumdat")]
+    #[test]
+    fn test_rename_and_replace() {
+        let ies = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/data/test.ies"),
+        )
+        .expect("test.ies fixture");
+        let buf_gldf = crate::ldt_to_gldf(&ies, "test.ies").expect("ldt_to_gldf");
+        let mut editable = EditableGldf::from_product(buf_gldf.gldf);
+        for f in buf_gldf.files {
+            if let (Some(id), Some(c)) = (f.file_id, f.content) {
+                editable.embedded_files.insert(id, c);
+            }
+        }
+
+        // The conversion creates one fixed light source "lightsource_1" and
+        // one photometry "photometry" with one emitter referencing both.
+        editable
+            .product
+            .rename_fixed_light_source("lightsource_1", "MyCustomSource")
+            .expect("rename");
+
+        // Source itself renamed.
+        assert!(editable
+            .product
+            .general_definitions
+            .light_sources
+            .as_ref()
+            .unwrap()
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == "MyCustomSource"));
+        assert!(!editable
+            .product
+            .general_definitions
+            .light_sources
+            .as_ref()
+            .unwrap()
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == "lightsource_1"));
+
+        // Emitter reference rewritten.
+        let any_emitter_points_at_new = editable
+            .product
+            .general_definitions
+            .emitters
+            .as_ref()
+            .unwrap()
+            .emitter
+            .iter()
+            .flat_map(|e| e.fixed_light_emitter.iter())
+            .any(|fle| {
+                fle.light_source_reference.fixed_light_source_id.as_deref()
+                    == Some("MyCustomSource")
+            });
+        assert!(any_emitter_points_at_new, "emitter still points at old id");
+
+        // Conflict detection: renaming to an in-use id errors and leaves state intact.
+        assert!(editable
+            .product
+            .rename_fixed_light_source("MyCustomSource", "MyCustomSource")
+            .is_ok());
+        editable
+            .product
+            .add_fixed_light_source(crate::gldf::general_definitions::lightsources::FixedLightSource {
+                id: "second".to_string(),
+                ..Default::default()
+            })
+            .expect("add second");
+        assert!(editable
+            .product
+            .rename_fixed_light_source("MyCustomSource", "second")
+            .is_err());
+
+        // -- replace_photometry_file: swap the file, keep the id --
+        let photometry_id = editable
+            .product
+            .general_definitions
+            .photometries
+            .as_ref()
+            .unwrap()
+            .photometry
+            .first()
+            .map(|p| p.id.clone())
+            .expect("at least one photometry");
+
+        let old_file_id = editable
+            .product
+            .general_definitions
+            .photometries
+            .as_ref()
+            .unwrap()
+            .photometry
+            .iter()
+            .find(|p| p.id == photometry_id)
+            .and_then(|p| p.photometry_file_reference.as_ref().map(|r| r.file_id.clone()))
+            .expect("photometry has a file ref");
+
+        let fake_ies_bytes = b"IESNA:LM-63-1995\nfake replacement\n".to_vec();
+        editable
+            .replace_photometry_file(&photometry_id, fake_ies_bytes.clone(), "better.ies")
+            .expect("replace");
+
+        // Same photometry id, NEW file id, old file gone.
+        let p_after = editable
+            .product
+            .general_definitions
+            .photometries
+            .as_ref()
+            .unwrap()
+            .photometry
+            .iter()
+            .find(|p| p.id == photometry_id)
+            .unwrap();
+        let new_file_id = p_after
+            .photometry_file_reference
+            .as_ref()
+            .unwrap()
+            .file_id
+            .clone();
+        assert_ne!(old_file_id, new_file_id, "file id should change");
+        assert!(!editable
+            .product
+            .general_definitions
+            .files
+            .file
+            .iter()
+            .any(|f| f.id == old_file_id), "old File entry removed");
+        assert!(editable.embedded_files.get(&old_file_id).is_none());
+        assert_eq!(editable.embedded_files.get(&new_file_id), Some(&fake_ies_bytes));
     }
 
     #[test]

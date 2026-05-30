@@ -6,9 +6,11 @@
 use crate::gldf::general_definitions::files::File;
 use crate::gldf::general_definitions::geometries::{Geometries, ModelGeometry, SimpleGeometry};
 use crate::gldf::general_definitions::lightsources::{
-    ChangeableLightSource, Emitter, Emitters, FixedLightSource, LightSources,
+    ChangeableLightSource, Emitter, Emitters, FixedLightSource, LightSources, SpectrumReference,
 };
-use crate::gldf::general_definitions::photometries::{Photometries, Photometry};
+use crate::gldf::general_definitions::photometries::{
+    Photometries, Photometry, Spectrum, Spectrums,
+};
 use crate::gldf::product_definitions::{ProductMetaData, Variant, Variants};
 use crate::gldf::GldfProduct;
 use anyhow::{anyhow, Result};
@@ -53,6 +55,13 @@ impl GldfProduct {
         if let Some(ref photometries) = self.general_definitions.photometries {
             for photometry in &photometries.photometry {
                 ids.insert(photometry.id.clone());
+            }
+        }
+
+        // Spectrum IDs
+        if let Some(ref spectrums) = self.general_definitions.spectrums {
+            for spectrum in &spectrums.spectrum {
+                ids.insert(spectrum.id.clone());
             }
         }
 
@@ -291,6 +300,71 @@ impl GldfProduct {
 
         photometries.photometry.push(photometry);
         Ok(())
+    }
+
+    /// Adds a spectrum definition to `GeneralDefinitions/Spectrums`.
+    ///
+    /// Creates the `Spectrums` container if absent. The spectrum's
+    /// `SpectrumFileReference.file_id` should point at an embedded `<File>`
+    /// (contentType `spectrum/text`); see [`crate::editable::EditableGldf`]
+    /// for the high-level "embed + link" helper.
+    ///
+    /// # Errors
+    /// Returns an error if a spectrum with the same ID already exists.
+    pub fn add_spectrum(&mut self, spectrum: Spectrum) -> Result<()> {
+        if self.general_definitions.spectrums.is_none() {
+            self.general_definitions.spectrums = Some(Spectrums::default());
+        }
+        let spectrums = self.general_definitions.spectrums.as_mut().unwrap();
+        if spectrums.spectrum.iter().any(|s| s.id == spectrum.id) {
+            return Err(anyhow!("Spectrum with ID '{}' already exists", spectrum.id));
+        }
+        spectrums.spectrum.push(spectrum);
+        Ok(())
+    }
+
+    /// Links a spectrum to a light source by setting its `SpectrumReference`.
+    ///
+    /// Targets the `FixedLightSource` or `ChangeableLightSource` whose id
+    /// matches `light_source_id`.
+    ///
+    /// # Errors
+    /// Returns an error if no light source with that id exists.
+    pub fn add_spectrum_reference_to_light_source(
+        &mut self,
+        light_source_id: &str,
+        spectrum_id: &str,
+    ) -> Result<()> {
+        let reference = SpectrumReference {
+            spectrum_id: spectrum_id.to_string(),
+        };
+        let light_sources = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+
+        if let Some(ls) = light_sources
+            .fixed_light_source
+            .iter_mut()
+            .find(|s| s.id == light_source_id)
+        {
+            ls.spectrum_reference = Some(reference);
+            return Ok(());
+        }
+        if let Some(ls) = light_sources
+            .changeable_light_source
+            .iter_mut()
+            .find(|s| s.id == light_source_id)
+        {
+            ls.spectrum_reference = Some(reference);
+            return Ok(());
+        }
+        Err(anyhow!(
+            "No light source with ID '{}' to attach spectrum '{}'",
+            light_source_id,
+            spectrum_id
+        ))
     }
 
     /// Updates an existing photometry definition.
@@ -562,6 +636,93 @@ impl GldfProduct {
             .ok_or_else(|| anyhow!("Changeable light source with ID '{}' not found", id))?;
 
         Ok(light_sources.changeable_light_source.remove(pos))
+    }
+
+    /// Renames a `FixedLightSource` id, updating every reference in the
+    /// product so the document stays internally consistent.
+    ///
+    /// References updated:
+    /// - `FixedLightEmitter::light_source_reference.fixed_light_source_id`
+    ///   in every `Emitter`.
+    /// - `Electrical::light_source_reference.fixed_light_source_id` on
+    ///   `ProductMetaData` and on every `Variant`.
+    ///
+    /// # Errors
+    /// - The source `old_id` doesn't exist.
+    /// - `new_id` is already in use by another fixed or changeable light source.
+    pub fn rename_fixed_light_source(&mut self, old_id: &str, new_id: &str) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New light source id must not be empty");
+        }
+
+        // 1) Validate: old exists, new is free across BOTH fixed + changeable.
+        let light_sources = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+
+        if !light_sources
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == old_id)
+        {
+            anyhow::bail!("Fixed light source with id '{}' not found", old_id);
+        }
+        if light_sources
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == new_id)
+            || light_sources
+                .changeable_light_source
+                .iter()
+                .any(|s| s.id == new_id)
+        {
+            anyhow::bail!("Light source id '{}' is already in use", new_id);
+        }
+
+        // 2) Rename the source itself.
+        if let Some(s) = light_sources
+            .fixed_light_source
+            .iter_mut()
+            .find(|s| s.id == old_id)
+        {
+            s.id = new_id.to_string();
+        }
+
+        // 3) Update every FixedLightEmitter reference.
+        if let Some(emitters) = self.general_definitions.emitters.as_mut() {
+            for emitter in &mut emitters.emitter {
+                for fle in &mut emitter.fixed_light_emitter {
+                    if fle
+                        .light_source_reference
+                        .fixed_light_source_id
+                        .as_deref()
+                        == Some(old_id)
+                    {
+                        fle.light_source_reference.fixed_light_source_id =
+                            Some(new_id.to_string());
+                    }
+                }
+            }
+        }
+
+        // 4) Update every Equipment.light_source_reference (each Equipment
+        //    can hold one optional fixed-light-source-id reference).
+        if let Some(equipments) = self.general_definitions.equipments.as_mut() {
+            for equipment in &mut equipments.equipment {
+                if let Some(lsr) = equipment.light_source_reference.as_mut() {
+                    if lsr.fixed_light_source_id.as_deref() == Some(old_id) {
+                        lsr.fixed_light_source_id = Some(new_id.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Gets a fixed light source by ID.
