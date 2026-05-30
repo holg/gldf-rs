@@ -1,4 +1,10 @@
-//! GLDF state management for the WASM editor
+//! GLDF state management for the WASM editor.
+//!
+//! The editor state is backed by `gldf_rs::EditableGldf` — a `GldfProduct` plus a
+//! `HashMap<String, Vec<u8>>` of embedded file bytes. That makes drop-and-link
+//! workflows (drop a `.spd` / `.ies` and link it to a light source) and round-trip
+//! `save_to_buf` reuse a single cross-platform builder API in the core lib, the
+//! same one any FFI / Unreal binding can drive.
 
 use gldf_rs::gldf::{
     general_definitions::photometries::{
@@ -10,6 +16,8 @@ use gldf_rs::gldf::{
     },
     FormatVersion, GldfProduct, LocaleFoo,
 };
+use gldf_rs::EditableGldf;
+use std::collections::HashMap;
 use std::rc::Rc;
 use yew::prelude::*;
 
@@ -31,8 +39,43 @@ pub enum Scope {
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant, dead_code)]
 pub enum GldfAction {
-    /// Load a new GLDF product
+    /// Load a new GLDF product (without embedded file bytes).
     Load(GldfProduct),
+    /// Load a GLDF product together with its embedded files. Use this when the
+    /// .gldf was just unzipped and you have the binary contents alongside the XML.
+    LoadWithFiles {
+        product: GldfProduct,
+        embedded_files: HashMap<String, Vec<u8>>,
+    },
+    /// Drop-and-link: embed a photometry file (`.ldt` / `.ies`) and create the
+    /// matching `<File>` + `<Photometry>` entries. Delegates to
+    /// `EditableGldf::add_photometry_file` so every binding shares one
+    /// implementation. On error, `last_error` is set and `is_modified` stays as
+    /// it was.
+    AddPhotometryFile { bytes: Vec<u8>, filename: String },
+    /// Drop-and-link: embed a spectrum file (`.spd`) linked to a light source.
+    /// Delegates to `EditableGldf::add_spectrum_file`. Errors (e.g. unknown
+    /// light-source id) surface via `last_error`.
+    AddSpectrumFile {
+        bytes: Vec<u8>,
+        filename: String,
+        light_source_id: String,
+    },
+    /// Add a product variant by name (English locale). Delegates to
+    /// `EditableGldf::add_variant_simple`.
+    AddVariantSimple { name: String },
+    /// Replace the file behind an existing `<Photometry>` (id stable so
+    /// emitter references survive). Delegates to
+    /// `EditableGldf::replace_photometry_file`.
+    ReplacePhotometryFile {
+        photometry_id: String,
+        bytes: Vec<u8>,
+        filename: String,
+    },
+    /// Rename a FixedLightSource id (e.g. the auto-created "lightsource_1"
+    /// from the start-page IES drop) and update every emitter + equipment
+    /// reference. Delegates to `GldfProduct::rename_fixed_light_source`.
+    RenameFixedLightSource { old_id: String, new_id: String },
     /// Update the header author
     SetAuthor(String),
     /// Update the header manufacturer
@@ -193,13 +236,28 @@ pub enum GldfAction {
     Reset,
 }
 
-/// State of the GLDF editor
+/// State of the GLDF editor.
+///
+/// `product` + `embedded_files` together mirror `gldf_rs::EditableGldf`. We keep
+/// them as two public fields (instead of a wrapped `EditableGldf` value) only so
+/// every existing editor component reading `gldf.product.X` keeps compiling; the
+/// builder actions internally hand both fields to an `EditableGldf` and call the
+/// core-lib API. That keeps the drop-and-link logic in the lib where every
+/// cross-platform binding can reuse it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GldfState {
     /// The current GLDF product being edited
     pub product: GldfProduct,
+    /// Embedded file bytes, keyed by `<File id="...">`. Mirrors
+    /// `EditableGldf::embedded_files`; populated by `GldfAction::LoadWithFiles`
+    /// and grown by drop-and-link actions (`AddPhotometryFile`, `AddSpectrumFile`).
+    pub embedded_files: HashMap<String, Vec<u8>>,
     /// Whether the product has been modified
     pub is_modified: bool,
+    /// Last builder-error message, if any (e.g. "unknown light source id").
+    /// Cleared by the next successful builder action or by `Reset`.
+    /// UI components can surface this to the user.
+    pub last_error: Option<String>,
     /// Currently active language for LocaleFoo viewing/editing — selected
     /// from the document's own locale set (the LanguageBanner dropdown).
     /// Not part of GldfProduct — viewer-only.
@@ -215,10 +273,37 @@ impl Default for GldfState {
     fn default() -> Self {
         Self {
             product: GldfProduct::default(),
+            embedded_files: HashMap::new(),
             is_modified: false,
+            last_error: None,
             active_language: "en".to_string(),
             ui_language: detect_initial_ui_language(),
         }
+    }
+}
+
+impl GldfState {
+    /// Build a transient `EditableGldf` for one operation (builder method or
+    /// `save_to_buf`). After the operation, copy the (possibly mutated) parts
+    /// back into the state with [`Self::take_from_editable`].
+    fn to_editable(&self) -> EditableGldf {
+        let mut e = EditableGldf::from_product(self.product.clone());
+        e.embedded_files = self.embedded_files.clone();
+        e
+    }
+
+    /// Absorb the result of a builder operation back into the state.
+    fn take_from_editable(&mut self, editable: EditableGldf) {
+        self.product = editable.product;
+        self.embedded_files = editable.embedded_files;
+    }
+
+    /// Serialize the current state to GLDF bytes via the core-lib builder.
+    /// This is the cross-platform export path — `save_to_buf` writes
+    /// `product.xml` (with the canonical online XSD) and zips every embedded
+    /// file under its content-type-derived folder.
+    pub fn save_to_buf(&self) -> anyhow::Result<Vec<u8>> {
+        self.to_editable().save_to_buf()
     }
 }
 
@@ -233,7 +318,90 @@ impl Reducible for GldfState {
             GldfAction::Load(product) => {
                 new_state.active_language = pick_initial_language(&product);
                 new_state.product = product;
+                new_state.embedded_files.clear();
                 new_state.is_modified = false;
+                new_state.last_error = None;
+            }
+            GldfAction::LoadWithFiles {
+                product,
+                embedded_files,
+            } => {
+                new_state.active_language = pick_initial_language(&product);
+                new_state.product = product;
+                new_state.embedded_files = embedded_files;
+                new_state.is_modified = false;
+                new_state.last_error = None;
+            }
+            GldfAction::AddPhotometryFile { bytes, filename } => {
+                let mut editable = new_state.to_editable();
+                match editable.add_photometry_file(bytes, &filename) {
+                    Ok(_id) => {
+                        new_state.take_from_editable(editable);
+                        new_state.last_error = None;
+                    }
+                    Err(e) => {
+                        new_state.last_error = Some(format!("Add photometry: {}", e));
+                        new_state.is_modified = self.is_modified;
+                    }
+                }
+            }
+            GldfAction::AddSpectrumFile {
+                bytes,
+                filename,
+                light_source_id,
+            } => {
+                let mut editable = new_state.to_editable();
+                match editable.add_spectrum_file(bytes, &filename, &light_source_id) {
+                    Ok(_id) => {
+                        new_state.take_from_editable(editable);
+                        new_state.last_error = None;
+                    }
+                    Err(e) => {
+                        new_state.last_error = Some(format!("Add spectrum: {}", e));
+                        new_state.is_modified = self.is_modified;
+                    }
+                }
+            }
+            GldfAction::AddVariantSimple { name } => {
+                let mut editable = new_state.to_editable();
+                match editable.add_variant_simple(&name) {
+                    Ok(_id) => {
+                        new_state.take_from_editable(editable);
+                        new_state.last_error = None;
+                    }
+                    Err(e) => {
+                        new_state.last_error = Some(format!("Add variant: {}", e));
+                        new_state.is_modified = self.is_modified;
+                    }
+                }
+            }
+            GldfAction::ReplacePhotometryFile {
+                photometry_id,
+                bytes,
+                filename,
+            } => {
+                let mut editable = new_state.to_editable();
+                match editable.replace_photometry_file(&photometry_id, bytes, &filename) {
+                    Ok(()) => {
+                        new_state.take_from_editable(editable);
+                        new_state.last_error = None;
+                    }
+                    Err(e) => {
+                        new_state.last_error = Some(format!("Replace photometry: {}", e));
+                        new_state.is_modified = self.is_modified;
+                    }
+                }
+            }
+            GldfAction::RenameFixedLightSource { old_id, new_id } => {
+                match new_state.product.rename_fixed_light_source(&old_id, &new_id) {
+                    Ok(()) => {
+                        new_state.last_error = None;
+                    }
+                    Err(e) => {
+                        new_state.last_error = Some(format!("Rename light source: {}", e));
+                        new_state.is_modified = self.is_modified;
+                    }
+                }
             }
             GldfAction::SetActiveLanguage(lang) => {
                 new_state.active_language = lang;

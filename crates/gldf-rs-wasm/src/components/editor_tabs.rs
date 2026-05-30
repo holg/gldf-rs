@@ -5,10 +5,10 @@
 //! e.g. Electrical lives under ProductMetaData → DescriptiveAttributes, not at the top level.
 
 use super::{
-    ApplicationsEditor, CustomPropertiesEditor, ElectricalEditor, EmergencyEditor, EmittersBrowser,
-    EquipmentsBrowser, FilesEditor, GeometriesBrowser, HeaderEditor, HyperlinksEditor,
-    IdentityEditor, LabelsEditor, LightSourceEditor, MechanicalEditor, PhotometriesBrowser,
-    PicturesEditor, SensorsBrowser, VariantEditor,
+    ApplicationsEditor, BuilderWidget, CustomPropertiesEditor, ElectricalEditor, EmergencyEditor,
+    EmittersBrowser, EquipmentsBrowser, FilesEditor, GeometriesBrowser, HeaderEditor,
+    HyperlinksEditor, IdentityEditor, LabelsEditor, LightSourceEditor, MechanicalEditor,
+    PhotometriesBrowser, PicturesEditor, SensorsBrowser, VariantEditor,
 };
 use crate::state::{collect_languages, use_gldf, GldfAction};
 use yew::prelude::*;
@@ -34,8 +34,12 @@ impl TopSection {
 }
 
 /// Sub-sections under General Definitions (mirrors GeneralDefinitions XSD children).
+/// `Builder` is a UI affordance, not an XSD child — it's a drop-and-link panel
+/// that creates Files / Photometries / Spectrums entries via the core-lib
+/// `EditableGldf` builder API.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GeneralSection {
+    Builder,
     Files,
     Photometries,
     LightSources,
@@ -48,6 +52,7 @@ enum GeneralSection {
 impl GeneralSection {
     fn label(self) -> &'static str {
         match self {
+            GeneralSection::Builder => "Builder",
             GeneralSection::Files => "Files",
             GeneralSection::Photometries => "Photometries",
             GeneralSection::LightSources => "Light Sources",
@@ -158,6 +163,7 @@ pub fn editor_tabs() -> Html {
 
 fn render_general(active: &UseStateHandle<GeneralSection>) -> Html {
     let sections = [
+        GeneralSection::Builder,
         GeneralSection::Files,
         GeneralSection::Photometries,
         GeneralSection::LightSources,
@@ -174,6 +180,7 @@ fn render_general(active: &UseStateHandle<GeneralSection>) -> Html {
             </nav>
             <div class="editor-subcontent">
                 { match **active {
+                    GeneralSection::Builder => html! { <BuilderWidget /> },
                     GeneralSection::Files => html! { <FilesEditor /> },
                     GeneralSection::LightSources => html! { <LightSourceEditor /> },
                     GeneralSection::Photometries => html! { <PhotometriesBrowser /> },

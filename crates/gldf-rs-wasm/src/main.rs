@@ -69,6 +69,15 @@ pub enum NavItem {
     LightSources,
     Emitters,
     Variants,
+    /// Drop-and-link builder: a single panel for embedding .ldt/.ies photometry,
+    /// .spd spectrum (linked to a light source), and adding variants. Backed by
+    /// the core-lib `EditableGldf` API so the same workflow can be exposed in
+    /// any future binding (FFI, Unreal cabi, etc.).
+    Builder,
+    /// Spectral / TM-30 viewer: renders every `<Spectrum>` in the loaded GLDF
+    /// as an SPD curve plus TM-30 CVG + Rf-hue + colorimetry box, using the
+    /// SVG renderers shipped by eulumdat-rs.
+    Spectra,
 }
 
 /// Application messages
@@ -125,6 +134,13 @@ pub enum Msg {
     // App actions
     ClearAll,
     ToggleHelp,
+    /// Mirror an `EditableGldf`-backed edit from the editor reducer (`GldfState`)
+    /// back into `App.loaded_gldf` so every other page (Files, Photometry, 3D
+    /// viewer, top-bar download) sees the edits. Without this, Builder mutates
+    /// the editor state but the chrome stays blind to it. Carried as bytes
+    /// (already round-tripped through `save_to_buf`) so `App` parses with the
+    /// same `load_gldf_from_buf_all` path it uses for a freshly opened file.
+    EditorStateSynced(Vec<u8>),
 }
 
 /// Mode of the application
@@ -1020,6 +1036,26 @@ impl Component for App {
             Msg::ToggleHelp => {
                 self.show_help = !self.show_help;
                 true
+            }
+            Msg::EditorStateSynced(bytes) => {
+                // The editor reducer just changed `product` or `embedded_files`
+                // and serialised them via `EditableGldf::save_to_buf`. Reload
+                // `App.loaded_gldf` from those bytes so every other page (Files,
+                // Photometry, 3D viewer, top-bar download) reflects the edits.
+                match WasmGldfProduct::load_gldf_from_buf_all(bytes) {
+                    Ok(gldf) => {
+                        self.loaded_gldf = Some(gldf);
+                        self.refresh_xsd_violations();
+                        // Existing selections may now point at vanished ids;
+                        // dropping them is safer than rendering stale.
+                        self.selected_file = None;
+                        true
+                    }
+                    Err(e) => {
+                        console::log!("EditorStateSynced reload failed:", e.to_string());
+                        false
+                    }
+                }
             }
         }
     }
@@ -2476,10 +2512,12 @@ impl App {
                 <div class="sidebar-section">
                     <div class="sidebar-section-title">{ t("gldf.sidebar.definitions") }</div>
                     <ul class="sidebar-nav">
+                        { self.nav_item(ctx, NavItem::Builder, "🏗️", "Builder", None, has_file) }
                         { self.nav_item(ctx, NavItem::Files, "📁", &t("gldf.nav.files"), Some(files_count), has_file) }
                         { self.nav_item(ctx, NavItem::LightSources, "💡", &t("gldf.nav.light_sources"), Some(light_sources_count), has_file) }
                         { self.nav_item(ctx, NavItem::Emitters, "🔆", &t("gldf.nav.emitters"), Some(emitters_count), has_file) }
                         { self.nav_item(ctx, NavItem::Variants, "📦", &t("gldf.nav.variants"), Some(variants_count), has_file) }
+                        { self.nav_item(ctx, NavItem::Spectra, "🌈", "Spectra", None, has_file) }
                     </ul>
                 </div>
 
@@ -2619,6 +2657,8 @@ impl App {
             NavItem::LightSources => t("gldf.nav.light_sources"),
             NavItem::Emitters => t("gldf.nav.emitters"),
             NavItem::Variants => t("gldf.nav.variants"),
+            NavItem::Builder => "Builder".to_string(),
+            NavItem::Spectra => "Spectra".to_string(),
         };
 
         html! {
@@ -2720,6 +2760,8 @@ impl App {
                             NavItem::LightSources => self.view_light_sources(),
                             NavItem::Emitters => self.view_emitters(),
                             NavItem::Variants => self.view_variants(ctx),
+                            NavItem::Builder => self.view_builder(),
+                            NavItem::Spectra => self.view_spectra(),
                         };
                         // The GldfProvider stays at the workspace level so
                         // every per-section view shares one state tree
@@ -2731,8 +2773,38 @@ impl App {
                         // Header dashboard don't show a banner that has
                         // nothing to do.
                         if let Some(ref gldf) = self.loaded_gldf {
+                            // Collect the embedded bytes from the loaded
+                            // FileBufGldf into the HashMap the editor state
+                            // (EditableGldf-backed) expects. Skips entries
+                            // missing an id or content; both are Option in
+                            // BufFile because zip entries are loaded eagerly
+                            // before XML cross-referencing.
+                            // Prefer the <File> element id as the key (matches
+                            // what `EditableGldf::add_*_file` and `save_to_buf`
+                            // expect); fall back to the zip path when a file
+                            // wasn't cross-referenced. Without the fallback,
+                            // any file the loader couldn't tie back to an XML
+                            // <File> entry would vanish from the editor state.
+                            let embedded_files: std::collections::HashMap<String, Vec<u8>> = gldf
+                                .files
+                                .iter()
+                                .filter_map(|f| {
+                                    let content = f.content.clone()?;
+                                    let key = f
+                                        .file_id
+                                        .clone()
+                                        .or_else(|| f.path.clone())
+                                        .or_else(|| f.name.clone())?;
+                                    Some((key, content))
+                                })
+                                .collect();
+                            let on_sync = ctx.link().callback(Msg::EditorStateSynced);
                             html! {
-                                <GldfProviderWithData gldf={gldf.gldf.clone()}>
+                                <GldfProviderWithData
+                                    gldf={gldf.gldf.clone()}
+                                    embedded_files={embedded_files}
+                                    on_sync={on_sync}
+                                >
                                     { body }
                                 </GldfProviderWithData>
                             }
@@ -5357,6 +5429,46 @@ impl App {
         }
     }
 
+    /// Render the GLDF Builder page (drop-and-link panel).
+    ///
+    /// The actual UI lives in `components::BuilderWidget`; this wrapper exists
+    /// only so the left-nav can render it like any other section. The widget
+    /// reads/writes via `use_gldf()` so it works whether or not a file was
+    /// previously loaded — on an empty editor it just shows no light sources
+    /// to pick. The outer `GldfProviderWithData` (in `view_content`) supplies
+    /// the context unconditionally when `loaded_gldf.is_some()`; if nothing
+    /// is loaded we tell the user to drop a file first.
+    fn view_builder(&self) -> Html {
+        if self.loaded_gldf.is_some() {
+            html! { <components::BuilderWidget /> }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🏗️" }</div>
+                    <h3>{ "GLDF Builder" }</h3>
+                    <p>{ "Drop a GLDF, .ies, .ldt, or .uld file to start, then come back here to attach more photometries, link a .spd spectrum, or add variants." }</p>
+                </div>
+            }
+        }
+    }
+
+    /// Render the Spectra page — delegates to `SpdViewer`, which iterates
+    /// every `<Spectrum>` in the editor state and renders an SPD curve plus
+    /// TM-30 CVG + Rf-hue chart + colorimetry box for each.
+    fn view_spectra(&self) -> Html {
+        if self.loaded_gldf.is_some() {
+            html! { <components::SpdViewer /> }
+        } else {
+            html! {
+                <div class="empty-state">
+                    <div class="icon">{ "🌈" }</div>
+                    <h3>{ "Spectra" }</h3>
+                    <p>{ "Load a GLDF that includes <Spectrum> entries (or attach a .spd in the Builder) to see SPD + TM-30 plots." }</p>
+                </div>
+            }
+        }
+    }
+
     fn view_emitters(&self) -> Html {
         if let Some(ref gldf) = self.loaded_gldf {
             let emitters = gldf
@@ -6091,6 +6203,18 @@ impl App {
 #[derive(Properties, Clone, PartialEq)]
 pub struct GldfProviderWithDataProps {
     pub gldf: GldfProduct,
+    /// Embedded file bytes, keyed by `<File id="...">`. Empty means
+    /// "load XML only" (legacy callers); populated routes through
+    /// `GldfAction::LoadWithFiles` so the editor state owns the bytes
+    /// and the drop-and-link / save_to_buf paths just work.
+    #[prop_or_default]
+    pub embedded_files: HashMap<String, Vec<u8>>,
+    /// Fired whenever the editor reducer mutates `product` or `embedded_files`
+    /// — `App` uses this to mirror the change back into `loaded_gldf` so every
+    /// non-editor page (Files, Photometry, 3D viewer, top-bar download) shows
+    /// the edits. Payload is the GLDF zip bytes produced by `save_to_buf`.
+    #[prop_or_default]
+    pub on_sync: Callback<Vec<u8>>,
     #[prop_or_default]
     pub children: Children,
 }
@@ -6099,7 +6223,11 @@ pub struct GldfProviderWithDataProps {
 pub fn gldf_provider_with_data(props: &GldfProviderWithDataProps) -> Html {
     html! {
         <GldfProvider>
-            <GldfInitializer gldf={props.gldf.clone()}>
+            <GldfInitializer
+                gldf={props.gldf.clone()}
+                embedded_files={props.embedded_files.clone()}
+            >
+                <EditorStateSync on_sync={props.on_sync.clone()} />
                 { for props.children.iter() }
             </GldfInitializer>
         </GldfProvider>
@@ -6111,6 +6239,8 @@ pub fn gldf_provider_with_data(props: &GldfProviderWithDataProps) -> Html {
 pub struct GldfInitializerProps {
     pub gldf: GldfProduct,
     #[prop_or_default]
+    pub embedded_files: HashMap<String, Vec<u8>>,
+    #[prop_or_default]
     pub children: Children,
 }
 
@@ -6121,11 +6251,19 @@ pub fn gldf_initializer(props: &GldfInitializerProps) -> Html {
 
     {
         let gldf = props.gldf.clone();
+        let embedded_files = props.embedded_files.clone();
         let state = state.clone();
         let initialized = initialized.clone();
         use_effect_with((), move |_| {
             if !*initialized {
-                state.dispatch(GldfAction::Load(gldf));
+                if embedded_files.is_empty() {
+                    state.dispatch(GldfAction::Load(gldf));
+                } else {
+                    state.dispatch(GldfAction::LoadWithFiles {
+                        product: gldf,
+                        embedded_files,
+                    });
+                }
                 initialized.set(true);
             }
             || ()
@@ -6135,6 +6273,83 @@ pub fn gldf_initializer(props: &GldfInitializerProps) -> Html {
     html! {
         { for props.children.iter() }
     }
+}
+
+#[derive(Properties, Clone, PartialEq)]
+pub struct EditorStateSyncProps {
+    pub on_sync: Callback<Vec<u8>>,
+}
+
+/// Sentinel that watches the editor reducer and re-emits whenever a Builder
+/// action (or any other state mutation) flips `is_modified` to true.
+///
+/// We can't lift this into `App` because `use_gldf()` only works inside
+/// `GldfProvider`. The sentinel pattern keeps the reactivity edge inside the
+/// provider tree and uses a plain Yew `Callback` to thread the bytes back out.
+///
+/// The guard is `is_modified`: the load arms clear it (so reloading from the
+/// emitted bytes won't re-emit), and every mutating arm sets it (so a real
+/// edit always fires). The effect deps include both `is_modified` and the
+/// embedded-file count so e.g. two consecutive Builder actions both emit
+/// even if the modified flag was already true.
+#[function_component(EditorStateSync)]
+pub fn editor_state_sync(props: &EditorStateSyncProps) -> Html {
+    let state = use_gldf();
+    let on_sync = props.on_sync.clone();
+
+    // Use `is_modified` + an embedded-file count + a cheap product fingerprint
+    // (number of files / photometries / variants / spectra) as the effect key.
+    // Cloning the whole product into the dependency tuple every render would
+    // be wasteful; these scalars cover every mutating action the reducer can
+    // run and avoid hashing the whole document.
+    let phot_count = state
+        .product
+        .general_definitions
+        .photometries
+        .as_ref()
+        .map(|p| p.photometry.len())
+        .unwrap_or(0);
+    let spectrum_count = state
+        .product
+        .general_definitions
+        .spectrums
+        .as_ref()
+        .map(|s| s.spectrum.len())
+        .unwrap_or(0);
+    let variant_count = state
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .map(|v| v.variant.len())
+        .unwrap_or(0);
+    let file_count = state.product.general_definitions.files.file.len();
+    let emb_count = state.embedded_files.len();
+    let is_modified = state.is_modified;
+
+    let deps = (
+        is_modified,
+        phot_count,
+        spectrum_count,
+        variant_count,
+        file_count,
+        emb_count,
+    );
+
+    {
+        let state = state.clone();
+        use_effect_with(deps, move |deps| {
+            if deps.0 {
+                match state.save_to_buf() {
+                    Ok(bytes) => on_sync.emit(bytes),
+                    Err(e) => gloo::console::log!("EditorStateSync save_to_buf failed:", e.to_string()),
+                }
+            }
+            || ()
+        });
+    }
+
+    html! {}
 }
 
 #[cfg(target_arch = "wasm32")]
