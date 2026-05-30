@@ -287,16 +287,41 @@ impl GldfProduct {
             GldfProduct::from_xml(&xml_str).context("Failed to parse product.xml")?;
         drop(xmlfile);
 
+        // Build a zip-path → file-id map so every BufFile we yield is keyed
+        // by the `<File>` element id. Without this the WASM editor's
+        // EditableGldf-backed state ends up with no embedded bytes (it filters
+        // entries lacking a file_id), and downstream pages — Files,
+        // Photometry, the SPD viewer — render as if the document had no
+        // embedded data.
+        let mut path_to_file_id: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        for file_def in &loaded.general_definitions.files.file {
+            if file_def.type_attr == "url" {
+                continue;
+            }
+            let zip_path = crate::editable::EditableGldf::get_zip_path_for_file(
+                &file_def.content_type,
+                &file_def.file_name,
+            );
+            path_to_file_id.insert(zip_path, file_def.id.clone());
+        }
+
         for i in 0..zip.len() {
             if let Ok(mut file) = zip.by_index(i) {
                 if file.is_file() {
                     let mut buf: Vec<u8> = Vec::new();
+                    let zip_name = file.name().to_string();
                     if file.read_to_end(&mut buf).is_ok() {
+                        // Resolve the file id from the XML's <File> entries.
+                        // Falls back to None if the zip path doesn't match any
+                        // declared file (e.g. product.xml itself, or a stray
+                        // companion file).
+                        let file_id = path_to_file_id.get(&zip_name).cloned();
                         let buf_file = BufFile {
-                            name: Some(file.name().to_string()),
+                            name: Some(zip_name.clone()),
                             content: Some(buf),
-                            file_id: None,
-                            path: Some(file.name().to_string()),
+                            file_id,
+                            path: Some(zip_name),
                         };
                         file_bufs.push(buf_file);
                     }
