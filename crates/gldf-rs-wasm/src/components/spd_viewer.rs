@@ -6,8 +6,9 @@
 //! - **TM-30 CVG** — `Tm30Result::to_svg(...)` (color vector graphic, 16 hue bins)
 //! - **TM-30 Rf-hue** — `Tm30Result::rf_hue_svg(...)` (per-hue fidelity bars)
 //! - **Colorimetry box** — CCT, Duv, x/y, peak λ, FWHM (from `colorimetry::analyze`)
+//! - **Greenhouse PPFD** — `GreenhouseDiagram::to_svg(...)` with a height slider
 //!
-//! All four are inline SVG strings + a small key/value list, so the bundle
+//! All five are inline SVG strings + a small key/value list, so the bundle
 //! impact is zero new deps (eulumdat is already in the workspace).
 //!
 //! Source order of preference:
@@ -15,6 +16,12 @@
 //!    parsed with `eulumdat::atla::spd_loader::parse`.
 //! 2. Inline `<Intensity>` entries (the SOLART pattern) → build
 //!    `SpectralDistribution` directly from the wavelength/value pairs.
+//!
+//! Leptos-specific bits: `SvgEmbed` uses a `NodeRef` + `Effect` to mount the
+//! SVG string via `Element::set_inner_html`. Setting `inner_html` on a div
+//! through the DOM API preserves the SVG namespace; piping the same string
+//! through Leptos's `inner_html` attribute would strip the geometry the same
+//! way Yew's `Html::from_html_unchecked` did.
 
 use crate::state::use_gldf;
 use eulumdat::atla::{
@@ -27,39 +34,311 @@ use eulumdat::atla::{
 };
 use gldf_rs::gldf::general_definitions::photometries::Spectrum;
 use gldf_rs::gldf::GldfProduct;
-use web_sys::{Element, HtmlInputElement};
-use yew::prelude::*;
+use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 
-/// Mount an SVG string into the DOM by calling `Element::set_inner_html` on a
-/// real `<div>` after render. We can't use `Html::from_html_unchecked` because
-/// Yew parses the string in a context that drops the SVG geometry primitives
-/// (`<path>`, `<rect>`, `<line>`, `<circle>`) and only keeps text — the user
-/// then sees the labels but no chart. Going through `Element::set_inner_html`
-/// preserves the SVG namespace and the figures render.
-#[derive(Properties, PartialEq, Clone)]
-struct SvgEmbedProps {
-    svg: String,
-    #[prop_or_default]
-    style: String,
+/// Mount an SVG string in the DOM via `Element::set_inner_html`.
+///
+/// Why a custom component: the browser's HTML parser, given an SVG string
+/// through Leptos's `inner_html` attribute, treats the content as HTML — it
+/// keeps `<svg>` and `<text>` (recognized HTML5 elements) but drops the SVG
+/// geometry primitives (`<path>`, `<rect>`, `<line>`, `<circle>`). The fix is
+/// to hand the string to the live DOM `innerHTML` setter on a real element,
+/// which constructs the proper SVG namespace subtree.
+///
+/// The `svg` prop is a `Signal<String>`, so callers can pass a `RwSignal`,
+/// `Memo`, or a derived signal and we re-mount whenever it changes (the
+/// greenhouse height slider exercises this path).
+#[component]
+pub fn SvgEmbed(
+    #[prop(into)] svg: Signal<String>,
+    #[prop(optional, into)] style: String,
+) -> impl IntoView {
+    let node_ref = NodeRef::<leptos::html::Div>::new();
+
+    Effect::new(move |_| {
+        // Track the signal so any update re-runs this effect.
+        let s = svg.get();
+        if let Some(div) = node_ref.get() {
+            div.set_inner_html(&s);
+        }
+    });
+
+    view! { <div node_ref=node_ref style=style></div> }
 }
 
-#[function_component(SvgEmbed)]
-fn svg_embed(props: &SvgEmbedProps) -> Html {
-    let node_ref = use_node_ref();
+/// Top-level Spectra page. Reads the editor state and renders one
+/// `<SpectrumPanel>` per `<Spectrum>` entry. Empty-state copy if the loaded
+/// GLDF doesn't declare any spectra.
+#[component]
+pub fn SpdViewer() -> impl IntoView {
+    let state = use_gldf();
 
-    {
-        let node_ref = node_ref.clone();
-        let svg = props.svg.clone();
-        use_effect_with(svg.clone(), move |svg| {
-            if let Some(el) = node_ref.cast::<Element>() {
-                el.set_inner_html(svg);
+    view! {
+        {move || state.with(|s| {
+            let spectrums = s.product.general_definitions.spectrums.as_ref();
+            let count = spectrums.map(|sp| sp.spectrum.len()).unwrap_or(0);
+            if count == 0 {
+                view! {
+                    <div style="padding: 16px; color: #666;">
+                        <h3 style="margin-top: 0;">{ "No Spectra" }</h3>
+                        <p>
+                            { "This GLDF has no <Spectrum> entries. Add a .spd file in the Builder (once ported) to see SPD + TM-30 + Greenhouse plots here." }
+                        </p>
+                    </div>
+                }.into_any()
+            } else {
+                let spectra: Vec<Spectrum> = spectrums
+                    .map(|sp| sp.spectrum.clone())
+                    .unwrap_or_default();
+                let panels: Vec<_> = spectra
+                    .into_iter()
+                    .map(|spectrum| view! { <SpectrumPanel spectrum=spectrum /> })
+                    .collect();
+                let label = format!(
+                    "{} spectrum{} — SPD + Metrics + TM-30 CVG / Rf-hue + Greenhouse PPFD, via eulumdat-rs.",
+                    count,
+                    if count == 1 { "" } else { "s" },
+                );
+                view! {
+                    <div style="padding: 8px;">
+                        <p style="color: #666; margin-top: 0;">{ label }</p>
+                        { panels }
+                    </div>
+                }.into_any()
             }
-            || ()
-        });
+        })}
     }
-
-    html! { <div ref={node_ref} style={props.style.clone()}></div> }
 }
+
+/// One panel per `<Spectrum>`. Owns the greenhouse height-slider signal so
+/// each spectrum has an independent slider. The panel reads the editor state
+/// on demand so a Builder edit that mutates the product or embedded_files
+/// re-renders this panel automatically.
+#[component]
+fn SpectrumPanel(spectrum: Spectrum) -> impl IntoView {
+    let state = use_gldf();
+
+    // Height slider — default 2.0 m matches eulumdat's `from_atla(&doc)`
+    // (which delegates to `from_atla_with_height(_, 2.0)`).
+    let height = RwSignal::new(2.0_f64);
+
+    // Capture the spectrum id once so the closures don't have to clone.
+    let spectrum_id = spectrum.id.clone();
+    let spectrum_for_resolve = spectrum.clone();
+
+    // Resolve the SPD inline each render (SpectralDistribution doesn't
+    // implement PartialEq so we can't memoise it; the cost is small —
+    // resolution re-runs only when the state signal changes).
+    view! {
+        <div style="border: 1px solid #ccc; padding: 12px; margin: 8px 0;">
+            <h3 style="margin-top: 0;">{ format!("Spectrum {}", spectrum_id) }</h3>
+            {move || {
+                let resolved = state.with(|s| resolve_spd(&spectrum_for_resolve, &s.embedded_files));
+                match resolved {
+                    None => view! {
+                        <em style="color: #c00;">
+                            { "No SPD source — neither a SpectrumFileReference nor inline <Intensity>." }
+                        </em>
+                    }.into_any(),
+                    Some((spd, source)) => {
+                        render_panel_body(spd, source, height).into_any()
+                    }
+                }
+            }}
+        </div>
+    }
+}
+
+/// Body of one spectrum panel, given a resolved SPD. Builds all four SVGs +
+/// captions + the greenhouse slider. Split out so the outer panel can keep
+/// the `match` over `Option<(SPD, source)>` simple.
+fn render_panel_body(
+    spd: SpectralDistribution,
+    source: String,
+    height: RwSignal<f64>,
+) -> impl IntoView {
+    let usable = spd.wavelengths.len() >= 2 && spd.wavelengths.len() == spd.values.len();
+
+    let sample_count = spd.wavelengths.len();
+    let source_line = format!("source: {} · {} samples", source, sample_count);
+
+    // ---- Static pre-computations (don't depend on the slider) ----
+
+    let spd_svg = if usable {
+        SpectralDiagram::from_spectral(&spd).to_svg(720.0, 320.0, &SpectralTheme::light())
+    } else {
+        String::new()
+    };
+
+    let tm30 = if usable { calculate_tm30(&spd) } else { None };
+    let colorim = if usable { Some(colorimetry::analyze(&spd)) } else { None };
+
+    let theme = Tm30Theme::light();
+    // Strip eulumdat's mis-labeled in-SVG headers; we render correct values
+    // in the caption underneath using colorimetry::analyze + Tm30Result.
+    let label_prefixes = ["Rf =", "Rg =", "CCT =", "Duv ="];
+    let cvg_svg = tm30
+        .as_ref()
+        .map(|r| strip_text_elements_with_prefix(&r.to_svg(420.0, 420.0, &theme), &label_prefixes))
+        .unwrap_or_default();
+    let rf_hue_svg = tm30
+        .as_ref()
+        .map(|r| strip_text_elements_with_prefix(&r.rf_hue_svg(540.0, 280.0, &theme), &label_prefixes))
+        .unwrap_or_default();
+
+    let tm30_caption = match (colorim.as_ref(), tm30.as_ref()) {
+        (Some(c), Some(r)) => format!(
+            "Rf {:.0} · Rg {:.0} · CCT {:.0} K · Duv {:+.4}",
+            r.rf, r.rg, c.cct_k, c.duv
+        ),
+        _ => String::new(),
+    };
+    let tm30_caption_clone = tm30_caption.clone();
+
+    let metric_rows = colorim.as_ref().map(|c| {
+        let tm30_rows = tm30.as_ref().map(|r| view! {
+            <tr><th>{ "TM-30 Rf" }</th><td>{ format!("{:.1}", r.rf) }</td></tr>
+            <tr><th>{ "TM-30 Rg" }</th><td>{ format!("{:.1}", r.rg) }</td></tr>
+        });
+        view! {
+            <table style="font-size: 0.92em; border-collapse: collapse;">
+                <tbody>
+                    <tr><th style="text-align: left; padding-right: 14px;">{ "CCT" }</th><td>{ format!("{:.0} K", c.cct_k) }</td></tr>
+                    <tr><th style="text-align: left; padding-right: 14px;">{ "Duv" }</th><td>{ format!("{:+.4}", c.duv) }</td></tr>
+                    <tr><th style="text-align: left;">{ "x, y (CIE 1931)" }</th><td>{ format!("{:.4}, {:.4}", c.x_1931, c.y_1931) }</td></tr>
+                    <tr><th style="text-align: left;">{ "Peak λ" }</th><td>{ format!("{:.1} nm", c.peak_wavelength_nm) }</td></tr>
+                    <tr><th style="text-align: left;">{ "FWHM" }</th><td>{ format!("{:.1} nm", c.half_peak_width_nm) }</td></tr>
+                    { tm30_rows }
+                </tbody>
+            </table>
+        }
+    });
+
+    // ---- Reactive greenhouse (height slider drives re-render) ----
+
+    // Build the greenhouse SVG + numbers each time the slider moves. Cloning
+    // the product + SPD into the closure is cheap (Arc-internal for SPD, and
+    // GldfProduct is small for the greenhouse path).
+    let state = use_gldf();
+    let spd_for_greenhouse = spd.clone();
+    let greenhouse_inputs = Memo::new(move |_| {
+        let max_height = height.get().max(0.2);
+        if !usable {
+            return (max_height, String::new(), 0.0, 0.0, 0.0);
+        }
+        let doc = state.with(|s| build_atla_for_greenhouse(&s.product, &spd_for_greenhouse));
+        let diagram = GreenhouseDiagram::from_atla_with_height(&doc, max_height);
+        let svg = diagram.to_svg(720.0, 360.0, &GreenhouseTheme::light());
+        (max_height, svg, diagram.ppf, diagram.efficacy, diagram.watts)
+    });
+
+    // Slider input — parses the value and writes it into the signal.
+    let on_height_input = move |e: web_sys::Event| {
+        let Some(target) = e.target() else { return };
+        let input: web_sys::HtmlInputElement = match target.dyn_into() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        if let Ok(v) = input.value().parse::<f64>() {
+            height.set(v);
+        }
+    };
+
+    let cvg_svg_clone = cvg_svg.clone();
+    let rf_hue_svg_clone = rf_hue_svg.clone();
+    let spd_svg_clone = spd_svg.clone();
+    let has_tm30 = !cvg_svg.is_empty() && !rf_hue_svg.is_empty();
+
+    view! {
+        <div style="color: #888; font-size: 0.85em; margin-bottom: 8px;">{ source_line }</div>
+
+        {move || if !usable {
+            view! {
+                <em style="color: #c00;">{ "Could not build a usable SPD (need ≥2 wavelength/value pairs)." }</em>
+            }.into_any()
+        } else {
+            let cvg_svg = cvg_svg_clone.clone();
+            let rf_hue_svg = rf_hue_svg_clone.clone();
+            let spd_svg = spd_svg_clone.clone();
+            let metric_rows = metric_rows.clone();
+            let tm30_caption_a = tm30_caption.clone();
+            let tm30_caption_b = tm30_caption_clone.clone();
+            view! {
+                <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
+                    <div style="min-width: 480px;">
+                        <SvgEmbed svg=spd_svg />
+                    </div>
+                    {metric_rows.map(|rows| view! {
+                        <div style="min-width: 220px;">{ rows }</div>
+                    })}
+                </div>
+
+                {if has_tm30 {
+                    view! {
+                        <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;">
+                            <div style="min-width: 420px;">
+                                <h4 style="margin: 0 0 4px 0;">{ "TM-30 CVG" }</h4>
+                                <SvgEmbed svg=cvg_svg />
+                                <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
+                                    { tm30_caption_a }
+                                </div>
+                            </div>
+                            <div style="min-width: 540px;">
+                                <h4 style="margin: 0 0 4px 0;">{ "TM-30 Rf per hue" }</h4>
+                                <SvgEmbed svg=rf_hue_svg />
+                                <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
+                                    { tm30_caption_b }
+                                </div>
+                            </div>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! {
+                        <div style="color: #888; font-style: italic; margin-top: 8px;">
+                            { "TM-30 unavailable (SPD outside the supported wavelength range or too sparse)." }
+                        </div>
+                    }.into_any()
+                }}
+
+                // -------- Greenhouse (PPFD heatmap, height-adjustable) --------
+                <div style="margin-top: 16px;">
+                    <h4 style="margin: 0 0 4px 0;">{ "Greenhouse PPFD" }</h4>
+                    <div style="margin: 4px 0 8px 0; font-size: 0.9em;">
+                        <label>{move || format!("Mounting height: {:.2} m  ", greenhouse_inputs.get().0)}</label>
+                        <input
+                            type="range"
+                            min="0.3"
+                            max="6.0"
+                            step="0.1"
+                            prop:value=move || format!("{:.2}", greenhouse_inputs.get().0)
+                            on:input=on_height_input
+                            style="vertical-align: middle; width: 320px;"
+                        />
+                    </div>
+                    {move || {
+                        let (_, svg, ppf, eff, watts) = greenhouse_inputs.get();
+                        if svg.is_empty() {
+                            view! {
+                                <em style="color: #999;">{ "Greenhouse plot unavailable (SPD not usable)." }</em>
+                            }.into_any()
+                        } else {
+                            let svg_signal = Signal::derive(move || greenhouse_inputs.get().1);
+                            view! {
+                                <SvgEmbed svg=svg_signal />
+                                <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
+                                    { format!("PPF {:.0} µmol/s · {:.0} W · {:.2} µmol/J", ppf, watts, eff) }
+                                </div>
+                            }.into_any()
+                        }
+                    }}
+                </div>
+            }.into_any()
+        }}
+    }
+}
+
+// ---- Framework-agnostic helpers (copied verbatim from the Yew commit) ----
 
 /// Strip `<text>...</text>` elements whose body starts with any of the given
 /// prefixes (e.g. "Duv =", "Rf =", "CCT =", "Rg =").
@@ -76,20 +355,16 @@ fn strip_text_elements_with_prefix(svg: &str, prefixes: &[&str]) -> String {
     let mut out = String::with_capacity(svg.len());
     let mut rest = svg;
     while let Some(start) = rest.find("<text") {
-        // Copy everything before this <text ...>.
         out.push_str(&rest[..start]);
-        // Find the end of the element.
         let after_start = &rest[start..];
         let end_rel = match after_start.find("</text>") {
             Some(idx) => idx + "</text>".len(),
             None => {
-                // Malformed — bail out: append the rest and stop.
                 out.push_str(after_start);
                 return out;
             }
         };
         let element = &after_start[..end_rel];
-        // Locate the inner text (between the first '>' and the trailing "</text>").
         let inner = element
             .find('>')
             .and_then(|gt| element.get(gt + 1..element.len() - "</text>".len()))
@@ -119,7 +394,9 @@ fn resolve_spd(
             let content = std::str::from_utf8(bytes).ok()?;
             match spd_loader::parse(content) {
                 Ok(loaded) => return Some((loaded.spd, format!("file {}", file_ref.file_id))),
-                Err(e) => return Some((SpectralDistribution::default(), format!("parse error: {}", e))),
+                Err(e) => {
+                    return Some((SpectralDistribution::default(), format!("parse error: {}", e)));
+                }
             }
         }
         return Some((
@@ -128,8 +405,7 @@ fn resolve_spd(
         ));
     }
 
-    // (b) Inline <Intensity wavelength="..."> entries. Skip rows missing either
-    //     side; sort by wavelength because XML order isn't guaranteed.
+    // (b) Inline <Intensity wavelength="..."> entries.
     if !spectrum.intensity.is_empty() {
         let mut pairs: Vec<(f64, f64)> = spectrum
             .intensity
@@ -143,7 +419,6 @@ fn resolve_spd(
         let wavelengths: Vec<f64> = pairs.iter().map(|p| p.0).collect();
         let values: Vec<f64> = pairs.iter().map(|p| p.1).collect();
         let start = wavelengths.first().copied();
-        // Constant-step detection: if every gap matches the first, mark it.
         let interval = if wavelengths.len() >= 2 {
             let step = wavelengths[1] - wavelengths[0];
             if wavelengths
@@ -174,17 +449,10 @@ fn resolve_spd(
 
 /// Build a minimal ATLA `LuminaireOpticalData` from a `GldfProduct` and a
 /// parsed SPD, suitable for handing to `GreenhouseDiagram::from_atla_with_height`.
-///
-/// We only fill the fields greenhouse actually reads:
-/// - `input_watts` from the first FixedLightSource's `rated_input_power`
-/// - `measured_lumens` from the first emitter's `rated_luminous_flux`
-/// - `spectral_distribution` from the SPD we just rendered
-///
-/// Beam angle is left unset so greenhouse falls back to its 120° default. The
-/// PPF→lumens conversion factor (~1.0 µmol/lm for full-spectrum white) is
-/// derived inside eulumdat from the SPD curve, so the result reacts to the
-/// actual spectrum rather than a constant.
-fn build_atla_for_greenhouse(product: &GldfProduct, spd: &SpectralDistribution) -> LuminaireOpticalData {
+fn build_atla_for_greenhouse(
+    product: &GldfProduct,
+    spd: &SpectralDistribution,
+) -> LuminaireOpticalData {
     let watts = product
         .general_definitions
         .light_sources
@@ -211,242 +479,4 @@ fn build_atla_for_greenhouse(product: &GldfProduct, spd: &SpectralDistribution) 
         ..Default::default()
     });
     doc
-}
-
-#[function_component(SpdViewer)]
-pub fn spd_viewer() -> Html {
-    let gldf = use_gldf();
-
-    let spectrums = gldf.product.general_definitions.spectrums.as_ref();
-    let spectrum_count = spectrums.map(|s| s.spectrum.len()).unwrap_or(0);
-
-    if spectrum_count == 0 {
-        return html! {
-            <div class="empty-state">
-                <div class="icon">{ "🌈" }</div>
-                <h3>{ "No Spectra" }</h3>
-                <p>{ "This GLDF has no <Spectrum> entries. Add a .spd file in the Builder to see SPD + TM-30 plots here." }</p>
-            </div>
-        };
-    }
-
-    let panels: Vec<Html> = spectrums
-        .unwrap()
-        .spectrum
-        .iter()
-        .map(|spectrum| {
-            html! {
-                <SpectrumPanel spectrum={spectrum.clone()} />
-            }
-        })
-        .collect();
-
-    html! {
-        <div class="spd-viewer" style="padding: 8px;">
-            <p style="color: #666; margin-top: 0;">
-                { format!("{} spectrum{} — SPD curve + Metrics + TM-30 CVG / Rf-hue + Greenhouse PPFD, computed via eulumdat-rs.", spectrum_count, if spectrum_count == 1 {""} else {"s"}) }
-            </p>
-            { for panels }
-        </div>
-    }
-}
-
-#[derive(Properties, PartialEq, Clone)]
-struct SpectrumPanelProps {
-    spectrum: Spectrum,
-}
-
-/// One panel for one `<Spectrum>`. Owns the greenhouse height-slider state so
-/// each spectrum has its own independent slider. Reading from `use_gldf()`
-/// (not a prop) keeps the panel reactive: a Builder edit that mutates the
-/// product or embedded_files re-renders the panel automatically.
-#[function_component(SpectrumPanel)]
-fn spectrum_panel(props: &SpectrumPanelProps) -> Html {
-    let gldf = use_gldf();
-    let spectrum = &props.spectrum;
-    let embedded_files = &gldf.embedded_files;
-
-    // Greenhouse height slider state. Default 2.0 m matches eulumdat's
-    // `from_atla(&doc)` (which delegates to `from_atla_with_height(_, 2.0)`).
-    let greenhouse_height = use_state(|| 2.0_f64);
-
-    let (spd, source) = match resolve_spd(spectrum, embedded_files) {
-        Some(pair) => pair,
-        None => {
-            return html! {
-                <div style="border: 1px solid #ccc; padding: 12px; margin: 8px 0;">
-                    <h3>{ format!("Spectrum {}", spectrum.id) }</h3>
-                    <em style="color: #c00;">{ "No SPD source — neither a SpectrumFileReference nor inline <Intensity>." }</em>
-                </div>
-            };
-        }
-    };
-
-    let usable = spd.wavelengths.len() >= 2 && spd.wavelengths.len() == spd.values.len();
-
-    let spd_svg = if usable {
-        SpectralDiagram::from_spectral(&spd).to_svg(720.0, 320.0, &SpectralTheme::light())
-    } else {
-        String::new()
-    };
-
-    let tm30 = if usable { calculate_tm30(&spd) } else { None };
-    let colorim = if usable { Some(colorimetry::analyze(&spd)) } else { None };
-
-    let theme = Tm30Theme::light();
-    // Strip eulumdat-rs's in-SVG header labels (Rf / Rg / CCT / Duv on the CVG,
-    // and the trailing "Rf =" label on the Rf-hue chart). eulumdat's Duv field
-    // is pre-scaled by 1000× so its CVG header shows a wrong number, and the
-    // Rf-hue "Rf =" label renders with a stray glyph. We use the correct
-    // numbers from `colorimetry::analyze` + the raw `Tm30Result` and surface
-    // them in a caption underneath.
-    let label_prefixes = ["Rf =", "Rg =", "CCT =", "Duv ="];
-    let cvg_svg = tm30
-        .as_ref()
-        .map(|r| strip_text_elements_with_prefix(&r.to_svg(420.0, 420.0, &theme), &label_prefixes))
-        .unwrap_or_default();
-    let rf_hue_svg = tm30
-        .as_ref()
-        .map(|r| strip_text_elements_with_prefix(&r.rf_hue_svg(540.0, 280.0, &theme), &label_prefixes))
-        .unwrap_or_default();
-
-    // Caption with the CORRECT values for the CVG / Rf-hue plots. eulumdat's
-    // in-SVG `Duv = ...` header is mis-scaled by 1000× and its `Rf = …` Rf-hue
-    // label can render with a stray glyph — those are stripped from the SVG
-    // above. We use `colorimetry::analyze` (Duv, CCT) + the raw `Tm30Result`
-    // (Rf, Rg) values, which are correct.
-    let tm30_caption = match (colorim.as_ref(), tm30.as_ref()) {
-        (Some(c), Some(r)) => format!(
-            "Rf {:.0} · Rg {:.0} · CCT {:.0} K · Duv {:+.4}",
-            r.rf, r.rg, c.cct_k, c.duv
-        ),
-        _ => String::new(),
-    };
-
-    let metric_rows = colorim.as_ref().map(|c| {
-        let tm30_rows = tm30
-            .as_ref()
-            .map(|r| {
-                html! {
-                    <>
-                        <tr><th>{ "TM-30 Rf" }</th><td>{ format!("{:.1}", r.rf) }</td></tr>
-                        <tr><th>{ "TM-30 Rg" }</th><td>{ format!("{:.1}", r.rg) }</td></tr>
-                    </>
-                }
-            })
-            .unwrap_or(html! { <></> });
-        html! {
-            <table style="font-size: 0.92em; border-collapse: collapse;">
-                <tbody>
-                    <tr><th style="text-align: left; padding-right: 14px;">{ "CCT" }</th><td>{ format!("{:.0} K", c.cct_k) }</td></tr>
-                    <tr><th style="text-align: left; padding-right: 14px;">{ "Duv" }</th><td>{ format!("{:+.4}", c.duv) }</td></tr>
-                    <tr><th style="text-align: left;">{ "x, y (CIE 1931)" }</th><td>{ format!("{:.4}, {:.4}", c.x_1931, c.y_1931) }</td></tr>
-                    <tr><th style="text-align: left;">{ "Peak λ" }</th><td>{ format!("{:.1} nm", c.peak_wavelength_nm) }</td></tr>
-                    <tr><th style="text-align: left;">{ "FWHM" }</th><td>{ format!("{:.1} nm", c.half_peak_width_nm) }</td></tr>
-                    { tm30_rows }
-                </tbody>
-            </table>
-        }
-    });
-
-    // Greenhouse (PPFD vs. mounting distance) — adapts a minimal ATLA doc
-    // built from the GLDF's first light source / emitter + this SPD. eulumdat
-    // computes PPF from the SPD curve, so the result reacts to actual spectrum
-    // content. Beam angle falls back to 120° (typical grow-light) because
-    // GLDF photometry isn't mapped into ATLA's IntensityDistribution yet.
-    let max_height = (*greenhouse_height).max(0.2);
-    let greenhouse_svg = if usable {
-        let doc = build_atla_for_greenhouse(&gldf.product, &spd);
-        let diagram = GreenhouseDiagram::from_atla_with_height(&doc, max_height);
-        diagram.to_svg(720.0, 360.0, &GreenhouseTheme::light())
-    } else {
-        String::new()
-    };
-    let (greenhouse_ppf, greenhouse_eff, greenhouse_watts) = if usable {
-        let doc = build_atla_for_greenhouse(&gldf.product, &spd);
-        let d = GreenhouseDiagram::from_atla_with_height(&doc, max_height);
-        (d.ppf, d.efficacy, d.watts)
-    } else {
-        (0.0, 0.0, 0.0)
-    };
-
-    let on_height_input = {
-        let greenhouse_height = greenhouse_height.clone();
-        Callback::from(move |e: InputEvent| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            if let Ok(v) = input.value().parse::<f64>() {
-                greenhouse_height.set(v);
-            }
-        })
-    };
-
-    html! {
-        <div style="border: 1px solid #ccc; padding: 12px; margin: 8px 0;">
-            <h3 style="margin-top: 0;">{ format!("Spectrum {}", spectrum.id) }</h3>
-            <div style="color: #888; font-size: 0.85em; margin-bottom: 8px;">
-                { format!("source: {} · {} samples", source, spd.wavelengths.len()) }
-            </div>
-
-            if !usable {
-                <em style="color: #c00;">{ "Could not build a usable SPD (need ≥2 wavelength/value pairs)." }</em>
-            } else {
-                <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
-                    <div style="min-width: 480px;">
-                        <SvgEmbed svg={spd_svg.clone()} />
-                    </div>
-                    if let Some(rows) = metric_rows {
-                        <div style="min-width: 220px;">{ rows }</div>
-                    }
-                </div>
-
-                if !cvg_svg.is_empty() && !rf_hue_svg.is_empty() {
-                    <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;">
-                        <div style="min-width: 420px;">
-                            <h4 style="margin: 0 0 4px 0;">{ "TM-30 CVG" }</h4>
-                            <SvgEmbed svg={cvg_svg.clone()} />
-                            <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
-                                { tm30_caption.clone() }
-                            </div>
-                        </div>
-                        <div style="min-width: 540px;">
-                            <h4 style="margin: 0 0 4px 0;">{ "TM-30 Rf per hue" }</h4>
-                            <SvgEmbed svg={rf_hue_svg.clone()} />
-                            <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
-                                { tm30_caption }
-                            </div>
-                        </div>
-                    </div>
-                } else {
-                    <div style="color: #888; font-style: italic; margin-top: 8px;">
-                        { "TM-30 unavailable (SPD outside the supported wavelength range or too sparse)." }
-                    </div>
-                }
-
-                // -------- Greenhouse (PPFD heatmap, height-adjustable) --------
-                <div style="margin-top: 16px;">
-                    <h4 style="margin: 0 0 4px 0;">{ "Greenhouse PPFD" }</h4>
-                    <div style="margin: 4px 0 8px 0; font-size: 0.9em;">
-                        <label>{ format!("Mounting height: {:.2} m  ", max_height) }</label>
-                        <input
-                            type="range"
-                            min="0.3"
-                            max="6.0"
-                            step="0.1"
-                            value={format!("{:.2}", max_height)}
-                            oninput={on_height_input}
-                            style="vertical-align: middle; width: 320px;"
-                        />
-                    </div>
-                    if !greenhouse_svg.is_empty() {
-                        <SvgEmbed svg={greenhouse_svg.clone()} />
-                        <div style="font-size: 0.9em; color: #444; margin-top: 4px;">
-                            { format!("PPF {:.0} µmol/s · {:.0} W · {:.2} µmol/J", greenhouse_ppf, greenhouse_watts, greenhouse_eff) }
-                        </div>
-                    } else {
-                        <em style="color: #999;">{ "Greenhouse plot unavailable (SPD not usable)." }</em>
-                    }
-                </div>
-            }
-        </div>
-    }
 }

@@ -1,10 +1,23 @@
-//! GLDF state management for the WASM editor.
+//! GLDF state management for the WASM editor (Leptos port).
 //!
-//! The editor state is backed by `gldf_rs::EditableGldf` — a `GldfProduct` plus a
-//! `HashMap<String, Vec<u8>>` of embedded file bytes. That makes drop-and-link
-//! workflows (drop a `.spd` / `.ies` and link it to a light source) and round-trip
-//! `save_to_buf` reuse a single cross-platform builder API in the core lib, the
-//! same one any FFI / Unreal binding can drive.
+//! The editor state is backed by `gldf_rs::EditableGldf` — a `GldfProduct` plus
+//! a `HashMap<String, Vec<u8>>` of embedded file bytes. That makes drop-and-link
+//! workflows (drop a `.spd` / `.ies` and link it to a light source) and the
+//! round-trip `save_to_buf` reuse a single cross-platform builder API in the
+//! core lib, the same one any FFI / Unreal binding can drive.
+//!
+//! ## Leptos translation
+//!
+//! The Yew side was a `Reducible` consumed via `use_reducer`. Here we hold the
+//! state in an `RwSignal<GldfState>` and dispatch by calling
+//! `signal.update(|s| s.apply(action))`. The reducer arms are unchanged in
+//! shape — they just mutate `&mut self` instead of a cloned `new_state`.
+//!
+//! `is_modified` defaults to true at the top of `apply` and is reverted by
+//! arms whose work doesn't actually change the document (e.g. language picker,
+//! UI translation language, error reporting). To keep the revert pattern
+//! working in an in-place mutation, we capture the prior value at entry as
+//! `prev_modified` and restore it in those arms.
 
 use gldf_rs::gldf::{
     general_definitions::photometries::{
@@ -17,9 +30,9 @@ use gldf_rs::gldf::{
     FormatVersion, GldfProduct, LocaleFoo,
 };
 use gldf_rs::EditableGldf;
+use leptos::prelude::*;
 use std::collections::HashMap;
-use std::rc::Rc;
-use yew::prelude::*;
+
 
 /// Edit scope for fields that exist at both ProductMetaData and per-Variant
 /// levels in the XSD (Electrical / Mechanical / Marketing → Applications).
@@ -307,41 +320,46 @@ impl GldfState {
     }
 }
 
-impl Reducible for GldfState {
-    type Action = GldfAction;
 
-    fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
-        let mut new_state = (*self).clone();
-        new_state.is_modified = true;
+/// In-place dispatcher. The Yew side cloned `*self` into `new_state`,
+/// mutated, then re-wrapped in `Rc::new`; we mutate `&mut self` directly
+/// because the Leptos `RwSignal::update(|s| s.apply(action))` closure already
+/// gives us a mutable reference. The body is otherwise identical to the
+/// old `Reducible::reduce` implementation.
+impl GldfState {
+    pub fn apply(&mut self, action: GldfAction) {
+        let prev_modified = self.is_modified;
+        self.is_modified = true;
+
 
         match action {
             GldfAction::Load(product) => {
-                new_state.active_language = pick_initial_language(&product);
-                new_state.product = product;
-                new_state.embedded_files.clear();
-                new_state.is_modified = false;
-                new_state.last_error = None;
+                self.active_language = pick_initial_language(&product);
+                self.product = product;
+                self.embedded_files.clear();
+                self.is_modified = false;
+                self.last_error = None;
             }
             GldfAction::LoadWithFiles {
                 product,
                 embedded_files,
             } => {
-                new_state.active_language = pick_initial_language(&product);
-                new_state.product = product;
-                new_state.embedded_files = embedded_files;
-                new_state.is_modified = false;
-                new_state.last_error = None;
+                self.active_language = pick_initial_language(&product);
+                self.product = product;
+                self.embedded_files = embedded_files;
+                self.is_modified = false;
+                self.last_error = None;
             }
             GldfAction::AddPhotometryFile { bytes, filename } => {
-                let mut editable = new_state.to_editable();
+                let mut editable = self.to_editable();
                 match editable.add_photometry_file(bytes, &filename) {
                     Ok(_id) => {
-                        new_state.take_from_editable(editable);
-                        new_state.last_error = None;
+                        self.take_from_editable(editable);
+                        self.last_error = None;
                     }
                     Err(e) => {
-                        new_state.last_error = Some(format!("Add photometry: {}", e));
-                        new_state.is_modified = self.is_modified;
+                        self.last_error = Some(format!("Add photometry: {}", e));
+                        self.is_modified = prev_modified;
                     }
                 }
             }
@@ -350,28 +368,28 @@ impl Reducible for GldfState {
                 filename,
                 light_source_id,
             } => {
-                let mut editable = new_state.to_editable();
+                let mut editable = self.to_editable();
                 match editable.add_spectrum_file(bytes, &filename, &light_source_id) {
                     Ok(_id) => {
-                        new_state.take_from_editable(editable);
-                        new_state.last_error = None;
+                        self.take_from_editable(editable);
+                        self.last_error = None;
                     }
                     Err(e) => {
-                        new_state.last_error = Some(format!("Add spectrum: {}", e));
-                        new_state.is_modified = self.is_modified;
+                        self.last_error = Some(format!("Add spectrum: {}", e));
+                        self.is_modified = prev_modified;
                     }
                 }
             }
             GldfAction::AddVariantSimple { name } => {
-                let mut editable = new_state.to_editable();
+                let mut editable = self.to_editable();
                 match editable.add_variant_simple(&name) {
                     Ok(_id) => {
-                        new_state.take_from_editable(editable);
-                        new_state.last_error = None;
+                        self.take_from_editable(editable);
+                        self.last_error = None;
                     }
                     Err(e) => {
-                        new_state.last_error = Some(format!("Add variant: {}", e));
-                        new_state.is_modified = self.is_modified;
+                        self.last_error = Some(format!("Add variant: {}", e));
+                        self.is_modified = prev_modified;
                     }
                 }
             }
@@ -380,56 +398,56 @@ impl Reducible for GldfState {
                 bytes,
                 filename,
             } => {
-                let mut editable = new_state.to_editable();
+                let mut editable = self.to_editable();
                 match editable.replace_photometry_file(&photometry_id, bytes, &filename) {
                     Ok(()) => {
-                        new_state.take_from_editable(editable);
-                        new_state.last_error = None;
+                        self.take_from_editable(editable);
+                        self.last_error = None;
                     }
                     Err(e) => {
-                        new_state.last_error = Some(format!("Replace photometry: {}", e));
-                        new_state.is_modified = self.is_modified;
+                        self.last_error = Some(format!("Replace photometry: {}", e));
+                        self.is_modified = prev_modified;
                     }
                 }
             }
             GldfAction::RenameFixedLightSource { old_id, new_id } => {
-                match new_state.product.rename_fixed_light_source(&old_id, &new_id) {
+                match self.product.rename_fixed_light_source(&old_id, &new_id) {
                     Ok(()) => {
-                        new_state.last_error = None;
+                        self.last_error = None;
                     }
                     Err(e) => {
-                        new_state.last_error = Some(format!("Rename light source: {}", e));
-                        new_state.is_modified = self.is_modified;
+                        self.last_error = Some(format!("Rename light source: {}", e));
+                        self.is_modified = prev_modified;
                     }
                 }
             }
             GldfAction::SetActiveLanguage(lang) => {
-                new_state.active_language = lang;
+                self.active_language = lang;
                 // Language switch alone does not modify the product.
-                new_state.is_modified = self.is_modified;
+                self.is_modified = prev_modified;
             }
             GldfAction::SetUiLanguage(lang) => {
                 store_ui_language(&lang);
-                new_state.ui_language = lang;
-                new_state.is_modified = self.is_modified;
+                self.ui_language = lang;
+                self.is_modified = prev_modified;
             }
             GldfAction::SetAuthor(author) => {
-                new_state.product.header.author = author;
+                self.product.header.author = author;
             }
             GldfAction::SetManufacturer(manufacturer) => {
-                new_state.product.header.manufacturer = manufacturer;
+                self.product.header.manufacturer = manufacturer;
             }
             GldfAction::SetCreationTimeCode(time_code) => {
-                new_state.product.header.creation_time_code = time_code;
+                self.product.header.creation_time_code = time_code;
             }
             GldfAction::SetCreatedWithApplication(app) => {
-                new_state.product.header.created_with_application = app;
+                self.product.header.created_with_application = app;
             }
             GldfAction::SetDefaultLanguage(lang) => {
-                new_state.product.header.default_language = lang;
+                self.product.header.default_language = lang;
             }
             GldfAction::SetFormatVersion(version) => {
-                new_state.product.header.format_version = FormatVersion::from_string(&version);
+                self.product.header.format_version = FormatVersion::from_string(&version);
             }
             GldfAction::AddFile {
                 id,
@@ -439,7 +457,7 @@ impl Reducible for GldfState {
                 language,
             } => {
                 use gldf_rs::gldf::general_definitions::files::File;
-                new_state.product.general_definitions.files.file.push(File {
+                self.product.general_definitions.files.file.push(File {
                     id,
                     content_type,
                     type_attr,
@@ -448,7 +466,7 @@ impl Reducible for GldfState {
                 });
             }
             GldfAction::RemoveFile(id) => {
-                new_state
+                self
                     .product
                     .general_definitions
                     .files
@@ -461,7 +479,7 @@ impl Reducible for GldfState {
                 type_attr,
                 file_name,
             } => {
-                if let Some(file) = new_state
+                if let Some(file) = self
                     .product
                     .general_definitions
                     .files
@@ -476,48 +494,48 @@ impl Reducible for GldfState {
             }
             // --- Electrical attributes ---
             GldfAction::SetElectricalSafetyClass(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.electrical_safety_class = value;
                 }
             }
             GldfAction::SetIngressProtectionIPCode(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.ingress_protection_ip_code = value;
                 }
             }
             GldfAction::SetPowerFactor(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.power_factor = value;
                 }
             }
             GldfAction::SetConstantLightOutput(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.constant_light_output = value;
                 }
             }
             GldfAction::SetLightDistribution(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.light_distribution = value;
                 }
             }
             GldfAction::SetSwitchingCapacity(scope, value) => {
-                if let Some(e) = ensure_electrical(&mut new_state, scope) {
+                if let Some(e) = ensure_electrical(self, scope) {
                     e.switching_capacity = value;
                 }
             }
             // --- Applications ---
             GldfAction::SetApplications(scope, apps) => {
-                if let Some(a) = ensure_applications(&mut new_state, scope) {
+                if let Some(a) = ensure_applications(self, scope) {
                     a.application = apps;
                 }
             }
             GldfAction::AddApplication(scope, app) => {
-                if let Some(a) = ensure_applications(&mut new_state, scope) {
+                if let Some(a) = ensure_applications(self, scope) {
                     a.application.push(app);
                 }
             }
             GldfAction::RemoveApplication(scope, index) => {
-                if let Some(a) = ensure_applications(&mut new_state, scope) {
+                if let Some(a) = ensure_applications(self, scope) {
                     if index < a.application.len() {
                         a.application.remove(index);
                     }
@@ -525,14 +543,14 @@ impl Reducible for GldfState {
             }
             // --- Labels ---
             GldfAction::AddLabel(scope, label) => {
-                if let Some(l) = ensure_labels(&mut new_state, scope) {
+                if let Some(l) = ensure_labels(self, scope) {
                     if !l.label.iter().any(|x| x == &label) {
                         l.label.push(label);
                     }
                 }
             }
             GldfAction::RemoveLabel(scope, index) => {
-                if let Some(l) = ensure_labels(&mut new_state, scope) {
+                if let Some(l) = ensure_labels(self, scope) {
                     if index < l.label.len() {
                         l.label.remove(index);
                     }
@@ -540,128 +558,128 @@ impl Reducible for GldfState {
             }
             // --- Photometry ---
             GldfAction::SetPhotometryCieFluxCode { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).cie_flux_code = value;
+                ensure_descriptive_photometry(self, index).cie_flux_code = value;
             }
             GldfAction::SetPhotometryLightOutputRatio { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).light_output_ratio = value;
+                ensure_descriptive_photometry(self, index).light_output_ratio = value;
             }
             GldfAction::SetPhotometryLuminousEfficacy { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).luminous_efficacy = value;
+                ensure_descriptive_photometry(self, index).luminous_efficacy = value;
             }
             GldfAction::SetPhotometryDownwardFluxFraction { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).downward_flux_fraction = value;
+                ensure_descriptive_photometry(self, index).downward_flux_fraction = value;
             }
             GldfAction::SetPhotometryDownwardLOR { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).downward_light_output_ratio =
+                ensure_descriptive_photometry(self, index).downward_light_output_ratio =
                     value;
             }
             GldfAction::SetPhotometryUpwardLOR { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).upward_light_output_ratio =
+                ensure_descriptive_photometry(self, index).upward_light_output_ratio =
                     value;
             }
             GldfAction::SetPhotometryCutOffAngle { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).cut_off_angle = value;
+                ensure_descriptive_photometry(self, index).cut_off_angle = value;
             }
             GldfAction::SetPhotometryLuminaireLuminance { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).luminaire_luminance = value;
+                ensure_descriptive_photometry(self, index).luminaire_luminance = value;
             }
             GldfAction::SetPhotometryUgrX { index, value } => {
-                ensure_ugr(&mut new_state, index).x = value;
+                ensure_ugr(self, index).x = value;
             }
             GldfAction::SetPhotometryUgrY { index, value } => {
-                ensure_ugr(&mut new_state, index).y = value;
+                ensure_ugr(self, index).y = value;
             }
             GldfAction::SetPhotometryPhotometricCode { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index).photometric_code = value;
+                ensure_descriptive_photometry(self, index).photometric_code = value;
             }
             GldfAction::SetPhotometryBugRating { index, value } => {
-                ensure_descriptive_photometry(&mut new_state, index)
+                ensure_descriptive_photometry(self, index)
                     .light_distribution_bug_rating = value;
             }
             GldfAction::SetProductMetaName(value) => {
-                ensure_product_meta_data(&mut new_state).name = Some(value);
+                ensure_product_meta_data(self).name = Some(value);
             }
             GldfAction::SetProductMetaDescription(value) => {
-                ensure_product_meta_data(&mut new_state).description = Some(value);
+                ensure_product_meta_data(self).description = Some(value);
             }
             GldfAction::SetProductMetaProductNumber(value) => {
-                ensure_product_meta_data(&mut new_state).product_number = Some(value);
+                ensure_product_meta_data(self).product_number = Some(value);
             }
             GldfAction::SetProductMetaTenderText(value) => {
-                ensure_product_meta_data(&mut new_state).tender_text = Some(value);
+                ensure_product_meta_data(self).tender_text = Some(value);
             }
             GldfAction::SetVariantName(idx, value) => {
-                if let Some(v) = variant_at_mut(&mut new_state, idx) {
+                if let Some(v) = variant_at_mut(self, idx) {
                     v.name = Some(value);
                 }
             }
             GldfAction::SetVariantDescription(idx, value) => {
-                if let Some(v) = variant_at_mut(&mut new_state, idx) {
+                if let Some(v) = variant_at_mut(self, idx) {
                     v.description = Some(value);
                 }
             }
             GldfAction::SetVariantProductNumber(idx, value) => {
-                if let Some(v) = variant_at_mut(&mut new_state, idx) {
+                if let Some(v) = variant_at_mut(self, idx) {
                     v.product_number = Some(value);
                 }
             }
             GldfAction::SetVariantTenderText(idx, value) => {
-                if let Some(v) = variant_at_mut(&mut new_state, idx) {
+                if let Some(v) = variant_at_mut(self, idx) {
                     v.tender_text = Some(value);
                 }
             }
             GldfAction::SetFixedLightSourceName(idx, value) => {
-                if let Some(s) = fixed_light_source_at_mut(&mut new_state, idx) {
+                if let Some(s) = fixed_light_source_at_mut(self, idx) {
                     s.name = value;
                 }
             }
             GldfAction::SetFixedLightSourceDescription(idx, value) => {
-                if let Some(s) = fixed_light_source_at_mut(&mut new_state, idx) {
+                if let Some(s) = fixed_light_source_at_mut(self, idx) {
                     s.description = Some(value);
                 }
             }
             GldfAction::SetChangeableLightSourceName(idx, value) => {
-                if let Some(s) = changeable_light_source_at_mut(&mut new_state, idx) {
+                if let Some(s) = changeable_light_source_at_mut(self, idx) {
                     s.name = value;
                 }
             }
             GldfAction::SetChangeableLightSourceDescription(idx, value) => {
-                if let Some(s) = changeable_light_source_at_mut(&mut new_state, idx) {
+                if let Some(s) = changeable_light_source_at_mut(self, idx) {
                     s.description = Some(value);
                 }
             }
             GldfAction::SetMechanicalIKRating(scope, value) => {
-                if let Some(m) = ensure_mechanical(&mut new_state, scope) {
+                if let Some(m) = ensure_mechanical(self, scope) {
                     m.ik_rating = value;
                 }
             }
             GldfAction::SetMechanicalProductForm(scope, value) => {
-                if let Some(m) = ensure_mechanical(&mut new_state, scope) {
+                if let Some(m) = ensure_mechanical(self, scope) {
                     m.product_form = value;
                 }
             }
             GldfAction::SetMechanicalWeight(scope, value) => {
-                if let Some(m) = ensure_mechanical(&mut new_state, scope) {
+                if let Some(m) = ensure_mechanical(self, scope) {
                     m.weight = value;
                 }
             }
             GldfAction::SetMechanicalLength(scope, value) => {
-                if let Some(s) = ensure_mechanical_size(&mut new_state, scope) {
+                if let Some(s) = ensure_mechanical_size(self, scope) {
                     s.length = value.unwrap_or(0);
                 }
             }
             GldfAction::SetMechanicalWidth(scope, value) => {
-                if let Some(s) = ensure_mechanical_size(&mut new_state, scope) {
+                if let Some(s) = ensure_mechanical_size(self, scope) {
                     s.width = value.unwrap_or(0);
                 }
             }
             GldfAction::SetMechanicalHeight(scope, value) => {
-                if let Some(s) = ensure_mechanical_size(&mut new_state, scope) {
+                if let Some(s) = ensure_mechanical_size(self, scope) {
                     s.height = value.unwrap_or(0);
                 }
             }
             GldfAction::SetMechanicalSealingMaterial(scope, value) => {
-                if let Some(m) = ensure_mechanical(&mut new_state, scope) {
+                if let Some(m) = ensure_mechanical(self, scope) {
                     m.sealing_material = if value.locale.is_empty() {
                         None
                     } else {
@@ -673,7 +691,7 @@ impl Reducible for GldfState {
                 file_id,
                 image_type,
             } => {
-                ensure_product_meta_pictures(&mut new_state).image.push(
+                ensure_product_meta_pictures(self).image.push(
                     gldf_rs::gldf::general_definitions::Image {
                         file_id,
                         image_type,
@@ -685,7 +703,7 @@ impl Reducible for GldfState {
                 file_id,
                 image_type,
             } => {
-                if let Some(img) = ensure_product_meta_pictures(&mut new_state)
+                if let Some(img) = ensure_product_meta_pictures(self)
                     .image
                     .get_mut(index)
                 {
@@ -694,7 +712,7 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::RemoveProductMetaPicture(index) => {
-                if let Some(pics) = new_state
+                if let Some(pics) = self
                     .product
                     .product_definitions
                     .product_meta_data
@@ -707,7 +725,7 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::AddHyperlink => {
-                if let Some(hs) = ensure_hyperlinks(&mut new_state, Scope::Product) {
+                if let Some(hs) = ensure_hyperlinks(self, Scope::Product) {
                     hs.hyperlink.push(gldf_rs::gldf::Hyperlink::default());
                 }
             }
@@ -719,7 +737,7 @@ impl Reducible for GldfState {
                 country_code,
                 value,
             } => {
-                if let Some(h) = ensure_hyperlinks(&mut new_state, Scope::Product)
+                if let Some(h) = ensure_hyperlinks(self, Scope::Product)
                     .and_then(|hs| hs.hyperlink.get_mut(index))
                 {
                     h.href = href;
@@ -730,7 +748,7 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::RemoveHyperlink(index) => {
-                if let Some(hs) = new_state
+                if let Some(hs) = self
                     .product
                     .product_definitions
                     .product_meta_data
@@ -745,17 +763,17 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::SetDedicatedEmergencyLightingType(value) => {
-                if let Some(e) = ensure_emergency(&mut new_state, Scope::Product) {
+                if let Some(e) = ensure_emergency(self, Scope::Product) {
                     e.dedicated_emergency_lighting_type = value;
                 }
             }
             GldfAction::AddEmergencyFlux => {
-                if let Some(d) = ensure_emergency_duration(&mut new_state, Scope::Product) {
+                if let Some(d) = ensure_emergency_duration(self, Scope::Product) {
                     d.flux.push(Flux::default());
                 }
             }
             GldfAction::UpdateEmergencyFlux { index, hours, flux } => {
-                if let Some(entry) = ensure_emergency_duration(&mut new_state, Scope::Product)
+                if let Some(entry) = ensure_emergency_duration(self, Scope::Product)
                     .and_then(|d| d.flux.get_mut(index))
                 {
                     entry.hours = hours;
@@ -763,7 +781,7 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::RemoveEmergencyFlux(index) => {
-                if let Some(d) = new_state
+                if let Some(d) = self
                     .product
                     .product_definitions
                     .product_meta_data
@@ -778,42 +796,33 @@ impl Reducible for GldfState {
                 }
             }
             GldfAction::Reset => {
-                new_state = GldfState::default();
+                *self = GldfState::default();
             }
         }
 
-        Rc::new(new_state)
     }
 }
 
-/// Context type for GLDF state
-pub type GldfContext = UseReducerHandle<GldfState>;
+// ---- Leptos context plumbing ----
 
-/// Properties for the GLDF provider component
-#[derive(Properties, Clone, PartialEq)]
-pub struct GldfProviderProps {
-    #[prop_or_default]
-    pub children: Children,
+/// Editor state context. A signal so any component below the provider can
+/// read with `.get()` / `.with(...)` and dispatch with `.update(|s| s.apply(...))`.
+pub type GldfContext = RwSignal<GldfState>;
+
+/// Install a fresh `GldfState` signal as Leptos context. Call once near the
+/// App root. Children retrieve the handle via [`use_gldf`].
+pub fn provide_gldf_state() -> GldfContext {
+    let signal = RwSignal::new(GldfState::default());
+    provide_context(signal);
+    signal
 }
 
-/// Provider component for GLDF state
-#[function_component(GldfProvider)]
-pub fn gldf_provider(props: &GldfProviderProps) -> Html {
-    let state = use_reducer(GldfState::default);
-
-    html! {
-        <ContextProvider<GldfContext> context={state}>
-            { for props.children.iter() }
-        </ContextProvider<GldfContext>>
-    }
-}
-
-/// Hook to access the GLDF state
-#[hook]
+/// Retrieve the editor state context. Panics if no `GldfContext` is in scope —
+/// install one with [`provide_gldf_state`] at the App root.
 pub fn use_gldf() -> GldfContext {
-    use_context::<GldfContext>()
-        .expect("GldfContext not found. Did you wrap your component in GldfProvider?")
+    expect_context::<GldfContext>()
 }
+
 
 /// Helper to ensure ProductMetaData exists and return mutable reference
 fn ensure_product_meta_data(state: &mut GldfState) -> &mut ProductMetaData {
