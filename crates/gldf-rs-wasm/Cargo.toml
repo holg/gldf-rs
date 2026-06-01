@@ -29,6 +29,8 @@ default = []
 [dependencies]
 # Core library - enable eulumdat for LDT/IES and l3d for geometry export
 gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
+# Editor API — shared reducer + actions with the TUI / CLI / Python frontends.
+gldf-rs-editor = { workspace = true }
 
 # Error handling
 anyhow.workspace = true

@@ -1,0 +1,84 @@
+[
+  {"action": "SetAuthor", "data": "Slice 3 Engineer"},
+  {"action": "SetManufacturer", "data": "Acme Road Lighting"},
+  {"action": "SetCreatedWithApplication", "data": "gldf-cli apply"},
+  {"action": "SetCreationTimeCode", "data": "2026-06-01T13:55:00Z"},
+  {"action": "SetDefaultLanguage", "data": "en"},
+  {"action": "SetFormatVersion", "data": "1.0.0-rc.3"},
+
+  {"action": "AddPhotometryFile",
+   "data": {"bytes": {"@file": "road.ldt"}, "filename": "road.ldt"}},
+
+  {"action": "AddFixedLightSource", "data": {
+    "payload": {
+      "@id": "",
+      "Name": {"Locale": [{"@language": "en", "$text": "Acme Road LED 70"}]},
+      "Description": {"Locale": [{"@language": "en", "$text": "70-CRI 2700K road luminaire LED"}]},
+      "Manufacturer": "Acme Optics",
+      "GTIN": "0000000000017",
+      "RatedInputPower": 42.5,
+      "RatedInputVoltage": {"FixedVoltage": 230.0},
+      "PowerRange": {"LowerBound": 40.0, "UpperBound": 45.0}
+    }
+  }},
+
+  {"action": "AddSpectrumFile",
+   "data": {"bytes": {"@file": "spectrum_2700K.spd"},
+            "filename": "spectrum_2700K.spd",
+            "light_source_id": "lightsource_1"}},
+
+  {"action": "AddFileWithBytes",
+   "data": {"bytes": {"@file": "product_picture.png"},
+            "filename": "product_picture.png"}},
+  {"action": "AddFileWithBytes",
+   "data": {"bytes": {"@file": "Application Picture.png"},
+            "filename": "Application Picture.png"}},
+
+  {"action": "AddEmitterWithChild", "data": {
+    "child_name": "Primary",
+    "kind": "Fixed",
+    "photometry_id": "photometry_1",
+    "fixed_light_source_id": "lightsource_1",
+    "multi_channel_light_source_id": "",
+    "sensor_id": ""
+  }},
+
+  {"action": "SetElectricalSafetyClass",   "data": ["Product", "ClassII"]},
+  {"action": "SetIngressProtectionIPCode", "data": ["Product", "IP65"]},
+  {"action": "SetPowerFactor",             "data": ["Product", 0.95]},
+  {"action": "SetConstantLightOutput",     "data": ["Product", true]},
+  {"action": "SetLightDistribution",       "data": ["Product", "Direct"]},
+
+  {"action": "AddApplication", "data": ["Product", "RoadAndStreet"]},
+  {"action": "AddApplication", "data": ["Product", "Outdoor"]},
+  {"action": "AddLabel",       "data": ["Product", "ENEC"]},
+
+  {"action": "SetMechanicalIKRating", "data": ["Product", "IK08"]},
+  {"action": "SetMechanicalWeight",   "data": ["Product", 4.2]},
+  {"action": "SetMechanicalLength",   "data": ["Product", 620]},
+  {"action": "SetMechanicalWidth",    "data": ["Product", 280]},
+  {"action": "SetMechanicalHeight",   "data": ["Product", 150]},
+
+  {"action": "SetPhotometryCieFluxCode",         "data": {"index": 0, "value": "100 100 100 100 84"}},
+  {"action": "SetPhotometryLightOutputRatio",    "data": {"index": 0, "value": 0.95}},
+  {"action": "SetPhotometryLuminousEfficacy",    "data": {"index": 0, "value": 130.0}},
+  {"action": "SetPhotometryDownwardFluxFraction","data": {"index": 0, "value": 1.0}},
+
+  {"action": "SetProductMetaName",
+   "data": {"Locale": [{"@language": "en", "$text": "Road LED 70"}]}},
+  {"action": "SetProductMetaDescription",
+   "data": {"Locale": [{"@language": "en", "$text": "Outdoor road luminaire built from road.ldt + 2700K spectrum"}]}},
+  {"action": "SetProductMetaProductNumber",
+   "data": {"Locale": [{"@language": "en", "$text": "ACME-RD70-2700"}]}},
+
+  {"action": "AddProductMetaPicture",
+   "data": {"file_id": "file_1", "image_type": "Product Picture"}},
+  {"action": "AddProductMetaPicture",
+   "data": {"file_id": "file_2", "image_type": "Application Picture"}},
+
+  {"action": "AddVariantSimple", "data": {"name": "Standard"}},
+  {"action": "SetVariantName",
+   "data": [0, {"Locale": [{"@language": "en", "$text": "Standard 2700K"}]}]},
+  {"action": "SetVariantDescription",
+   "data": [0, {"Locale": [{"@language": "en", "$text": "Default warm-white road variant"}]}]}
+]

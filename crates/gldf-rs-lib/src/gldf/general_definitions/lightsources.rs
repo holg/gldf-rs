@@ -553,6 +553,140 @@ pub struct FixedLightSource {
     pub zhaga_standard: Option<bool>,
 }
 
+// ============================================================
+// MultiChannel light source — tunable-white / RGB / RGBW etc.
+// ============================================================
+
+/// Per-channel definition inside a `MultiChannelLightSource`. Each channel
+/// has its own SpectrumReference and PhotometryReference plus a rated
+/// flux and optional color information.
+///
+/// XSD path: `LightSources/MultiChannelLightSource/Channels/Channel`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiChannelChannel {
+    /// Translatable name of the channel (e.g. "Warm", "Cool", "Red").
+    #[serde(rename = "DisplayName", default)]
+    pub display_name: LocaleFoo,
+
+    /// Spectrum reference for this channel.
+    #[serde(rename = "SpectrumReference", default)]
+    pub spectrum_reference: ChannelSpectrumReference,
+
+    /// Photometry reference for this channel.
+    #[serde(rename = "PhotometryReference", default)]
+    pub photometry_reference: ChannelPhotometryReference,
+
+    /// Initial luminous flux of the channel at 25 °C (lumen, required by XSD).
+    #[serde(rename = "RatedLuminousFlux", default)]
+    pub rated_luminous_flux: i32,
+
+    /// Color information of the channel.
+    #[serde(rename = "ColorInformation", skip_serializing_if = "Option::is_none")]
+    pub color_information: Option<ColorInformation>,
+}
+
+/// Spectrum reference used inside a `MultiChannelLightSource/Channels/Channel`.
+/// Distinct from the top-level `SpectrumReference` because the XSD only
+/// declares the `@spectrumId` attribute here (no `@lightSourceCount`).
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChannelSpectrumReference {
+    /// Id reference to a Spectrum element under GeneralDefinitions/Spectrums.
+    #[serde(rename = "@spectrumId", default)]
+    pub spectrum_id: String,
+}
+
+/// Photometry reference used inside a `MultiChannelLightSource/Channels/Channel`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChannelPhotometryReference {
+    /// Id reference to a Photometry element under GeneralDefinitions/Photometries.
+    #[serde(rename = "@photometryId", default)]
+    pub photometry_id: String,
+}
+
+/// Channels wrapper element. `<Channels><Channel>…</Channel></Channels>`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Channels {
+    /// The per-channel definitions.
+    #[serde(rename = "Channel", default)]
+    pub channel: Vec<MultiChannelChannel>,
+}
+
+/// Tunable-white / RGB / RGBW / multi-channel light source. Distinct from
+/// `FixedLightSource` and `ChangeableLightSource` — the lamp is one
+/// physical object but has several independently-controllable channels,
+/// each with its own spectrum + photometry.
+///
+/// XSD path: `LightSources/MultiChannelLightSource`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiChannelLightSource {
+    /// Identifier for this multi-channel light source.
+    #[serde(rename = "@id", default)]
+    pub id: String,
+
+    /// Translatable display name.
+    #[serde(rename = "Name", default)]
+    pub name: LocaleFoo,
+
+    /// Translatable description.
+    #[serde(rename = "Description", default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocaleFoo>,
+
+    /// Manufacturer name.
+    #[serde(rename = "Manufacturer", skip_serializing_if = "Option::is_none")]
+    pub manufacturer: Option<String>,
+
+    /// GTIN (Global Trade Item Number).
+    #[serde(rename = "GTIN", skip_serializing_if = "Option::is_none")]
+    pub gtin: Option<String>,
+
+    /// Rated input power (watt). XSD-required.
+    #[serde(rename = "RatedInputPower", default)]
+    pub rated_input_power: f64,
+
+    /// Rated input voltage.
+    #[serde(rename = "RatedInputVoltage", skip_serializing_if = "Option::is_none")]
+    pub rated_input_voltage: Option<Voltage>,
+
+    /// Min/max/default light source power.
+    #[serde(rename = "PowerRange", skip_serializing_if = "Option::is_none")]
+    pub power_range: Option<PowerRange>,
+
+    /// Position of usage (Horizontal/Vertical, optional range).
+    #[serde(
+        rename = "LightSourcePositionOfUsage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub light_source_position_of_usage: Option<String>,
+
+    /// EU energy labels.
+    #[serde(rename = "EnergyLabels", skip_serializing_if = "Option::is_none")]
+    pub energy_labels: Option<EnergyLabels>,
+
+    /// Active power table (dimming curve).
+    #[serde(rename = "ActivePowerTable", skip_serializing_if = "Option::is_none")]
+    pub active_power_table: Option<ActivePowerTable>,
+
+    /// Combined color information for the whole multi-channel source
+    /// (separate from per-channel ColorInformation).
+    #[serde(rename = "ColorInformation", skip_serializing_if = "Option::is_none")]
+    pub color_information: Option<ColorInformation>,
+
+    /// Product images for the multi-channel source.
+    #[serde(rename = "LightSourceImages", skip_serializing_if = "Option::is_none")]
+    pub light_source_images: Option<Images>,
+
+    /// Maintenance data (lifetime, lamp type).
+    #[serde(
+        rename = "LightSourceMaintenance",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub light_source_maintenance: Option<LightSourceMaintenance>,
+
+    /// The actual channels — required by XSD (no minOccurs=0).
+    #[serde(rename = "Channels", default)]
+    pub channels: Channels,
+}
+
 /// Represents a collection of light sources in the GLDF data structure.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LightSources {
@@ -563,6 +697,14 @@ pub struct LightSources {
     /// A vector of fixed light sources integrated into the luminaire.
     #[serde(rename = "FixedLightSource", default)]
     pub fixed_light_source: Vec<FixedLightSource>,
+
+    /// A vector of multi-channel (tunable-white / RGB / RGBW) light sources.
+    #[serde(
+        rename = "MultiChannelLightSource",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub multi_channel_light_source: Vec<MultiChannelLightSource>,
 }
 
 /// Represents a reference to a light source in the GLDF data structure.
@@ -691,6 +833,52 @@ pub struct SensorEmitter {
     pub sensor_reference: SensorReference,
 }
 
+/// Reference from a `MultiChannelLightEmitter` to a `MultiChannelLightSource`.
+/// XSD attribute: `@multiChannelLightSourceId` (distinct from the
+/// `@fixedLightSourceId` / `@changeableLightSourceId` attrs on the regular
+/// `LightSourceReference`).
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiChannelLightSourceReference {
+    /// Id reference to a MultiChannelLightSource under
+    /// GeneralDefinitions/LightSources.
+    #[serde(rename = "@multiChannelLightSourceId", default)]
+    pub multi_channel_light_source_id: String,
+}
+
+/// Represents a multi-channel light emitter — the emitter-side counterpart
+/// of a `MultiChannelLightSource`. Combines the multi-channel lamp with
+/// an optional control gear (driver).
+///
+/// XSD path: `Emitter/MultiChannelLightEmitter`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiChannelLightEmitter {
+    /// Combined/EmergencyOnly/None — same enum as the other LightEmitters.
+    #[serde(
+        rename = "@emergencyBehaviour",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub emergency_behaviour: Option<String>,
+
+    /// Translatable display name.
+    #[serde(rename = "Name", skip_serializing_if = "Option::is_none")]
+    pub name: Option<LocaleFoo>,
+
+    /// Optional rotation when the emitter is mounted at an angle.
+    #[serde(rename = "Rotation", skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<Rotation>,
+
+    /// Reference to the multi-channel light source — required by XSD.
+    #[serde(rename = "LightSourceReference", default)]
+    pub light_source_reference: MultiChannelLightSourceReference,
+
+    /// Optional control gear (driver) reference.
+    #[serde(
+        rename = "ControlGearReference",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub control_gear_reference: Option<ControlGearReference>,
+}
+
 /// Represents an emitter in the GLDF data structure.
 /// Note: According to GLDF schema, Emitter must have at least one child
 /// (ChangeableLightEmitter, FixedLightEmitter, MultiChannelLightEmitter, or SensorEmitter).
@@ -716,6 +904,14 @@ pub struct Emitter {
     )]
     pub fixed_light_emitter: Vec<FixedLightEmitter>,
 
+    /// Collection of multi-channel light emitters (tunable-white / RGB).
+    #[serde(
+        rename = "MultiChannelLightEmitter",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub multi_channel_light_emitter: Vec<MultiChannelLightEmitter>,
+
     /// Collection of sensor emitters.
     #[serde(
         rename = "SensorEmitter",
@@ -730,6 +926,7 @@ impl Emitter {
     pub fn is_empty(&self) -> bool {
         self.changeable_light_emitter.is_empty()
             && self.fixed_light_emitter.is_empty()
+            && self.multi_channel_light_emitter.is_empty()
             && self.sensor_emitter.is_empty()
     }
 }

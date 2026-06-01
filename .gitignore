@@ -166,3 +166,9 @@ bindings/csharp/runtimes/
 # Code Injection
 iOSInjectionProject/
 .build_cache
+
+# Unreal build artifacts in the GldfImporter plugin tree (symlinked into test
+# UE projects; UE writes these into extra/ via the symlink — keep untracked).
+extra/unreal-plugin-interchange/**/Binaries/
+extra/unreal-plugin-interchange/**/Intermediate/
+extra/unreal-plugin-interchange/**/DerivedDataCache/

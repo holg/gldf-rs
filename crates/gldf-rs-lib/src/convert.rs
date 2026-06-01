@@ -222,6 +222,7 @@ pub fn ldt_metadata_to_gldf(
     let light_source_id = "lightsource_1";
     let light_sources = Some(LightSources {
         changeable_light_source: vec![],
+        multi_channel_light_source: vec![],
         fixed_light_source: vec![FixedLightSource {
             id: light_source_id.to_string(),
             name: LocaleFoo {
@@ -249,6 +250,7 @@ pub fn ldt_metadata_to_gldf(
         emitter: vec![Emitter {
             id: emitter_id.to_string(),
             changeable_light_emitter: vec![],
+            multi_channel_light_emitter: vec![],
             fixed_light_emitter: vec![FixedLightEmitter {
                 name: Some(LocaleFoo {
                     locale: vec![Locale {

@@ -1,0 +1,27 @@
+[package]
+name = "gldf-rs-tui"
+description = "Ratatui-based terminal frontend for the gldf-rs editor. Shares the GldfAction → GldfState reducer with every other frontend via gldf-rs-editor."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "gldf-edit"
+path = "src/main.rs"
+
+[dependencies]
+gldf-rs = { workspace = true, features = ["eulumdat"] }
+gldf-rs-editor = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+dirs = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

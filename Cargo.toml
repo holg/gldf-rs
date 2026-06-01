@@ -7,6 +7,9 @@ members = [
     "crates/gldf-rs-ffi",
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
+    "crates/gldf-rs-cli",
+    "crates/gldf-rs-editor",
+    "crates/gldf-rs-tui",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
     "crates/gldf-unreal",
@@ -27,6 +30,18 @@ homepage = "https://github.com/holg/gldf-rs"
 [workspace.dependencies]
 # Core library
 gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
+# Editor API (frontend-agnostic) — all consumers (WASM, TUI, CLI, Python, FFI) drive this.
+gldf-rs-editor = { version = "0.4.0", path = "crates/gldf-rs-editor" }
+
+# Serde helper for binary fields (Vec<u8> → JSON byte arrays without UTF-8 lossy detour).
+serde_bytes = "0.11"
+
+# TUI dependencies
+ratatui = "0.29"
+crossterm = "0.28"
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+insta = { version = "1", features = ["yaml"] }
 
 # Serialization
 quick-xml = { version = "0.37", features = ["serialize"] }

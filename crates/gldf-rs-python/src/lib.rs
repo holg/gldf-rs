@@ -136,6 +136,111 @@ fn gldf_json_to_bytes<'py>(
     Ok(pyo3::types::PyBytes::new(py, &gldf_bytes))
 }
 
+/// `EditorState` — Python wrapper around `gldf_rs_editor::GldfState`.
+///
+/// Exposes the same `apply` reducer that the WASM, TUI, and CLI
+/// frontends drive, via JSON in / JSON out. A notebook can build a
+/// GLDF from zero without ever touching FFI byte layers:
+///
+/// ```python
+/// import gldf_rs_python as gldf
+/// s = gldf.EditorState()
+/// s.apply_json('{"action": "SetAuthor", "data": "me"}')
+/// s.apply_json('{"action": "SetManufacturer", "data": "Acme"}')
+/// s.save("out.gldf")
+/// ```
+#[pyclass]
+struct EditorState {
+    inner: gldf_rs_editor::GldfState,
+}
+
+#[pymethods]
+impl EditorState {
+    /// Construct an empty editor state.
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: gldf_rs_editor::GldfState::default(),
+        }
+    }
+
+    /// Load a GLDF file from disk into this state. Replaces any prior
+    /// content; modifies `is_modified = false` on success.
+    fn load(&mut self, path: &str) -> PyResult<()> {
+        let editable = EditableGldf::from_gldf(path)
+            .map_err(|e| PyValueError::new_err(format!("load {}: {}", path, e)))?;
+        self.inner.apply(gldf_rs_editor::GldfAction::LoadWithFiles {
+            product: editable.product,
+            embedded_files: editable.embedded_files,
+        });
+        Ok(())
+    }
+
+    /// Apply a single action expressed as JSON. Use the same shape the
+    /// `gldf-cli apply` subcommand reads — `{"action": "<variant>",
+    /// "data": ...}`. On error, returns `ValueError` with the parse or
+    /// reducer error string; on success, returns `None`.
+    fn apply_json(&mut self, action_json: &str) -> PyResult<()> {
+        let action: gldf_rs_editor::GldfAction = serde_json::from_str(action_json)
+            .map_err(|e| PyValueError::new_err(format!("parse action: {}", e)))?;
+        self.inner.apply(action);
+        if let Some(err) = self.inner.last_error.as_deref() {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Apply a sequence of actions. Returns on the first failure.
+    fn apply_many(&mut self, actions_json: &str) -> PyResult<()> {
+        let actions: Vec<gldf_rs_editor::GldfAction> = serde_json::from_str(actions_json)
+            .map_err(|e| PyValueError::new_err(format!("parse actions: {}", e)))?;
+        for action in actions {
+            self.inner.apply(action);
+            if let Some(err) = self.inner.last_error.as_deref() {
+                return Err(PyValueError::new_err(err.to_string()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply a `WizardDraft` non-interactively. Mirrors `gldf-cli wizard`.
+    fn apply_wizard_json(&mut self, draft_json: &str) -> PyResult<()> {
+        let draft: gldf_rs_editor::WizardDraft = serde_json::from_str(draft_json)
+            .map_err(|e| PyValueError::new_err(format!("parse draft: {}", e)))?;
+        gldf_rs_editor::apply_wizard(&mut self.inner, &draft);
+        Ok(())
+    }
+
+    /// Save the current state to a `.gldf` file on disk.
+    fn save(&self, path: &str) -> PyResult<()> {
+        let bytes = self
+            .inner
+            .save_to_buf()
+            .map_err(|e| PyValueError::new_err(format!("save: {}", e)))?;
+        std::fs::write(path, bytes)
+            .map_err(|e| PyValueError::new_err(format!("write {}: {}", path, e)))
+    }
+
+    /// Serialize the current product (no embedded files) as a pretty
+    /// JSON string. Use for inspection / diffing in scripts.
+    fn dump_json(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.inner.product)
+            .map_err(|e| PyValueError::new_err(format!("serialize: {}", e)))
+    }
+
+    /// `True` if the document has unsaved changes.
+    #[getter]
+    fn is_modified(&self) -> bool {
+        self.inner.is_modified
+    }
+
+    /// Last reducer error, if any. Cleared by the next successful action.
+    #[getter]
+    fn last_error(&self) -> Option<String> {
+        self.inner.last_error.clone()
+    }
+}
+
 /// A Python module for GLDF file handling implemented in Rust.
 ///
 /// Functions:
@@ -147,6 +252,10 @@ fn gldf_json_to_bytes<'py>(
 ///     ldt_to_gldf_json(data, filename): Convert LDT/IES to GLDF JSON
 ///     ldt_to_gldf_bytes(data, filename): Convert LDT/IES to GLDF bytes
 ///     gldf_json_to_bytes(json_str): Export GLDF JSON to bytes
+///
+/// Classes:
+///     EditorState: stateful editor driven by the same JSON action
+///         surface as the CLI / TUI / WASM frontends.
 #[pymodule]
 fn gldf_rs_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gldf_to_xml, m)?)?;
@@ -157,5 +266,6 @@ fn gldf_rs_python(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ldt_to_gldf_json, m)?)?;
     m.add_function(wrap_pyfunction!(ldt_to_gldf_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(gldf_json_to_bytes, m)?)?;
+    m.add_class::<EditorState>()?;
     Ok(())
 }

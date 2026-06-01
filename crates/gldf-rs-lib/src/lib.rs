@@ -119,7 +119,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use serde_json::from_str as serde_from_str;
 use std::fs::File as StdFile;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use zip::ZipArchive;
@@ -351,6 +351,118 @@ impl GldfProduct {
         let loaded: GldfProduct =
             GldfProduct::from_xml(&xml_str).context("Failed to parse product.xml")?;
         Ok(loaded)
+    }
+
+    /// Serialize this `GldfProduct` back into a `.gldf` zip buffer.
+    ///
+    /// Reads the original `.gldf` (whose path was recorded on
+    /// [`load_gldf`]) and produces a new zip with **only the
+    /// `product.xml` entry replaced** by `self.to_xml_with_schema(...)`;
+    /// every other entry (LDC files, images, geometries, spectra) is
+    /// copied through with [`ZipWriter::raw_copy_file`], preserving
+    /// compression and CRCs so we don't recompress untouched files.
+    ///
+    /// The schema version written matches the source: a
+    /// `header.format_version.pre_release == Some(3)` round-trips as
+    /// rc.3, otherwise rc.4. This keeps a header-only patch (e.g.
+    /// rewriting `<Manufacturer>`) from silently bumping the schema
+    /// version of the file on disk.
+    ///
+    /// Requires `self.path` to be non-empty — i.e. this `GldfProduct`
+    /// originated from [`load_gldf`] (path-based load), not from
+    /// `load_gldf_from_buf` (which leaves `path` empty and so has no
+    /// source zip to copy non-XML entries from).
+    pub fn to_buf(&self) -> anyhow::Result<Vec<u8>> {
+        if self.path.is_empty() {
+            return Err(anyhow::anyhow!(
+                "to_buf requires a path-loaded GldfProduct (load_gldf), \
+                 not a buffer-loaded one; nowhere to source the LDC/image \
+                 entries from"
+            ));
+        }
+        let source = StdFile::open(&self.path)
+            .with_context(|| format!("open source gldf: {}", self.path))?;
+        let mut src_zip = ZipArchive::new(source)
+            .with_context(|| format!("open source gldf as zip: {}", self.path))?;
+
+        let schema = match self.header.format_version.pre_release {
+            Some(3) => GldfSchemaVersion::Rc3,
+            _ => GldfSchemaVersion::Rc4,
+        };
+        let xml_str = self
+            .to_xml_with_schema(schema)
+            .context("serialize patched product.xml")?;
+
+        let mut out_buf: Vec<u8> = Vec::with_capacity(
+            // The file size on disk is a tight upper bound for the new
+            // archive in practice: only product.xml grows/shrinks, and
+            // a manufacturer-rename rarely changes its size meaningfully.
+            std::fs::metadata(&self.path).map(|m| m.len() as usize).unwrap_or(0).max(8 * 1024),
+        );
+        {
+            let cursor = std::io::Cursor::new(&mut out_buf);
+            let mut writer = zip::ZipWriter::new(cursor);
+
+            // Copy every non-product.xml entry through unchanged.
+            for i in 0..src_zip.len() {
+                let entry = src_zip
+                    .by_index(i)
+                    .with_context(|| format!("read source zip entry {i}"))?;
+                if entry.name() == "product.xml" {
+                    continue;
+                }
+                writer
+                    .raw_copy_file(entry)
+                    .context("raw-copy zip entry to output")?;
+            }
+
+            // Write the patched product.xml as a deflated entry. Use
+            // the writer's default time/perms; the GLDF zip doesn't
+            // depend on those.
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            writer
+                .start_file("product.xml", opts)
+                .context("start product.xml entry")?;
+            writer
+                .write_all(xml_str.as_bytes())
+                .context("write patched product.xml bytes")?;
+            writer.finish().context("finish zip writer")?;
+        }
+        Ok(out_buf)
+    }
+
+    /// Save this `GldfProduct` to disk at `path`, replacing the
+    /// `product.xml` entry inside the zip while preserving every other
+    /// file unchanged. Companion to [`load_gldf`].
+    ///
+    /// Writes via a sibling temp file + atomic rename, so a crash mid-
+    /// write can't leave a corrupt `.gldf` on disk. Safe to call with
+    /// `path == self.path` (the common "patch in place" case): we
+    /// finish reading the source zip into the in-memory buffer in
+    /// [`to_buf`] before any write, so we never overwrite a file we're
+    /// still reading.
+    pub fn save_gldf(&self, path: &str) -> anyhow::Result<()> {
+        let buf = self.to_buf()?;
+        let dest = Path::new(path);
+        // Place the temp file in the same directory as the destination
+        // so the rename below is on a single filesystem (atomic on
+        // POSIX). `.gldf.tmp.<pid>` keeps it visibly debug-able if
+        // something goes wrong.
+        let parent = dest.parent().unwrap_or_else(|| Path::new("."));
+        let tmp_name = format!(
+            "{}.tmp.{}",
+            dest.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("gldf"),
+            std::process::id()
+        );
+        let tmp = parent.join(tmp_name);
+        std::fs::write(&tmp, &buf)
+            .with_context(|| format!("write temp gldf: {}", tmp.display()))?;
+        std::fs::rename(&tmp, dest)
+            .with_context(|| format!("rename {} -> {}", tmp.display(), dest.display()))?;
+        Ok(())
     }
 
     /// represent the GldfProduct as JSON String

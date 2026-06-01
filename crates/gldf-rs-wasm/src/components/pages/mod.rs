@@ -1,0 +1,68 @@
+//! Per-page components for the editor's left-nav routes.
+//!
+//! Each module corresponds to one `NavItem` route. Slice 1 ports the
+//! high-impact subset (Overview, Header dashboard, Files list, Variants,
+//! Builder); the rest fill in across later slices.
+
+pub mod applications_editor;
+pub mod applications_read;
+pub mod custom_properties;
+pub mod electrical_editor;
+pub mod electrical_read;
+pub mod emergency_editor;
+pub mod emergency_read;
+pub mod emitters;
+pub mod file_viewer;
+pub mod files_list;
+pub mod header_dashboard;
+pub mod header_editor;
+pub mod hyperlinks_editor;
+pub mod hyperlinks_read;
+pub mod identity_editor;
+pub mod labels_editor;
+pub mod labels_read;
+pub mod light_sources;
+pub mod link_hint;
+pub mod linkage;
+pub mod mechanical_editor;
+pub mod mechanical_read;
+pub mod overview;
+pub mod photometry_editor;
+pub mod pictures_editor;
+pub mod pictures_read;
+pub mod plugins;
+pub mod raw_data;
+pub mod statistics;
+pub mod variant_editor;
+pub mod variants;
+
+pub use applications_editor::ApplicationsEditorPage;
+pub use applications_read::ApplicationsReadPage;
+pub use custom_properties::CustomPropertiesPage;
+pub use electrical_editor::ElectricalEditorPage;
+pub use electrical_read::ElectricalReadPage;
+pub use emergency_editor::EmergencyEditorPage;
+pub use emergency_read::EmergencyReadPage;
+pub use emitters::EmittersPage;
+pub use file_viewer::FileViewerPage;
+pub use files_list::FilesListPage;
+pub use header_dashboard::HeaderDashboardPage;
+pub use header_editor::HeaderEditorPage;
+pub use hyperlinks_editor::HyperlinksEditorPage;
+pub use hyperlinks_read::HyperlinksReadPage;
+pub use identity_editor::IdentityEditorPage;
+pub use labels_editor::LabelsEditorPage;
+pub use labels_read::LabelsReadPage;
+pub use light_sources::LightSourcesPage;
+pub use linkage::{LinkagePage, LinkageTarget, NavJump};
+pub use mechanical_editor::MechanicalEditorPage;
+pub use mechanical_read::MechanicalReadPage;
+pub use overview::OverviewPage;
+pub use photometry_editor::{PhotometryEditorPage, PhotometryReadPage};
+pub use pictures_editor::PicturesEditorPage;
+pub use pictures_read::PicturesReadPage;
+pub use plugins::PluginsPage;
+pub use raw_data::RawDataPage;
+pub use statistics::StatisticsPage;
+pub use variant_editor::VariantEditorPage;
+pub use variants::VariantsPage;

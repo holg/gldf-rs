@@ -1,0 +1,33 @@
+//! Frontend-agnostic state machine for the gldf-rs editor.
+//!
+//! This crate owns the [`GldfAction`] enum, the [`GldfState`] struct, and
+//! the `apply` reducer. Both frontends (Leptos/WASM and ratatui/TUI)
+//! drive the same reducer; the difference is only the view layer and a
+//! couple of pluggable side-effects (UI language persistence, file I/O
+//! delivery).
+//!
+//! Architecture:
+//! - [`GldfAction`] — variants are pure data (`String`, `Vec<u8>`, etc.).
+//! - [`GldfState`] — plain Rust struct holding the loaded product, its
+//!   embedded files, edit metadata, and pluggable adapters.
+//! - [`GldfState::apply`] — pure-function reducer over `&mut self`.
+//! - [`UiLanguageStore`] — the only non-pure dependency, abstracted as a
+//!   trait so the WASM frontend writes to `localStorage` and the TUI
+//!   writes to `~/.config/gldf-edit/lang`.
+//! - [`wizard::WizardDraft`] / [`wizard::apply_wizard`] — portable wizard
+//!   logic shared between Leptos forms and ratatui modals.
+
+pub mod action;
+pub mod emitter_draft;
+pub mod state;
+pub mod ui_language;
+pub mod wizard;
+
+pub use action::{GldfAction, LightEmitterKind, Scope};
+pub use emitter_draft::EmitterDraft;
+pub use state::{collect_languages, GldfState};
+pub use ui_language::{
+    initial_ui_language, normalise_ui_language, ui_language_native_name, LangStore, NullLangStore,
+    UiLanguageStore, SUPPORTED_UI_LANGUAGES,
+};
+pub use wizard::{apply_wizard, WizardDraft, WizardLightSourceKind, WizardStep};

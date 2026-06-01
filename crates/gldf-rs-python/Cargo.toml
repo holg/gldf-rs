@@ -21,6 +21,11 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 # Core library with eulumdat support for LDT/IES conversion
 gldf-rs = { workspace = true, features = ["eulumdat"] }
+# Editor API — exposes the JSON action surface to Python.
+gldf-rs-editor = { workspace = true }
+
+# Serde for JSON in/out on the Python side.
+serde_json = { workspace = true }
 
 # Python bindings
 pyo3.workspace = true

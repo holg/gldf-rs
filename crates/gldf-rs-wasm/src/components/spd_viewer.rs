@@ -23,6 +23,7 @@
 //! through Leptos's `inner_html` attribute would strip the geometry the same
 //! way Yew's `Html::from_html_unchecked` did.
 
+use crate::components::pages::link_hint::LinkHint;
 use crate::state::use_gldf;
 use eulumdat::atla::{
     colorimetry,
@@ -78,9 +79,16 @@ pub fn SpdViewer() -> impl IntoView {
         {move || state.with(|s| {
             let spectrums = s.product.general_definitions.spectrums.as_ref();
             let count = spectrums.map(|sp| sp.spectrum.len()).unwrap_or(0);
+            let hint = view! {
+                <LinkHint
+                    title="Where do I link this spectrum to a light source?".to_string()
+                    body="A <Spectrum> only declares the SPD curve (or points at an embedded .spd file). The GLDF schema does not allow a direct light-source link here — the SpectrumReference lives on FixedLightSource / ChangeableLightSource. Attach a spectrum to a lamp on the Light Sources page; the Emitters page then shows the resolved Photometry · LightSource · Spectrum chain.".to_string()
+                />
+            };
             if count == 0 {
                 view! {
                     <div style="padding: 16px; color: #666;">
+                        { hint }
                         <h3 style="margin-top: 0;">{ "No Spectra" }</h3>
                         <p>
                             { "This GLDF has no <Spectrum> entries. Add a .spd file in the Builder (once ported) to see SPD + TM-30 + Greenhouse plots here." }
@@ -102,6 +110,7 @@ pub fn SpdViewer() -> impl IntoView {
                 );
                 view! {
                     <div style="padding: 8px;">
+                        { hint }
                         <p style="color: #666; margin-top: 0;">{ label }</p>
                         { panels }
                     </div>
@@ -147,6 +156,32 @@ fn SpectrumPanel(spectrum: Spectrum) -> impl IntoView {
                 }
             }}
         </div>
+    }
+}
+
+/// Render a standalone SPD panel from raw `.spd` bytes. Used by the
+/// FileViewer when the user clicks an embedded spectrum file. Parses via
+/// `eulumdat::atla::spd_loader::parse` and feeds the result into the same
+/// renderer the Spectra page uses, so SPD curve + colorimetry + TM-30 CVG +
+/// Rf-hue + Greenhouse PPFD all show up identically.
+#[component]
+pub fn SpdPanel(bytes: Vec<u8>) -> impl IntoView {
+    let height = RwSignal::new(2.0_f64);
+    let parsed: Result<(SpectralDistribution, String), String> = {
+        let content = match std::str::from_utf8(&bytes) {
+            Ok(s) => s,
+            Err(e) => return view! {
+                <em style="color: #c00;">{ format!("Not UTF-8 .spd content: {}", e) }</em>
+            }.into_any(),
+        };
+        match spd_loader::parse(content) {
+            Ok(loaded) => Ok((loaded.spd, "embedded .spd".to_string())),
+            Err(e) => Err(format!("Parse error: {}", e)),
+        }
+    };
+    match parsed {
+        Ok((spd, source)) => render_panel_body(spd, source, height).into_any(),
+        Err(e) => view! { <em style="color: #c00;">{ e }</em> }.into_any(),
     }
 }
 

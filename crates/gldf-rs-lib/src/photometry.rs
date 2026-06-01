@@ -163,6 +163,13 @@ pub struct VariantPhotometryResolution {
     /// the driver in `GeneralDefinitions/ControlGears`. Used by the
     /// Electrical viewer to render driver details per variant.
     pub control_gear_id: Option<String>,
+    /// `EmitterReference.EmitterObjectExternalName` — the name of the
+    /// emitter object inside the referenced 3D geometry (e.g. the L3D LEO
+    /// `partName` "LEO0"/"LEO1"). Lets a consumer match this photometry to
+    /// a specific light-emitting object when a luminaire has several (e.g.
+    /// the two heads of a twin spotlight). Empty when the reference didn't
+    /// name one.
+    pub emitter_external_name: String,
 }
 
 impl VariantPhotometryResolution {
@@ -193,17 +200,22 @@ pub fn resolve_variant_photometries(
 ) -> Vec<VariantPhotometryResolution> {
     let _ = product; // Reserved for future use (Equipment lookups, etc.)
 
-    let mut emitter_ids: Vec<String> = Vec::new();
+    // Keep each emitter id paired with the EmitterObjectExternalName from the
+    // reference that named it (the L3D LEO partName), so a multi-emitter
+    // luminaire can map each photometry back to its specific emitter object.
+    // SimpleGeometryReference has no external-name child, so it pairs with "".
+    let mut emitter_refs: Vec<(String, String)> = Vec::new();
     if let Some(ref geom) = variant.geometry {
+        // Bare Variant>Geometry>EmitterReference has no external-name child.
         for er in &geom.emitter_reference {
-            emitter_ids.push(er.emitter_id.clone());
+            emitter_refs.push((er.emitter_id.clone(), String::new()));
         }
         if let Some(ref sgr) = geom.simple_geometry_reference {
-            emitter_ids.push(sgr.emitter_id.clone());
+            emitter_refs.push((sgr.emitter_id.clone(), String::new()));
         }
         if let Some(ref mgr) = geom.model_geometry_reference {
             for er in &mgr.emitter_reference {
-                emitter_ids.push(er.emitter_id.clone());
+                emitter_refs.push((er.emitter_id.clone(), er.emitter_object_external_name.clone()));
             }
         }
     }
@@ -215,7 +227,7 @@ pub fn resolve_variant_photometries(
     let light_sources = general.light_sources.as_ref();
 
     let mut out = Vec::new();
-    for eid in &emitter_ids {
+    for (eid, external_name) in &emitter_refs {
         let Some(emitter) = emitters.iter().find(|e| &e.id == eid) else {
             continue;
         };
@@ -267,6 +279,7 @@ pub fn resolve_variant_photometries(
                     .control_gear_reference
                     .as_ref()
                     .map(|cgr| cgr.control_gear_id.clone()),
+                emitter_external_name: external_name.clone(),
             });
         }
         // ChangeableLightEmitter has no light_source_reference at the emitter
@@ -285,6 +298,7 @@ pub fn resolve_variant_photometries(
                 // the emitter level (XSD wires gear via Equipment for
                 // replaceable bulbs). Phase 1 leaves this None.
                 control_gear_id: None,
+                emitter_external_name: external_name.clone(),
             });
         }
     }

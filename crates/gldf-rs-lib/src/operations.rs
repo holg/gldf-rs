@@ -6,7 +6,8 @@
 use crate::gldf::general_definitions::files::File;
 use crate::gldf::general_definitions::geometries::{Geometries, ModelGeometry, SimpleGeometry};
 use crate::gldf::general_definitions::lightsources::{
-    ChangeableLightSource, Emitter, Emitters, FixedLightSource, LightSources, SpectrumReference,
+    ChangeableLightSource, Emitter, Emitters, FixedLightSource, LightSources,
+    MultiChannelLightSource, SpectrumReference,
 };
 use crate::gldf::general_definitions::photometries::{
     Photometries, Photometry, Spectrum, Spectrums,
@@ -75,12 +76,18 @@ impl GldfProduct {
             }
         }
 
-        // Light source IDs
+        // Light source IDs (Fixed, Changeable, MultiChannel — XSD declares
+        // FixedLightSourceId, ChangeableLightSourceId, MultiChannelLightSourceId
+        // as three separate keys but they share the same id namespace in
+        // practice because emitter/equipment refs disambiguate by attribute).
         if let Some(ref light_sources) = self.general_definitions.light_sources {
             for source in &light_sources.fixed_light_source {
                 ids.insert(source.id.clone());
             }
             for source in &light_sources.changeable_light_source {
+                ids.insert(source.id.clone());
+            }
+            for source in &light_sources.multi_channel_light_source {
                 ids.insert(source.id.clone());
             }
         }
@@ -172,6 +179,157 @@ impl GldfProduct {
             .ok_or_else(|| anyhow!("File with ID '{}' not found", id))?;
 
         Ok(self.general_definitions.files.file.remove(pos))
+    }
+
+    /// Renames a `<File>` id, cascading into every referencing slot so
+    /// the document stays internally consistent.
+    ///
+    /// References updated (per the rc.3 XSD `FileId` keyrefs at lines 86-114):
+    /// - `Photometry/PhotometryFileReference @fileId`
+    /// - `Spectrum/SpectrumFileReference @fileId`
+    /// - `Fixed/Changeable/MultiChannel LightSource/LightSourceImages/Image @fileId`
+    /// - `ModelGeometry/GeometryFileReference @fileId`
+    /// - `Sensor/SensorFileReference @fileId`
+    /// - `ProductMetaData/Pictures/Image @fileId` (product-level pictures)
+    /// - `Variant/Pictures/Image @fileId`
+    /// - `Variant/Symbol @fileId`
+    ///
+    /// # Errors
+    /// - `old_id` doesn't exist.
+    /// - `new_id` is empty.
+    /// - `new_id` is already in use by another File.
+    pub fn rename_file(&mut self, old_id: &str, new_id: &str) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New file id must not be empty");
+        }
+        if !self
+            .general_definitions
+            .files
+            .file
+            .iter()
+            .any(|f| f.id == old_id)
+        {
+            anyhow::bail!("File with id '{}' not found", old_id);
+        }
+        if self
+            .general_definitions
+            .files
+            .file
+            .iter()
+            .any(|f| f.id == new_id)
+        {
+            anyhow::bail!("File id '{}' is already in use", new_id);
+        }
+        if let Some(f) = self
+            .general_definitions
+            .files
+            .file
+            .iter_mut()
+            .find(|f| f.id == old_id)
+        {
+            f.id = new_id.to_string();
+        }
+        // Photometry file refs
+        if let Some(ps) = self.general_definitions.photometries.as_mut() {
+            for p in &mut ps.photometry {
+                if let Some(fr) = p.photometry_file_reference.as_mut() {
+                    if fr.file_id == old_id {
+                        fr.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // Spectrum file refs
+        if let Some(ss) = self.general_definitions.spectrums.as_mut() {
+            for sp in &mut ss.spectrum {
+                if let Some(fr) = sp.spectrum_file_reference.as_mut() {
+                    if fr.file_id == old_id {
+                        fr.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // LightSource images (all three kinds)
+        if let Some(ls) = self.general_definitions.light_sources.as_mut() {
+            for f in &mut ls.fixed_light_source {
+                if let Some(imgs) = f.light_source_images.as_mut() {
+                    for img in &mut imgs.image {
+                        if img.file_id == old_id {
+                            img.file_id = new_id.to_string();
+                        }
+                    }
+                }
+            }
+            for c in &mut ls.changeable_light_source {
+                if let Some(imgs) = c.light_source_images.as_mut() {
+                    for img in &mut imgs.image {
+                        if img.file_id == old_id {
+                            img.file_id = new_id.to_string();
+                        }
+                    }
+                }
+            }
+            for m in &mut ls.multi_channel_light_source {
+                if let Some(imgs) = m.light_source_images.as_mut() {
+                    for img in &mut imgs.image {
+                        if img.file_id == old_id {
+                            img.file_id = new_id.to_string();
+                        }
+                    }
+                }
+            }
+        }
+        // ModelGeometry file refs
+        if let Some(geoms) = self.general_definitions.geometries.as_mut() {
+            for m in &mut geoms.model_geometry {
+                for gfr in &mut m.geometry_file_reference {
+                    if gfr.file_id == old_id {
+                        gfr.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // Sensor file refs
+        if let Some(sensors) = self.general_definitions.sensors.as_mut() {
+            for sensor in &mut sensors.sensor {
+                if let Some(fr) = sensor.sensor_file_reference.as_mut() {
+                    if fr.file_id == old_id {
+                        fr.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // ProductMetaData pictures
+        if let Some(meta) = self.product_definitions.product_meta_data.as_mut() {
+            if let Some(pics) = meta.pictures.as_mut() {
+                for img in &mut pics.image {
+                    if img.file_id == old_id {
+                        img.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // Variant pictures + symbol
+        if let Some(vs) = self.product_definitions.variants.as_mut() {
+            for v in &mut vs.variant {
+                if let Some(pics) = v.pictures.as_mut() {
+                    for img in &mut pics.image {
+                        if img.file_id == old_id {
+                            img.file_id = new_id.to_string();
+                        }
+                    }
+                }
+                if let Some(sym) = v.symbol.as_mut() {
+                    if sym.file_id == old_id {
+                        sym.file_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Gets a file definition by ID.
@@ -725,6 +883,122 @@ impl GldfProduct {
         Ok(())
     }
 
+    /// Replaces a `FixedLightSource` in place by id. The new value's `id`
+    /// field is overwritten with the target id so the slot identity stays
+    /// stable — every existing reference (Emitter / Equipment / Variant)
+    /// continues to resolve. To rename a light source use
+    /// [`Self::rename_fixed_light_source`] which also rewrites the refs.
+    ///
+    /// # Errors
+    /// Returns an error if no fixed light source with the given id exists.
+    pub fn update_fixed_light_source(
+        &mut self,
+        id: &str,
+        mut new_value: FixedLightSource,
+    ) -> Result<()> {
+        let light_sources = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        let slot = light_sources
+            .fixed_light_source
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| anyhow!("Fixed light source with id '{}' not found", id))?;
+        new_value.id = id.to_string();
+        *slot = new_value;
+        Ok(())
+    }
+
+    /// Replaces a `ChangeableLightSource` in place by id. Same identity-
+    /// preservation contract as [`Self::update_fixed_light_source`].
+    ///
+    /// # Errors
+    /// Returns an error if no changeable light source with the given id exists.
+    pub fn update_changeable_light_source(
+        &mut self,
+        id: &str,
+        mut new_value: ChangeableLightSource,
+    ) -> Result<()> {
+        let light_sources = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        let slot = light_sources
+            .changeable_light_source
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| anyhow!("Changeable light source with id '{}' not found", id))?;
+        new_value.id = id.to_string();
+        *slot = new_value;
+        Ok(())
+    }
+
+    /// Renames a `ChangeableLightSource` id, updating every reference in
+    /// the product so the document stays internally consistent.
+    ///
+    /// References updated (per the rc.3 XSD keyrefs):
+    /// - `Equipment::light_source_reference.changeable_light_source_id`
+    ///   (the `Equipment-LightSource` keyref on `@changeableLightSourceId`).
+    ///
+    /// ChangeableLightSources are *not* referenced from ChangeableLight-
+    /// Emitter directly — the user picks the lamp at install time — so
+    /// there's no emitter-side cascade like the Fixed variant has.
+    ///
+    /// # Errors
+    /// - The source `old_id` doesn't exist.
+    /// - `new_id` is already in use by another fixed or changeable light source.
+    pub fn rename_changeable_light_source(&mut self, old_id: &str, new_id: &str) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New light source id must not be empty");
+        }
+        let light_sources = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        if !light_sources
+            .changeable_light_source
+            .iter()
+            .any(|s| s.id == old_id)
+        {
+            anyhow::bail!("Changeable light source with id '{}' not found", old_id);
+        }
+        if light_sources
+            .fixed_light_source
+            .iter()
+            .any(|s| s.id == new_id)
+            || light_sources
+                .changeable_light_source
+                .iter()
+                .any(|s| s.id == new_id)
+        {
+            anyhow::bail!("Light source id '{}' is already in use", new_id);
+        }
+        if let Some(s) = light_sources
+            .changeable_light_source
+            .iter_mut()
+            .find(|s| s.id == old_id)
+        {
+            s.id = new_id.to_string();
+        }
+        if let Some(equipments) = self.general_definitions.equipments.as_mut() {
+            for equipment in &mut equipments.equipment {
+                if let Some(lsr) = equipment.light_source_reference.as_mut() {
+                    if lsr.changeable_light_source_id.as_deref() == Some(old_id) {
+                        lsr.changeable_light_source_id = Some(new_id.to_string());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Gets a fixed light source by ID.
     pub fn get_fixed_light_source(&self, id: &str) -> Option<&FixedLightSource> {
         self.general_definitions
@@ -739,6 +1013,131 @@ impl GldfProduct {
             .light_sources
             .as_ref()
             .and_then(|ls| ls.changeable_light_source.iter().find(|s| s.id == id))
+    }
+
+    // ==================== MultiChannel Light Source Operations ====================
+
+    /// Adds a new multi-channel light source. Errors if the id collides
+    /// with any existing LightSource id (Fixed, Changeable, or MultiChannel
+    /// share an id namespace for the editor's safety).
+    pub fn add_multi_channel_light_source(
+        &mut self,
+        source: MultiChannelLightSource,
+    ) -> Result<()> {
+        if self.general_definitions.light_sources.is_none() {
+            self.general_definitions.light_sources = Some(LightSources::default());
+        }
+        let ls = self.general_definitions.light_sources.as_mut().unwrap();
+        if ls.fixed_light_source.iter().any(|s| s.id == source.id)
+            || ls.changeable_light_source.iter().any(|s| s.id == source.id)
+            || ls
+                .multi_channel_light_source
+                .iter()
+                .any(|s| s.id == source.id)
+        {
+            return Err(anyhow!(
+                "Light source with ID '{}' already exists",
+                source.id
+            ));
+        }
+        ls.multi_channel_light_source.push(source);
+        Ok(())
+    }
+
+    /// Removes a multi-channel light source by id.
+    pub fn remove_multi_channel_light_source(
+        &mut self,
+        id: &str,
+    ) -> Result<MultiChannelLightSource> {
+        let ls = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        let pos = ls
+            .multi_channel_light_source
+            .iter()
+            .position(|s| s.id == id)
+            .ok_or_else(|| anyhow!("MultiChannel light source with id '{}' not found", id))?;
+        Ok(ls.multi_channel_light_source.remove(pos))
+    }
+
+    /// Replaces a multi-channel light source in place by id. The new value's
+    /// id field is overwritten to keep the slot stable so existing
+    /// MultiChannelLightEmitter references stay valid.
+    pub fn update_multi_channel_light_source(
+        &mut self,
+        id: &str,
+        mut new_value: MultiChannelLightSource,
+    ) -> Result<()> {
+        let ls = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        let slot = ls
+            .multi_channel_light_source
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| anyhow!("MultiChannel light source with id '{}' not found", id))?;
+        new_value.id = id.to_string();
+        *slot = new_value;
+        Ok(())
+    }
+
+    /// Renames a MultiChannelLightSource id, cascading into every
+    /// `Emitter/MultiChannelLightEmitter/LightSourceReference
+    /// @multiChannelLightSourceId` (XSD keyref L154).
+    pub fn rename_multi_channel_light_source(
+        &mut self,
+        old_id: &str,
+        new_id: &str,
+    ) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New light source id must not be empty");
+        }
+        let ls = self
+            .general_definitions
+            .light_sources
+            .as_mut()
+            .ok_or_else(|| anyhow!("No light sources defined"))?;
+        if !ls
+            .multi_channel_light_source
+            .iter()
+            .any(|s| s.id == old_id)
+        {
+            anyhow::bail!("MultiChannel light source with id '{}' not found", old_id);
+        }
+        if ls.fixed_light_source.iter().any(|s| s.id == new_id)
+            || ls.changeable_light_source.iter().any(|s| s.id == new_id)
+            || ls
+                .multi_channel_light_source
+                .iter()
+                .any(|s| s.id == new_id)
+        {
+            anyhow::bail!("Light source id '{}' is already in use", new_id);
+        }
+        if let Some(s) = ls
+            .multi_channel_light_source
+            .iter_mut()
+            .find(|s| s.id == old_id)
+        {
+            s.id = new_id.to_string();
+        }
+        if let Some(emitters) = self.general_definitions.emitters.as_mut() {
+            for emitter in &mut emitters.emitter {
+                for mle in &mut emitter.multi_channel_light_emitter {
+                    if mle.light_source_reference.multi_channel_light_source_id == old_id {
+                        mle.light_source_reference.multi_channel_light_source_id =
+                            new_id.to_string();
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     // ==================== Emitter Operations ====================
@@ -782,6 +1181,74 @@ impl GldfProduct {
             .ok_or_else(|| anyhow!("Emitter with ID '{}' not found", id))?;
 
         Ok(emitters.emitter.remove(pos))
+    }
+
+    /// Renames an `Emitter` id, updating every reference in the product so
+    /// the document stays internally consistent.
+    ///
+    /// References updated (per the rc.3 XSD keyrefs at lines 182-216):
+    /// - `Variant > Geometry > EmitterReference @emitterId` (the bare form,
+    ///   used when a variant has no 3D model attached).
+    /// - `Variant > Geometry > SimpleGeometryReference @emitterId`.
+    /// - `Variant > Geometry > ModelGeometryReference > EmitterReference
+    ///   @emitterId` (the nested form alongside an L3D/M3D/R3D model).
+    ///
+    /// The XSD also allows a `<GeometryReferences>` wrapper around the
+    /// SimpleGeometry/ModelGeometry choice (XSD L4304) but the Rust model
+    /// does not yet carry that variant on `Geometry` — when it is added,
+    /// this method must be extended to walk it too.
+    ///
+    /// # Errors
+    /// - The source `old_id` doesn't exist.
+    /// - `new_id` is already in use by another emitter.
+    /// - `new_id` is empty.
+    pub fn rename_emitter(&mut self, old_id: &str, new_id: &str) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New emitter id must not be empty");
+        }
+        let emitters = self
+            .general_definitions
+            .emitters
+            .as_mut()
+            .ok_or_else(|| anyhow!("No emitters defined"))?;
+        if !emitters.emitter.iter().any(|e| e.id == old_id) {
+            anyhow::bail!("Emitter with id '{}' not found", old_id);
+        }
+        if emitters.emitter.iter().any(|e| e.id == new_id) {
+            anyhow::bail!("Emitter id '{}' is already in use", new_id);
+        }
+        if let Some(e) = emitters.emitter.iter_mut().find(|e| e.id == old_id) {
+            e.id = new_id.to_string();
+        }
+
+        // Cascade into every Variant.Geometry that references this emitter.
+        if let Some(variants) = self.product_definitions.variants.as_mut() {
+            for v in &mut variants.variant {
+                if let Some(geom) = v.geometry.as_mut() {
+                    for er in &mut geom.emitter_reference {
+                        if er.emitter_id == old_id {
+                            er.emitter_id = new_id.to_string();
+                        }
+                    }
+                    if let Some(sr) = geom.simple_geometry_reference.as_mut() {
+                        if sr.emitter_id == old_id {
+                            sr.emitter_id = new_id.to_string();
+                        }
+                    }
+                    if let Some(mr) = geom.model_geometry_reference.as_mut() {
+                        for er in &mut mr.emitter_reference {
+                            if er.emitter_id == old_id {
+                                er.emitter_id = new_id.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Gets an emitter by ID.
@@ -928,5 +1395,157 @@ mod tests {
         // Remove source
         assert!(product.remove_fixed_light_source("source_1").is_ok());
         assert!(product.get_fixed_light_source("source_1").is_none());
+    }
+
+    #[test]
+    fn test_multi_channel_light_source_round_trip() {
+        // Build a GLDF that has a MultiChannelLightSource with two channels
+        // and a MultiChannelLightEmitter referencing it. Serialize → parse →
+        // assert the structure survived. This is the data-loss canary: if
+        // we ever forget to plumb a field through, this test catches it.
+        use crate::gldf::general_definitions::lightsources::{
+            ChannelPhotometryReference, ChannelSpectrumReference, Channels, Emitter, Emitters,
+            MultiChannelChannel, MultiChannelLightEmitter, MultiChannelLightSource,
+            MultiChannelLightSourceReference,
+        };
+        use crate::gldf::header::{Locale, LocaleFoo};
+
+        let mut product = GldfProduct::default();
+
+        let mc = MultiChannelLightSource {
+            id: "mc_1".to_string(),
+            name: LocaleFoo {
+                locale: vec![Locale {
+                    language: "en".to_string(),
+                    value: "Tunable LED".to_string(),
+                }],
+            },
+            manufacturer: Some("Acme".to_string()),
+            rated_input_power: 24.0,
+            channels: Channels {
+                channel: vec![
+                    MultiChannelChannel {
+                        display_name: LocaleFoo {
+                            locale: vec![Locale {
+                                language: "en".to_string(),
+                                value: "Warm".to_string(),
+                            }],
+                        },
+                        spectrum_reference: ChannelSpectrumReference {
+                            spectrum_id: "spec_warm".to_string(),
+                        },
+                        photometry_reference: ChannelPhotometryReference {
+                            photometry_id: "photo_warm".to_string(),
+                        },
+                        rated_luminous_flux: 1200,
+                        color_information: None,
+                    },
+                    MultiChannelChannel {
+                        display_name: LocaleFoo {
+                            locale: vec![Locale {
+                                language: "en".to_string(),
+                                value: "Cool".to_string(),
+                            }],
+                        },
+                        spectrum_reference: ChannelSpectrumReference {
+                            spectrum_id: "spec_cool".to_string(),
+                        },
+                        photometry_reference: ChannelPhotometryReference {
+                            photometry_id: "photo_cool".to_string(),
+                        },
+                        rated_luminous_flux: 1500,
+                        color_information: None,
+                    },
+                ],
+            },
+            ..Default::default()
+        };
+        product.add_multi_channel_light_source(mc).unwrap();
+
+        product
+            .general_definitions
+            .emitters = Some(Emitters {
+            emitter: vec![Emitter {
+                id: "em_1".to_string(),
+                multi_channel_light_emitter: vec![MultiChannelLightEmitter {
+                    light_source_reference: MultiChannelLightSourceReference {
+                        multi_channel_light_source_id: "mc_1".to_string(),
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        });
+
+        // Round-trip via XML
+        let xml = product.to_xml().expect("serialize MultiChannel");
+        assert!(
+            xml.contains("<MultiChannelLightSource"),
+            "serialized XML missing MultiChannelLightSource element"
+        );
+        assert!(
+            xml.contains("<MultiChannelLightEmitter"),
+            "serialized XML missing MultiChannelLightEmitter element"
+        );
+        assert!(
+            xml.contains("multiChannelLightSourceId=\"mc_1\""),
+            "serialized XML missing emitter reference attribute"
+        );
+
+        let parsed = GldfProduct::from_xml(&xml).expect("parse MultiChannel back");
+        let ls = parsed
+            .general_definitions
+            .light_sources
+            .as_ref()
+            .expect("parsed product has light_sources");
+        assert_eq!(ls.multi_channel_light_source.len(), 1);
+        let parsed_mc = &ls.multi_channel_light_source[0];
+        assert_eq!(parsed_mc.id, "mc_1");
+        assert_eq!(parsed_mc.manufacturer.as_deref(), Some("Acme"));
+        assert_eq!(parsed_mc.rated_input_power, 24.0);
+        assert_eq!(parsed_mc.channels.channel.len(), 2);
+        assert_eq!(parsed_mc.channels.channel[0].spectrum_reference.spectrum_id, "spec_warm");
+        assert_eq!(parsed_mc.channels.channel[1].rated_luminous_flux, 1500);
+
+        let emitters = parsed
+            .general_definitions
+            .emitters
+            .as_ref()
+            .expect("parsed product has emitters");
+        assert_eq!(emitters.emitter[0].multi_channel_light_emitter.len(), 1);
+        assert_eq!(
+            emitters.emitter[0].multi_channel_light_emitter[0]
+                .light_source_reference
+                .multi_channel_light_source_id,
+            "mc_1"
+        );
+
+        // Rename and confirm the cascade rewires the emitter reference.
+        let mut parsed = parsed;
+        parsed
+            .rename_multi_channel_light_source("mc_1", "mc_renamed")
+            .expect("rename MultiChannel");
+        assert_eq!(
+            parsed
+                .general_definitions
+                .light_sources
+                .as_ref()
+                .unwrap()
+                .multi_channel_light_source[0]
+                .id,
+            "mc_renamed"
+        );
+        assert_eq!(
+            parsed
+                .general_definitions
+                .emitters
+                .as_ref()
+                .unwrap()
+                .emitter[0]
+                .multi_channel_light_emitter[0]
+                .light_source_reference
+                .multi_channel_light_source_id,
+            "mc_renamed"
+        );
     }
 }

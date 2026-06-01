@@ -1,0 +1,328 @@
+//! Files list page — read view of `<GeneralDefinitions/Files>`, plus an
+//! edit mode that adds an "Add file…" drop-zone and per-row Edit / Remove
+//! affordances. The drop-zone is the generic primitive for shipping any
+//! attachment in the bundle; the typed Builder flows (Photometry / Spectrum)
+//! still apply when you want the `<File>` wrapped by a matching
+//! `<Photometry>` / `<Spectrum>` block.
+
+use crate::components::IdRenameChip;
+use crate::exports::download_embedded_file;
+use crate::state::{use_gldf, GldfAction};
+use leptos::prelude::*;
+use leptos::task::spawn_local;
+use std::sync::Arc;
+use wasm_bindgen::JsCast;
+use web_sys::HtmlInputElement;
+
+#[component]
+pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
+    let state = use_gldf();
+
+    let on_add_file = move |e: web_sys::Event| {
+        let Some(target) = e.target() else { return };
+        let input: HtmlInputElement = match target.dyn_into() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        let Some(files) = input.files() else { return };
+        // Process every file the user picked; one AddFileWithBytes per drop.
+        for i in 0..files.length() {
+            let Some(file) = files.get(i) else { continue };
+            let filename = file.name();
+            let gloo_file = gloo::file::File::from(file);
+            spawn_local(async move {
+                match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                    Ok(bytes) => {
+                        state.update(|s| {
+                            s.apply(GldfAction::AddFileWithBytes { bytes, filename });
+                        });
+                    }
+                    Err(err) => log::error!("read file: {}", err),
+                }
+            });
+        }
+        input.set_value("");
+    };
+
+    view! {
+        {move || state.with(|s| {
+            let files = s.product.general_definitions.files.file.clone();
+            let embedded_ids: std::collections::HashSet<String> = s.embedded_files.keys().cloned().collect();
+            view! {
+                <div class="files-container">
+                    {if editable {
+                        view! {
+                            <div class="files-add-zone" style="margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--accent-blue); border-radius: 6px; background: var(--bg-secondary);">
+                                <label style="display: flex; gap: 12px; align-items: center; font-size: 13px; cursor: pointer;">
+                                    <span style="color: var(--accent-blue); font-weight: 500;">{ "Add file(s) to this bundle" }</span>
+                                    <input
+                                        type="file"
+                                        multiple=true
+                                        on:change=on_add_file.clone()
+                                        style="font-size: 12px;"
+                                    />
+                                </label>
+                                <p style="margin: 6px 0 0; font-size: 11px; color: var(--text-tertiary);">
+                                    { "Content type is inferred from extension (.ldt → ldc/eulumdat, .spd → spectrum/text, .l3d → geo/l3d, …). Edit it inline below if the sniff is wrong. For a photometry/spectrum that should also create a <Photometry> / <Spectrum> wrapper, use the Builder page." }
+                                </p>
+                            </div>
+                        }.into_any()
+                    } else { ().into_any() }}
+                    {if files.is_empty() {
+                        view! {
+                            <div class="empty-state">
+                                <div class="icon">{ "📁" }</div>
+                                <h3>{ "No Files" }</h3>
+                                <p>{
+                                    if editable { "Drop a file above, or use the Builder for typed photometry/spectrum drops." }
+                                    else { "Load a GLDF file to view file definitions" }
+                                }</p>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <div class="card">
+                                <table class="data-table files-table-clickable">
+                                    <thead>
+                                        <tr>
+                                            <th>{ "ID" }</th>
+                                            <th>{ "File Name" }</th>
+                                            <th>{ "Content Type" }</th>
+                                            <th>{ "Type" }</th>
+                                            <th>{ "Actions" }</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {files.into_iter().map(|f| {
+                                            let embedded = embedded_ids.contains(&f.id);
+                                            view! {
+                                                <FileRow file=f editable=editable embedded=embedded />
+                                            }
+                                        }).collect::<Vec<_>>()}
+                                    </tbody>
+                                </table>
+                                <p style="text-align: center; color: var(--text-tertiary); margin-top: 16px; font-size: 13px;">
+                                    { "Click ⬇ to download. Open File Viewer for inline preview." }
+                                </p>
+                            </div>
+                        }.into_any()
+                    }}
+                </div>
+            }.into_any()
+        })}
+    }
+}
+
+#[component]
+fn FileRow(
+    file: gldf_rs::gldf::general_definitions::files::File,
+    editable: bool,
+    embedded: bool,
+) -> impl IntoView {
+    let state = use_gldf();
+    let is_editing = RwSignal::new(false);
+    let id = file.id.clone();
+    let id_for_dl = file.id.clone();
+    let id_for_save = file.id.clone();
+    let id_for_remove = file.id.clone();
+    let id_for_rename = file.id.clone();
+    let on_rename_id: Arc<dyn Fn(String) + Send + Sync> = {
+        let old_id = id_for_rename.clone();
+        Arc::new(move |new_id| {
+            state.update(|s| s.apply(GldfAction::RenameFile {
+                old_id: old_id.clone(),
+                new_id,
+            }));
+        })
+    };
+    let file_name = file.file_name.clone();
+    let file_name_for_title = file.file_name.clone();
+    let content_type = file.content_type.clone();
+    let ct_class = content_type_class(&content_type);
+    let type_attr = file.type_attr.clone();
+
+    let s_name = RwSignal::new(file.file_name.clone());
+    let s_ct = RwSignal::new(file.content_type.clone());
+    let s_type = RwSignal::new(file.type_attr.clone());
+
+    let on_download = move |e: web_sys::MouseEvent| {
+        e.stop_propagation();
+        if let Err(err) = download_embedded_file(state, &id_for_dl) {
+            log::error!("download {}: {}", id_for_dl, err);
+        }
+    };
+
+    let file_name_for_name_cell = file_name.clone();
+    let content_type_for_ct_cell = content_type.clone();
+    let type_attr_for_type_cell = type_attr.clone();
+
+    view! {
+        <tr>
+            <td class="file-id">
+                <IdRenameChip current_id=id editable=editable on_rename=on_rename_id />
+            </td>
+            <td class="file-name">
+                {move || if editable && is_editing.get() {
+                    view! { <TextField value=s_name /> }.into_any()
+                } else {
+                    view! { <span>{ file_name_for_name_cell.clone() }</span> }.into_any()
+                }}
+            </td>
+            <td>
+                {move || if editable && is_editing.get() {
+                    view! { <TextField value=s_ct /> }.into_any()
+                } else {
+                    view! {
+                        <span class=format!("content-type-badge {}", ct_class)>{ content_type_for_ct_cell.clone() }</span>
+                    }.into_any()
+                }}
+            </td>
+            <td class="file-type">
+                {move || if editable && is_editing.get() {
+                    view! { <TextField value=s_type /> }.into_any()
+                } else {
+                    view! { <span>{ type_attr_for_type_cell.clone() }</span> }.into_any()
+                }}
+            </td>
+            <td class="file-download-cell">
+                <span style="display: inline-flex; gap: 6px;">
+                    {if embedded {
+                        view! {
+                            <button
+                                class="btn-download-file"
+                                on:click=on_download
+                                title=format!("Download {}", file_name_for_title)
+                                style="background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--accent-blue);"
+                            >{ "⬇" }</button>
+                        }.into_any()
+                    } else {
+                        view! { <span style="color: var(--text-tertiary); font-size: 11px;">{ "—" }</span> }.into_any()
+                    }}
+                    {if editable {
+                        // Defining the handlers here (inside the editable branch
+                        // which evaluates exactly once per row, not per reactive
+                        // re-render) keeps them as plain Fn closures.
+                        let id_for_save = id_for_save.clone();
+                        let id_for_remove = id_for_remove.clone();
+                        let on_edit = move |_| is_editing.set(true);
+                        let on_cancel = move |_| is_editing.set(false);
+                        let on_save = move |_| {
+                            let id = id_for_save.clone();
+                            let file_name = s_name.get();
+                            let content_type = s_ct.get();
+                            let type_attr = s_type.get();
+                            state.update(|s| {
+                                s.apply(GldfAction::UpdateFile { id, content_type, type_attr, file_name });
+                            });
+                            is_editing.set(false);
+                        };
+                        let on_remove = move |_| {
+                            let id = id_for_remove.clone();
+                            let msg = format!("Remove file '{}'? Embedded bytes (if any) will be discarded.", id);
+                            if web_sys::window()
+                                .and_then(|w| w.confirm_with_message(&msg).ok())
+                                .unwrap_or(false)
+                            {
+                                state.update(|s| s.apply(GldfAction::RemoveFile(id)));
+                            }
+                        };
+                        view! {
+                            <ActionCellButtons
+                                is_editing=is_editing
+                                on_edit=on_edit
+                                on_cancel=on_cancel
+                                on_save=on_save
+                                on_remove=on_remove
+                            />
+                        }.into_any()
+                    } else { ().into_any() }}
+                </span>
+            </td>
+        </tr>
+    }
+}
+
+/// Renders the per-row action buttons (Edit/Remove or Save/Cancel) based
+/// on the `is_editing` signal. Keeping this inside its own component lets
+/// us pass per-row callbacks as plain typed props without fighting
+/// Leptos's reactive-closure trait bounds.
+#[component]
+fn ActionCellButtons(
+    is_editing: RwSignal<bool>,
+    on_edit: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
+    on_cancel: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
+    on_save: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
+    on_remove: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
+) -> impl IntoView {
+    view! {
+        {move || if is_editing.get() {
+            let on_save = on_save.clone();
+            let on_cancel = on_cancel.clone();
+            view! {
+                <>
+                    <button
+                        on:click=on_save
+                        style="padding: 2px 8px; font-size: 11px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
+                    >{ "Save" }</button>
+                    <button
+                        on:click=on_cancel
+                        style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
+                    >{ "Cancel" }</button>
+                </>
+            }.into_any()
+        } else {
+            let on_edit = on_edit.clone();
+            let on_remove = on_remove.clone();
+            view! {
+                <>
+                    <button
+                        on:click=on_edit
+                        style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
+                    >{ "✎" }</button>
+                    <button
+                        on:click=on_remove
+                        style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--accent-orange); border-radius: 4px; cursor: pointer; color: var(--accent-orange);"
+                    >{ "Remove" }</button>
+                </>
+            }.into_any()
+        }}
+    }
+}
+
+#[component]
+fn TextField(value: RwSignal<String>) -> impl IntoView {
+    let on_input = move |e: web_sys::Event| {
+        let Some(target) = e.target() else { return };
+        let input: HtmlInputElement = match target.dyn_into() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        value.set(input.value());
+    };
+    view! {
+        <input
+            type="text"
+            prop:value=move || value.get()
+            on:input=on_input
+            style="width: 100%; padding: 3px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+        />
+    }
+}
+
+fn content_type_class(ct: &str) -> &'static str {
+    if ct.starts_with("ldc/") {
+        "content-type-ldc"
+    } else if ct.starts_with("geo/") {
+        "content-type-geo"
+    } else if ct.starts_with("image/") {
+        "content-type-image"
+    } else if ct.starts_with("sensor/") {
+        "content-type-sensor"
+    } else if ct.starts_with("document/") {
+        "content-type-doc"
+    } else if ct.starts_with("spectrum/") {
+        "content-type-other"
+    } else {
+        "content-type-other"
+    }
+}

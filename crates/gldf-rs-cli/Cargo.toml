@@ -1,0 +1,21 @@
+[package]
+name = "gldf-rs-cli"
+description = "Command-line frontend for the gldf-rs editor. Reads GldfAction sequences as JSON and applies them via the shared reducer in gldf-rs-editor."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "gldf-cli"
+path = "src/main.rs"
+
+[dependencies]
+gldf-rs = { workspace = true, features = ["eulumdat"] }
+gldf-rs-editor = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }

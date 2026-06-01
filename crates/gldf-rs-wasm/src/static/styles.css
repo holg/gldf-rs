@@ -1,12 +1,28 @@
 /* macOS-style GLDF Viewer */
 
-/* CSS Variables for macOS Dark Mode */
+/* CSS Variables for macOS Dark Mode.
+ *
+ * `color-scheme: dark` tells the browser the page is dark-themed so native
+ * form controls (input, select, textarea, scrollbar, file picker) render
+ * with light-on-dark defaults instead of the OS's light theme. Without
+ * this, browsers in a light OS draw inputs with black text that then sits
+ * invisibly on top of the CSS `--bg-input` dark fill.
+ *
+ * The `--bg-primary` / `--bg-secondary` aliases exist so newer page styles
+ * (cut 2B editors) resolve to the canonical card tones without inventing
+ * an undefined variable. When a proper theme selector lands they fold into
+ * the [data-theme="light"] override naturally.
+ */
 :root {
+    color-scheme: dark;
+
     --bg-window: #1e1e1e;
     --bg-sidebar: #252526;
     --bg-content: #1e1e1e;
+    --bg-primary: #1e1e1e;
     --bg-card: #2d2d2d;
     --bg-card-hover: #363636;
+    --bg-secondary: #363636;
     --bg-input: #3c3c3c;
     --bg-table-header: #252526;
 
@@ -1449,6 +1465,48 @@ label {
 .non-canonical-flag {
     color: var(--accent-orange, #e67e22);
     font-weight: 600;
+}
+
+/* Checkbox list rows used by the Applications + Labels editors.
+ *
+ * Two problems the cut 2B port hit and this rule prevents:
+ *   1. The global `label { display: block }` rule makes every <label> a full-width
+ *      block, which pushed the text to the next line below the checkbox.
+ *   2. The global `input, select, textarea { width: 100% }` rule stretches the
+ *      checkbox to the full row width unless we explicitly cap it. With the
+ *      checkbox at 100% width, flex distributes the remaining whitespace to the
+ *      label, throwing it to the far right of the row.
+ *
+ * `flex-flow: row nowrap` + auto-width checkbox + label that takes the remaining
+ * space puts the affordance back where the user expects it: tick-box on the
+ * left, text label immediately to the right, depth indent applied via inline
+ * `padding-left` per row. */
+.application-checkbox-row {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    /* `label` from the base reset adds `margin-bottom: 6px;` — undo it. */
+    margin-bottom: 0;
+    font-size: 13px;
+    text-align: left;
+}
+
+.application-checkbox-row > input[type="checkbox"] {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    cursor: pointer;
+}
+
+.application-checkbox-row > span {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .application-checkbox-row:hover {
