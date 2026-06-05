@@ -2220,6 +2220,27 @@ impl GldfState {
                     }
                 }
             }
+            GldfAction::EnsureL3dMtlForVariant { variant_idx } => {
+                // Re-run the same sync the `UpdateHousingColor` arm above
+                // does — but on demand. Useful when the user drops a fresh
+                // L3D AFTER setting the RAL: the file-drop path doesn't
+                // know about the RAL change, so auto-fire doesn't fire,
+                // and the L3D's MTL stays at whatever colour the
+                // manufacturer shipped.
+                let product = self.product.clone();
+                match gldf_rs::l3d_mtl_sync::sync_l3d_mtl_for_housing_color(
+                    &mut self.embedded_files,
+                    &product,
+                    variant_idx,
+                ) {
+                    Ok(outcome) => {
+                        log::debug!("Sync .mtl button: {:?}", outcome);
+                    }
+                    Err(e) => {
+                        self.last_error = Some(format!("L3D MTL sync: {}", e));
+                    }
+                }
+            }
             GldfAction::SetVariantMountings { index, payload } => {
                 // Replace the n-th Variant's Mountings. `None` clears it entirely
                 // (XSD allows omission). We deref the Box → owned Mountings on the

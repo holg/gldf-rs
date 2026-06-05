@@ -690,6 +690,18 @@ pub enum GldfAction {
         scope: Scope,
         index: usize,
     },
+    /// Force a fresh sync of the n-th Variant's L3D MTL materials from
+    /// its first HousingColor's RAL value. Same machinery that auto-fires
+    /// from `UpdateHousingColor` at variant scope, but reachable as a
+    /// standalone trigger — useful when the user drops a new L3D file
+    /// AFTER setting the RAL (the file-drop path doesn't see the RAL
+    /// change, so auto-fire doesn't catch it).
+    ///
+    /// Outcome (success or hard error) lands in `last_error` for the
+    /// caller to surface. Non-actionable cases (no RAL, unknown RAL,
+    /// no L3D) are silent no-ops on purpose — they're routine mid-edit
+    /// states, not user-visible problems.
+    EnsureL3dMtlForVariant { variant_idx: usize },
     /// Replace the n-th Variant's `<Mountings>` block. Passing `None`
     /// clears it. The XSD allows any combination of the four top-level
     /// branches (Ceiling / Wall / Ground / WorkingPlane), so the action

@@ -285,6 +285,21 @@ fn HousingColorRow(
         state.update(|s| s.apply(GldfAction::RemoveHousingColor { scope: scp, index: idx }));
     };
 
+    // Force a fresh L3D MTL sync from the current RAL. Useful when the
+    // user dropped a new L3D AFTER setting the RAL — auto-fire only
+    // runs on `UpdateHousingColor`, not on file drops, so the MTL
+    // stays at the manufacturer's shipped colour. Variant scope only:
+    // the product-level HousingColor is a catalog default and isn't
+    // tied to a specific Variant's L3D.
+    let on_sync_mtl = move |_| {
+        if let Scope::Variant(variant_idx) = scope.get() {
+            state.update(|s| {
+                s.apply(GldfAction::EnsureL3dMtlForVariant { variant_idx });
+            });
+        }
+    };
+    let is_variant_scope = move || matches!(scope.get(), Scope::Variant(_));
+
     // sRGB swatch chip showing the *currently selected* RAL colour
     // (or a neutral border if nothing is picked). Re-renders whenever
     // s_ral changes so the user has immediate visual confirmation.
@@ -340,6 +355,15 @@ fn HousingColorRow(
                 list="gldf-ral-names"
                 title="Type a RAL Classic colour name (DE or EN) to autofill the RAL number."
             />
+            {move || is_variant_scope().then(|| view! {
+                <button
+                    type="button"
+                    title="Force a fresh L3D MTL sync from this RAL. Auto-fires on RAL change; this button covers the case where you dropped a new L3D file AFTER setting the RAL."
+                    on:click=on_sync_mtl
+                    data-testid=format!("marketing-sync-mtl-{}", idx)
+                    style="font-size: 11px; padding: 2px 8px;"
+                >{ "🎨 Sync .mtl" }</button>
+            })}
             <button type="button" title="Remove" on:click=on_remove>{ "✕" }</button>
         </div>
     }
