@@ -147,9 +147,33 @@ impl GldfState {
             }
             GldfAction::AddPhotometryFile { bytes, filename } => {
                 let mut editable = self.to_editable();
+                // Keep a copy for the auto-fill pass below — the file
+                // embed consumes the bytes vec.
+                let bytes_for_summary = bytes.clone();
                 match editable.add_photometry_file(bytes, &filename) {
-                    Ok(_id) => {
+                    Ok(photometry_id) => {
+                        // Best-effort: parse the LDT/IES and populate
+                        // DescriptivePhotometry. On parse failure we
+                        // silently skip the summary — the file still
+                        // embeds and the Photometry entry still exists;
+                        // the user can fill the fields manually. We log
+                        // the parse error so it shows up in browser /
+                        // server logs, but don't surface it via
+                        // `last_error` because that would make
+                        // apply_script abort and confuse callers who
+                        // dropped a valid file with weak metadata.
+                        let fill_outcome = editable.fill_descriptive_photometry(
+                            &photometry_id,
+                            &bytes_for_summary,
+                            &filename,
+                        );
                         self.take_from_editable(editable);
+                        if let Err(e) = fill_outcome {
+                            log::warn!(
+                                "Photometry summary unavailable for {}: {}",
+                                filename, e
+                            );
+                        }
                         self.last_error = None;
                     }
                     Err(e) => {
@@ -282,6 +306,374 @@ impl GldfState {
                     Err(e) => {
                         self.last_error = Some(format!("Add variant: {}", e));
                         self.is_modified = prev_modified;
+                    }
+                }
+            }
+            GldfAction::RenameVariant { old_id, new_id } => {
+                if let Some(vs) = self.product.product_definitions.variants.as_mut() {
+                    if let Some(v) = vs.variant.iter_mut().find(|v| v.id == old_id) {
+                        v.id = new_id;
+                        self.last_error = None;
+                    } else {
+                        self.last_error = Some(format!("Rename variant: unknown id {}", old_id));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error = Some("Rename variant: no variants block".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::RemoveVariant { id } => {
+                match self.product.remove_variant(&id) {
+                    Ok(_) => {
+                        self.last_error = None;
+                    }
+                    Err(e) => {
+                        self.last_error = Some(format!("Remove variant: {}", e));
+                        self.is_modified = prev_modified;
+                    }
+                }
+            }
+            GldfAction::DuplicateVariant { src_idx } => {
+                let new_id = self.product.generate_unique_id("variant");
+                let dup: Option<gldf_rs::gldf::product_definitions::Variant> = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_ref()
+                    .and_then(|vs| vs.variant.get(src_idx))
+                    .cloned();
+                match dup {
+                    Some(mut clone) => {
+                        clone.id = new_id;
+                        // Append " (copy)" to the English-locale name if
+                        // there is one, otherwise leave the name alone.
+                        if let Some(ref mut name) = clone.name {
+                            for loc in &mut name.locale {
+                                if !loc.value.is_empty() {
+                                    loc.value.push_str(" (copy)");
+                                }
+                            }
+                        }
+                        if let Some(vs) = self.product.product_definitions.variants.as_mut() {
+                            // Insert right after the source so the new
+                            // entry sits next to the one it was cloned
+                            // from in the document.
+                            let insert_at = (src_idx + 1).min(vs.variant.len());
+                            vs.variant.insert(insert_at, clone);
+                        }
+                        self.last_error = None;
+                    }
+                    None => {
+                        self.last_error = Some(format!(
+                            "Duplicate variant: index {} out of range",
+                            src_idx
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                }
+            }
+            GldfAction::SetVariantGTIN { index, gtin } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(index))
+                {
+                    v.gtin = gtin.filter(|s| !s.is_empty());
+                }
+            }
+            GldfAction::SetVariantSortOrder { index, sort_order } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(index))
+                {
+                    v.sort_order = sort_order;
+                }
+            }
+            GldfAction::MoveVariant { index, delta } => {
+                if let Some(vs) = self.product.product_definitions.variants.as_mut() {
+                    let len = vs.variant.len() as i32;
+                    let from = index as i32;
+                    let to = from + delta;
+                    if to >= 0 && to < len && from < len {
+                        let item = vs.variant.remove(index);
+                        vs.variant.insert(to as usize, item);
+                    } else {
+                        // Out-of-bounds → keep state but don't flip modified.
+                        self.is_modified = prev_modified;
+                    }
+                }
+            }
+            GldfAction::SetVariantSymbol { index, file_id } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(index))
+                {
+                    v.symbol = file_id
+                        .filter(|s| !s.is_empty())
+                        .map(|fid| gldf_rs::gldf::product_definitions::Symbol { file_id: fid });
+                }
+            }
+            GldfAction::SetVariantGeometryEmitterRefs {
+                variant_idx,
+                emitter_ids,
+            } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(variant_idx))
+                {
+                    if emitter_ids.is_empty() {
+                        v.geometry = None;
+                    } else {
+                        use gldf_rs::gldf::product_definitions::{
+                            EmitterReferenceBare, Geometry,
+                        };
+                        v.geometry = Some(Geometry {
+                            emitter_reference: emitter_ids
+                                .into_iter()
+                                .map(|eid| EmitterReferenceBare { emitter_id: eid })
+                                .collect(),
+                            simple_geometry_reference: None,
+                            model_geometry_reference: None,
+                        });
+                    }
+                } else {
+                    self.last_error = Some(format!(
+                        "SetVariantGeometryEmitterRefs: variant {} out of range",
+                        variant_idx
+                    ));
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::SetVariantGeometrySimple {
+                variant_idx,
+                geometry_id,
+                emitter_id,
+            } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(variant_idx))
+                {
+                    use gldf_rs::gldf::product_definitions::{Geometry, SimpleGeometryReference};
+                    v.geometry = Some(Geometry {
+                        emitter_reference: Vec::new(),
+                        simple_geometry_reference: Some(SimpleGeometryReference {
+                            geometry_id,
+                            emitter_id,
+                        }),
+                        model_geometry_reference: None,
+                    });
+                } else {
+                    self.last_error = Some(format!(
+                        "SetVariantGeometrySimple: variant {} out of range",
+                        variant_idx
+                    ));
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::SetVariantGeometryModel {
+                variant_idx,
+                geometry_id,
+                bindings,
+            } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(variant_idx))
+                {
+                    use gldf_rs::gldf::product_definitions::{
+                        EmitterReference, Geometry, ModelGeometryReference,
+                    };
+                    v.geometry = Some(Geometry {
+                        emitter_reference: Vec::new(),
+                        simple_geometry_reference: None,
+                        model_geometry_reference: Some(ModelGeometryReference {
+                            geometry_id,
+                            emitter_reference: bindings
+                                .into_iter()
+                                .map(|b| EmitterReference {
+                                    emitter_id: b.emitter_id,
+                                    target_model_type: b.target_model_type,
+                                    emitter_object_external_name: b.external_name,
+                                })
+                                .collect(),
+                        }),
+                    });
+                } else {
+                    self.last_error = Some(format!(
+                        "SetVariantGeometryModel: variant {} out of range",
+                        variant_idx
+                    ));
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::ClearVariantGeometry { variant_idx } => {
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(variant_idx))
+                {
+                    v.geometry = None;
+                } else {
+                    self.last_error = Some(format!(
+                        "ClearVariantGeometry: variant {} out of range",
+                        variant_idx
+                    ));
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::ImportL3dFile { bytes, filename } => {
+                use gldf_rs::gldf::general_definitions::files::File as GldfFile;
+                use gldf_rs::gldf::general_definitions::geometries::{
+                    GeometryFileReference, ModelGeometry,
+                };
+                // Auto-generate file id + geometry id; embed bytes;
+                // register both entries. Mirrors the existing
+                // AddFileWithBytes flow but for the L3D / ModelGeometry
+                // pair the wizard's Geometry step needs.
+                let file_id = self.product.generate_unique_id("file");
+                let push_file = self.product.add_file(GldfFile {
+                    id: file_id.clone(),
+                    content_type: "geo/l3d".to_string(),
+                    type_attr: "localFileName".to_string(),
+                    language: String::new(),
+                    file_name: filename.clone(),
+                });
+                if let Err(e) = push_file {
+                    self.last_error = Some(format!("ImportL3dFile (add_file): {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.embedded_files.insert(file_id.clone(), bytes);
+                    let geom_id = self.product.generate_unique_id("geometry");
+                    let push_geom = self.product.add_model_geometry(ModelGeometry {
+                        id: geom_id,
+                        geometry_file_reference: vec![GeometryFileReference {
+                            file_id: file_id.clone(),
+                            level_of_detail: None,
+                        }],
+                    });
+                    if let Err(e) = push_geom {
+                        self.last_error =
+                            Some(format!("ImportL3dFile (add_model_geometry): {}", e));
+                        self.is_modified = prev_modified;
+                    } else {
+                        self.last_error = None;
+                    }
+                }
+            }
+            GldfAction::AddSimpleGeometryCuboid {
+                width_mm,
+                length_mm,
+                height_mm,
+            } => {
+                use gldf_rs::gldf::general_definitions::geometries::{Cuboid, SimpleGeometry};
+                let id = self.product.generate_unique_id("geometry");
+                let result = self.product.add_simple_geometry(SimpleGeometry {
+                    id,
+                    cuboid: vec![Cuboid {
+                        width: vec![width_mm],
+                        length: vec![length_mm],
+                        height: vec![height_mm],
+                    }],
+                    ..Default::default()
+                });
+                if let Err(e) = result {
+                    self.last_error = Some(format!("Add simple geometry: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::AddSimpleGeometryCylinder {
+                plane,
+                diameter_mm,
+                height_mm,
+            } => {
+                use gldf_rs::gldf::general_definitions::geometries::{Cylinder, SimpleGeometry};
+                let id = self.product.generate_unique_id("geometry");
+                let result = self.product.add_simple_geometry(SimpleGeometry {
+                    id,
+                    cylinder: vec![Cylinder {
+                        plane,
+                        diameter: vec![diameter_mm],
+                        height: vec![height_mm.to_string()],
+                    }],
+                    ..Default::default()
+                });
+                if let Err(e) = result {
+                    self.last_error = Some(format!("Add simple geometry: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::RemoveSimpleGeometry { id } => {
+                if let Some(geoms) = self.product.general_definitions.geometries.as_mut() {
+                    let before = geoms.simple_geometry.len();
+                    geoms.simple_geometry.retain(|g| g.id != id);
+                    if geoms.simple_geometry.len() == before {
+                        self.last_error = Some(format!("SimpleGeometry '{}' not found", id));
+                        self.is_modified = prev_modified;
+                    } else {
+                        self.last_error = None;
+                    }
+                } else {
+                    self.last_error = Some("No geometries block present".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::ImportSpectrumFile { bytes, filename } => {
+                use gldf_rs::gldf::general_definitions::files::File as GldfFile;
+                use gldf_rs::gldf::general_definitions::photometries::{
+                    Spectrum, SpectrumFileReference,
+                };
+                // Embed the .spd bytes as a <File>, then auto-register
+                // a matching <Spectrum>. Mirrors ImportL3dFile. Does
+                // NOT bind to a light source — the LightSources page
+                // picker handles binding once the spectrum exists.
+                let file_id = self.product.generate_unique_id("spectrumFile");
+                let push_file = self.product.add_file(GldfFile {
+                    id: file_id.clone(),
+                    content_type: "spectrum/text".to_string(),
+                    type_attr: "localFileName".to_string(),
+                    language: String::new(),
+                    file_name: filename.clone(),
+                });
+                if let Err(e) = push_file {
+                    self.last_error = Some(format!("ImportSpectrumFile (add_file): {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.embedded_files.insert(file_id.clone(), bytes);
+                    let spectrum_id = self.product.generate_unique_id("spectrum");
+                    let push_spectrum = self.product.add_spectrum(Spectrum {
+                        id: spectrum_id,
+                        spectrum_file_reference: Some(SpectrumFileReference { file_id }),
+                        ..Default::default()
+                    });
+                    if let Err(e) = push_spectrum {
+                        self.last_error =
+                            Some(format!("ImportSpectrumFile (add_spectrum): {}", e));
+                        self.is_modified = prev_modified;
+                    } else {
+                        self.last_error = None;
                     }
                 }
             }
@@ -780,6 +1172,27 @@ impl GldfState {
                 fle.photometry_reference.photometry_id = photometry_id;
                 self.last_error = None;
             }
+            GldfAction::SetFixedLightEmitterFlux {
+                emitter_id,
+                index,
+                rated_luminous_flux,
+            } => {
+                let Some(emitter) = self.product.get_emitter_mut(&emitter_id) else {
+                    self.last_error = Some(format!("Emitter '{}' not found", emitter_id));
+                    self.is_modified = prev_modified;
+                    return;
+                };
+                let Some(fle) = emitter.fixed_light_emitter.get_mut(index) else {
+                    self.last_error = Some(format!(
+                        "Fixed light emitter index {} out of range on emitter '{}'",
+                        index, emitter_id
+                    ));
+                    self.is_modified = prev_modified;
+                    return;
+                };
+                fle.rated_luminous_flux = Some(rated_luminous_flux);
+                self.last_error = None;
+            }
             GldfAction::SetFixedLightEmitterLightSource {
                 emitter_id,
                 index,
@@ -1147,48 +1560,60 @@ impl GldfState {
                 }
             }
             GldfAction::AddProductMetaPicture {
+                scope,
                 file_id,
                 image_type,
             } => {
-                ensure_product_meta_pictures(self).image.push(
-                    gldf_rs::gldf::general_definitions::Image {
+                if let Some(pics) = ensure_product_meta_pictures(self, scope) {
+                    pics.image.push(gldf_rs::gldf::general_definitions::Image {
                         file_id,
                         image_type,
-                    },
-                );
+                    });
+                }
             }
             GldfAction::UpdateProductMetaPicture {
+                scope,
                 index,
                 file_id,
                 image_type,
             } => {
-                if let Some(img) = ensure_product_meta_pictures(self)
-                    .image
-                    .get_mut(index)
+                if let Some(img) = ensure_product_meta_pictures(self, scope)
+                    .and_then(|p| p.image.get_mut(index))
                 {
                     img.file_id = file_id;
                     img.image_type = image_type;
                 }
             }
-            GldfAction::RemoveProductMetaPicture(index) => {
-                if let Some(pics) = self
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_mut()
-                    .and_then(|m| m.pictures.as_mut())
-                {
+            GldfAction::RemoveProductMetaPicture { scope, index } => {
+                let pics_opt: Option<&mut gldf_rs::gldf::general_definitions::Images> =
+                    match scope {
+                        Scope::Product => self
+                            .product
+                            .product_definitions
+                            .product_meta_data
+                            .as_mut()
+                            .and_then(|m| m.pictures.as_mut()),
+                        Scope::Variant(i) => self
+                            .product
+                            .product_definitions
+                            .variants
+                            .as_mut()
+                            .and_then(|vs| vs.variant.get_mut(i))
+                            .and_then(|v| v.pictures.as_mut()),
+                    };
+                if let Some(pics) = pics_opt {
                     if index < pics.image.len() {
                         pics.image.remove(index);
                     }
                 }
             }
-            GldfAction::AddHyperlink => {
-                if let Some(hs) = ensure_hyperlinks(self, Scope::Product) {
+            GldfAction::AddHyperlink(scope) => {
+                if let Some(hs) = ensure_hyperlinks(self, scope) {
                     hs.hyperlink.push(gldf_rs::gldf::Hyperlink::default());
                 }
             }
             GldfAction::UpdateHyperlink {
+                scope,
                 index,
                 href,
                 language,
@@ -1196,7 +1621,7 @@ impl GldfState {
                 country_code,
                 value,
             } => {
-                if let Some(h) = ensure_hyperlinks(self, Scope::Product)
+                if let Some(h) = ensure_hyperlinks(self, scope)
                     .and_then(|hs| hs.hyperlink.get_mut(index))
                 {
                     h.href = href;
@@ -1206,51 +1631,624 @@ impl GldfState {
                     h.value = value;
                 }
             }
-            GldfAction::RemoveHyperlink(index) => {
-                if let Some(hs) = self
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_mut()
-                    .and_then(|m| m.descriptive_attributes.as_mut())
-                    .and_then(|a| a.marketing.as_mut())
-                    .and_then(|m| m.hyperlinks.as_mut())
-                {
+            GldfAction::RemoveHyperlink { scope, index } => {
+                let hs_opt: Option<&mut gldf_rs::gldf::Hyperlinks> = match scope {
+                    Scope::Product => self
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_mut()
+                        .and_then(|m| m.descriptive_attributes.as_mut())
+                        .and_then(|a| a.marketing.as_mut())
+                        .and_then(|m| m.hyperlinks.as_mut()),
+                    Scope::Variant(i) => self
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_mut()
+                        .and_then(|vs| vs.variant.get_mut(i))
+                        .and_then(|v| v.descriptive_attributes.as_mut())
+                        .and_then(|a| a.marketing.as_mut())
+                        .and_then(|m| m.hyperlinks.as_mut()),
+                };
+                if let Some(hs) = hs_opt {
                     if index < hs.hyperlink.len() {
                         hs.hyperlink.remove(index);
                     }
                 }
             }
-            GldfAction::SetDedicatedEmergencyLightingType(value) => {
-                if let Some(e) = ensure_emergency(self, Scope::Product) {
+            GldfAction::AddHousingColor(scope) => {
+                use gldf_rs::gldf::header::Locale;
+                use gldf_rs::gldf::product_definitions::{HousingColor, HousingColors};
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if m.housing_colors.is_none() {
+                        m.housing_colors = Some(HousingColors::default());
+                    }
+                    if let Some(hc) = m.housing_colors.as_mut() {
+                        hc.housing_color.push(HousingColor {
+                            ral: None,
+                            locale: Locale::default(),
+                        });
+                    }
+                }
+            }
+            GldfAction::UpdateHousingColor {
+                scope,
+                index,
+                ral,
+                language,
+                value,
+            } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(hc) = m.housing_colors.as_mut() {
+                        if let Some(entry) = hc.housing_color.get_mut(index) {
+                            entry.ral = ral;
+                            entry.locale.language = language;
+                            entry.locale.value = value;
+                        }
+                    }
+                }
+                // Auto-sync the variant's L3D housing material from the
+                // new RAL value. Only fires for variant-scope updates (the
+                // product-level HousingColor is a catalog default, not
+                // tied to a 3D model). All non-actionable outcomes
+                // (no RAL, unknown RAL, no L3D) are silent no-ops; only
+                // hard failures surface to `last_error`.
+                if let Scope::Variant(variant_idx) = scope {
+                    let product = self.product.clone();
+                    match gldf_rs::l3d_mtl_sync::sync_l3d_mtl_for_housing_color(
+                        &mut self.embedded_files,
+                        &product,
+                        variant_idx,
+                    ) {
+                        Ok(outcome) => {
+                            log::debug!("L3D MTL sync: {:?}", outcome);
+                        }
+                        Err(e) => {
+                            self.last_error =
+                                Some(format!("L3D MTL sync: {}", e));
+                        }
+                    }
+                }
+            }
+            GldfAction::RemoveHousingColor { scope, index } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(hc) = m.housing_colors.as_mut() {
+                        if index < hc.housing_color.len() {
+                            hc.housing_color.remove(index);
+                        }
+                    }
+                }
+            }
+            GldfAction::AddMarketRegion(scope) => {
+                use gldf_rs::gldf::header::Locale;
+                use gldf_rs::gldf::product_definitions::Markets;
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if m.markets.is_none() {
+                        m.markets = Some(Markets::default());
+                    }
+                    if let Some(mk) = m.markets.as_mut() {
+                        mk.region.push(Locale::default());
+                    }
+                }
+            }
+            GldfAction::UpdateMarketRegion {
+                scope,
+                index,
+                language,
+                value,
+            } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(mk) = m.markets.as_mut() {
+                        if let Some(entry) = mk.region.get_mut(index) {
+                            entry.language = language;
+                            entry.value = value;
+                        }
+                    }
+                }
+            }
+            GldfAction::RemoveMarketRegion { scope, index } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(mk) = m.markets.as_mut() {
+                        if index < mk.region.len() {
+                            mk.region.remove(index);
+                        }
+                    }
+                }
+            }
+            GldfAction::AddApprovalMark(scope) => {
+                use gldf_rs::gldf::product_definitions::ApprovalMarks;
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if m.approval_marks.is_none() {
+                        m.approval_marks = Some(ApprovalMarks::default());
+                    }
+                    if let Some(am) = m.approval_marks.as_mut() {
+                        am.approval_mark.push(String::new());
+                    }
+                }
+            }
+            GldfAction::UpdateApprovalMark {
+                scope,
+                index,
+                value,
+            } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(am) = m.approval_marks.as_mut() {
+                        if let Some(slot) = am.approval_mark.get_mut(index) {
+                            *slot = value;
+                        }
+                    }
+                }
+            }
+            GldfAction::RemoveApprovalMark { scope, index } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(am) = m.approval_marks.as_mut() {
+                        if index < am.approval_mark.len() {
+                            am.approval_mark.remove(index);
+                        }
+                    }
+                }
+            }
+            GldfAction::AddDesignAward(scope) => {
+                use gldf_rs::gldf::product_definitions::DesignAwards;
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if m.design_awards.is_none() {
+                        m.design_awards = Some(DesignAwards::default());
+                    }
+                    if let Some(da) = m.design_awards.as_mut() {
+                        da.design_award.push(String::new());
+                    }
+                }
+            }
+            GldfAction::UpdateDesignAward {
+                scope,
+                index,
+                value,
+            } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(da) = m.design_awards.as_mut() {
+                        if let Some(slot) = da.design_award.get_mut(index) {
+                            *slot = value;
+                        }
+                    }
+                }
+            }
+            GldfAction::RemoveDesignAward { scope, index } => {
+                if let Some(m) = ensure_marketing(self, scope) {
+                    if let Some(da) = m.design_awards.as_mut() {
+                        if index < da.design_award.len() {
+                            da.design_award.remove(index);
+                        }
+                    }
+                }
+            }
+            GldfAction::AddControlGear { prefix } => {
+                use gldf_rs::gldf::general_definitions::electrical::ControlGear;
+                let pfx = prefix.unwrap_or_else(|| "controlGear".to_string());
+                let id = self.product.generate_unique_id(&pfx);
+                let gear = ControlGear {
+                    id: id.clone(),
+                    ..ControlGear::default()
+                };
+                if let Err(e) = self.product.add_control_gear(gear) {
+                    self.last_error = Some(format!("AddControlGear: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::UpdateControlGear {
+                id,
+                name,
+                nominal_voltage_value,
+                standby_power,
+                dimmable,
+                color_controllable,
+                constant_light_output_start_power,
+                constant_light_output_end_power,
+            } => {
+                use gldf_rs::gldf::general_definitions::electrical::{
+                    CurrentType, Frequency, Voltage,
+                };
+                use gldf_rs::gldf::header::Locale;
+                let cgs_opt = self.product.general_definitions.control_gears.as_mut();
+                if let Some(cgs) = cgs_opt {
+                    if let Some(g) = cgs.control_gear.iter_mut().find(|g| g.id == id) {
+                        if g.name.locale.is_empty() {
+                            g.name.locale.push(Locale::default());
+                        }
+                        g.name.locale[0].value = name;
+                        g.nominal_voltage = nominal_voltage_value.map(|v| Voltage {
+                            type_attr: CurrentType::AC,
+                            fixed_voltage: Some(v),
+                            voltage_range: None,
+                            frequency: Frequency::Hz50,
+                        });
+                        g.standby_power = standby_power;
+                        g.dimmable = dimmable;
+                        g.color_controllable = color_controllable;
+                        g.constant_light_output_start_power =
+                            constant_light_output_start_power;
+                        g.constant_light_output_end_power = constant_light_output_end_power;
+                        self.last_error = None;
+                    } else {
+                        self.last_error = Some(format!(
+                            "UpdateControlGear: no control gear with id '{}'",
+                            id
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error =
+                        Some("UpdateControlGear: no control gears defined".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::RemoveControlGear { id } => {
+                if let Err(e) = self.product.remove_control_gear(&id) {
+                    self.last_error = Some(format!("RemoveControlGear: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::RenameControlGear { old_id, new_id } => {
+                let cgs_opt = self.product.general_definitions.control_gears.as_mut();
+                if let Some(cgs) = cgs_opt {
+                    if cgs.control_gear.iter().any(|g| g.id == new_id) {
+                        self.last_error = Some(format!(
+                            "RenameControlGear: id '{}' already exists",
+                            new_id
+                        ));
+                        self.is_modified = prev_modified;
+                    } else if let Some(g) =
+                        cgs.control_gear.iter_mut().find(|g| g.id == old_id)
+                    {
+                        g.id = new_id.clone();
+                        if let Some(eqs) = self.product.general_definitions.equipments.as_mut()
+                        {
+                            for e in eqs.equipment.iter_mut() {
+                                if let Some(cgr) = e.control_gear_reference.as_mut() {
+                                    if cgr.control_gear_id == old_id {
+                                        cgr.control_gear_id = new_id.clone();
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(emitters) =
+                            self.product.general_definitions.emitters.as_mut()
+                        {
+                            for em in emitters.emitter.iter_mut() {
+                                for fe in em.fixed_light_emitter.iter_mut() {
+                                    if let Some(cgr) = fe.control_gear_reference.as_mut() {
+                                        if cgr.control_gear_id == old_id {
+                                            cgr.control_gear_id = new_id.clone();
+                                        }
+                                    }
+                                }
+                                for me in em.multi_channel_light_emitter.iter_mut() {
+                                    if let Some(cgr) = me.control_gear_reference.as_mut() {
+                                        if cgr.control_gear_id == old_id {
+                                            cgr.control_gear_id = new_id.clone();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        self.last_error = None;
+                    } else {
+                        self.last_error = Some(format!(
+                            "RenameControlGear: no control gear with id '{}'",
+                            old_id
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error =
+                        Some("RenameControlGear: no control gears defined".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::AddEquipment { prefix } => {
+                use gldf_rs::gldf::general_definitions::electrical::Equipment;
+                let pfx = prefix.unwrap_or_else(|| "equipment".to_string());
+                let id = self.product.generate_unique_id(&pfx);
+                let eq = Equipment {
+                    id: id.clone(),
+                    ..Equipment::default()
+                };
+                if let Err(e) = self.product.add_equipment(eq) {
+                    self.last_error = Some(format!("AddEquipment: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::UpdateEquipment {
+                id,
+                light_source_id,
+                light_source_kind,
+                control_gear_id,
+                rated_input_power,
+                emergency_ballast_lumen_factor,
+                emergency_rated_luminous_flux,
+            } => {
+                use gldf_rs::gldf::general_definitions::electrical::ControlGearReference;
+                use gldf_rs::gldf::general_definitions::lightsources::LightSourceReference;
+                let eqs_opt = self.product.general_definitions.equipments.as_mut();
+                if let Some(eqs) = eqs_opt {
+                    if let Some(e) = eqs.equipment.iter_mut().find(|e| e.id == id) {
+                        e.light_source_reference = match (light_source_id, light_source_kind) {
+                            (Some(lid), Some(LightEmitterKind::Fixed)) => {
+                                Some(LightSourceReference {
+                                    fixed_light_source_id: Some(lid),
+                                    changeable_light_source_id: None,
+                                    light_source_count: None,
+                                })
+                            }
+                            (Some(lid), Some(LightEmitterKind::Changeable)) => {
+                                Some(LightSourceReference {
+                                    fixed_light_source_id: None,
+                                    changeable_light_source_id: Some(lid),
+                                    light_source_count: None,
+                                })
+                            }
+                            _ => None,
+                        };
+                        e.control_gear_reference = control_gear_id.map(|cid| {
+                            ControlGearReference {
+                                control_gear_id: cid,
+                                control_gear_count: None,
+                            }
+                        });
+                        e.rated_input_power = rated_input_power;
+                        e.emergency_ballast_lumen_factor = emergency_ballast_lumen_factor;
+                        e.emergency_rated_luminous_flux = emergency_rated_luminous_flux;
+                        self.last_error = None;
+                    } else {
+                        self.last_error = Some(format!(
+                            "UpdateEquipment: no equipment with id '{}'",
+                            id
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error =
+                        Some("UpdateEquipment: no equipments defined".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::RemoveEquipment { id } => {
+                if let Err(e) = self.product.remove_equipment(&id) {
+                    self.last_error = Some(format!("RemoveEquipment: {}", e));
+                    self.is_modified = prev_modified;
+                } else {
+                    self.last_error = None;
+                }
+            }
+            GldfAction::RenameEquipment { old_id, new_id } => {
+                let eqs_opt = self.product.general_definitions.equipments.as_mut();
+                if let Some(eqs) = eqs_opt {
+                    if eqs.equipment.iter().any(|e| e.id == new_id) {
+                        self.last_error = Some(format!(
+                            "RenameEquipment: id '{}' already exists",
+                            new_id
+                        ));
+                        self.is_modified = prev_modified;
+                    } else if let Some(e) =
+                        eqs.equipment.iter_mut().find(|e| e.id == old_id)
+                    {
+                        e.id = new_id;
+                        self.last_error = None;
+                    } else {
+                        self.last_error = Some(format!(
+                            "RenameEquipment: no equipment with id '{}'",
+                            old_id
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error =
+                        Some("RenameEquipment: no equipments defined".to_string());
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::SetEmitterControlGearReference {
+                emitter_id,
+                kind,
+                light_emitter_index,
+                control_gear_id,
+            } => {
+                use gldf_rs::gldf::general_definitions::electrical::ControlGearReference;
+                let new_ref = control_gear_id.map(|cid| ControlGearReference {
+                    control_gear_id: cid,
+                    control_gear_count: None,
+                });
+                let emitters_opt = self.product.general_definitions.emitters.as_mut();
+                if let Some(emitters) = emitters_opt {
+                    if let Some(em) =
+                        emitters.emitter.iter_mut().find(|e| e.id == emitter_id)
+                    {
+                        let hit = match kind {
+                            LightEmitterKind::Fixed => em
+                                .fixed_light_emitter
+                                .get_mut(light_emitter_index)
+                                .map(|fe| fe.control_gear_reference = new_ref.clone())
+                                .is_some(),
+                            LightEmitterKind::MultiChannel => em
+                                .multi_channel_light_emitter
+                                .get_mut(light_emitter_index)
+                                .map(|me| me.control_gear_reference = new_ref.clone())
+                                .is_some(),
+                            // ChangeableLightEmitter has no ControlGearReference
+                            // in the XSD — only Fixed/MultiChannel carry it.
+                            LightEmitterKind::Changeable | LightEmitterKind::Sensor => false,
+                        };
+                        if hit {
+                            self.last_error = None;
+                        } else {
+                            self.last_error = Some(format!(
+                                "SetEmitterControlGearReference: kind/index not found in emitter '{}'",
+                                emitter_id
+                            ));
+                            self.is_modified = prev_modified;
+                        }
+                    } else {
+                        self.last_error = Some(format!(
+                            "SetEmitterControlGearReference: no emitter '{}'",
+                            emitter_id
+                        ));
+                        self.is_modified = prev_modified;
+                    }
+                } else {
+                    self.last_error = Some(
+                        "SetEmitterControlGearReference: no emitters defined".to_string(),
+                    );
+                    self.is_modified = prev_modified;
+                }
+            }
+            GldfAction::SetLightSourceCri {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.color_rendering_index = value;
+                }
+            }
+            GldfAction::SetLightSourceCct {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.correlated_color_temperature = value;
+                }
+            }
+            GldfAction::SetLightSourceCctRange {
+                light_source_id,
+                lower,
+                upper,
+            } => {
+                use gldf_rs::gldf::general_definitions::lightsources::ColorTemperatureAdjustingRange;
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    match (lower, upper) {
+                        (None, None) => ci.color_temperature_adjusting_range = None,
+                        (l, u) => {
+                            ci.color_temperature_adjusting_range =
+                                Some(ColorTemperatureAdjustingRange { lower: l, upper: u });
+                        }
+                    }
+                }
+            }
+            GldfAction::SetLightSourceInitialColorTolerance {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.initial_color_tolerance = value;
+                }
+            }
+            GldfAction::SetLightSourceMaintainedColorTolerance {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.maintained_color_tolerance = value;
+                }
+            }
+            GldfAction::SetLightSourceTlci {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.tlci = value;
+                }
+            }
+            GldfAction::SetLightSourceMelanopicFactor {
+                light_source_id,
+                value,
+            } => {
+                if let Some(ci) = ensure_color_information(self, &light_source_id) {
+                    ci.melanopic_factor = value;
+                }
+            }
+            GldfAction::SetDedicatedEmergencyLightingType(scope, value) => {
+                if let Some(e) = ensure_emergency(self, scope) {
                     e.dedicated_emergency_lighting_type = value;
                 }
             }
-            GldfAction::AddEmergencyFlux => {
-                if let Some(d) = ensure_emergency_duration(self, Scope::Product) {
+            GldfAction::AddEmergencyFlux(scope) => {
+                if let Some(d) = ensure_emergency_duration(self, scope) {
                     d.flux.push(Flux::default());
                 }
             }
-            GldfAction::UpdateEmergencyFlux { index, hours, flux } => {
-                if let Some(entry) = ensure_emergency_duration(self, Scope::Product)
+            GldfAction::UpdateEmergencyFlux {
+                scope,
+                index,
+                hours,
+                flux,
+            } => {
+                if let Some(entry) = ensure_emergency_duration(self, scope)
                     .and_then(|d| d.flux.get_mut(index))
                 {
                     entry.hours = hours;
                     entry.value = flux;
                 }
             }
-            GldfAction::RemoveEmergencyFlux(index) => {
-                if let Some(d) = self
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_mut()
-                    .and_then(|m| m.descriptive_attributes.as_mut())
-                    .and_then(|a| a.emergency.as_mut())
-                    .and_then(|e| e.duration_time_and_flux.as_mut())
-                {
+            GldfAction::RemoveEmergencyFlux { scope, index } => {
+                let d_opt: Option<&mut gldf_rs::gldf::DurationTimeAndFlux> = match scope {
+                    Scope::Product => self
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_mut()
+                        .and_then(|m| m.descriptive_attributes.as_mut())
+                        .and_then(|a| a.emergency.as_mut())
+                        .and_then(|e| e.duration_time_and_flux.as_mut()),
+                    Scope::Variant(i) => self
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_mut()
+                        .and_then(|vs| vs.variant.get_mut(i))
+                        .and_then(|v| v.descriptive_attributes.as_mut())
+                        .and_then(|a| a.emergency.as_mut())
+                        .and_then(|e| e.duration_time_and_flux.as_mut()),
+                };
+                if let Some(d) = d_opt {
                     if index < d.flux.len() {
                         d.flux.remove(index);
+                    }
+                }
+            }
+            GldfAction::SetVariantMountings { index, payload } => {
+                // Replace the n-th Variant's Mountings. `None` clears it entirely
+                // (XSD allows omission). We deref the Box → owned Mountings on the
+                // write so the Variant doesn't carry an extra heap indirection.
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(index))
+                {
+                    v.mountings = payload.map(|b| *b);
+                }
+            }
+            GldfAction::SetVariantProductSeries { index, payload } => {
+                use gldf_rs::gldf::general_definitions::ProductSeries;
+                if let Some(v) = self
+                    .product
+                    .product_definitions
+                    .variants
+                    .as_mut()
+                    .and_then(|vs| vs.variant.get_mut(index))
+                {
+                    if payload.is_empty() {
+                        v.product_series = None;
+                    } else {
+                        v.product_series = Some(ProductSeries {
+                            product_serie: payload,
+                        });
                     }
                 }
             }
@@ -1393,14 +2391,31 @@ fn ensure_mechanical_size(state: &mut GldfState, scope: Scope) -> Option<&mut Pr
 }
 
 /// Helper to ensure ProductMetaData.Pictures exists and return mutable reference
+/// Scope-aware getter for the Pictures container. `Scope::Product` writes
+/// into `ProductMetaData.Pictures`; `Scope::Variant(idx)` writes into
+/// `Variants/Variant[idx].Pictures`. Returns `None` if the variant index
+/// is out of range. Lazily creates the container.
 fn ensure_product_meta_pictures(
     state: &mut GldfState,
-) -> &mut gldf_rs::gldf::general_definitions::Images {
-    let meta = ensure_product_meta_data(state);
-    if meta.pictures.is_none() {
-        meta.pictures = Some(gldf_rs::gldf::general_definitions::Images::default());
+    scope: Scope,
+) -> Option<&mut gldf_rs::gldf::general_definitions::Images> {
+    match scope {
+        Scope::Product => {
+            let meta = ensure_product_meta_data(state);
+            if meta.pictures.is_none() {
+                meta.pictures = Some(gldf_rs::gldf::general_definitions::Images::default());
+            }
+            Some(meta.pictures.as_mut().unwrap())
+        }
+        Scope::Variant(idx) => {
+            let variants = state.product.product_definitions.variants.as_mut()?;
+            let v = variants.variant.get_mut(idx)?;
+            if v.pictures.is_none() {
+                v.pictures = Some(gldf_rs::gldf::general_definitions::Images::default());
+            }
+            Some(v.pictures.as_mut().unwrap())
+        }
     }
-    meta.pictures.as_mut().unwrap()
 }
 
 /// Hyperlinks live under Marketing — Marketing exists at both ProductMetaData
@@ -1443,6 +2458,36 @@ fn ensure_marketing(state: &mut GldfState, scope: Scope) -> Option<&mut Marketin
         attrs.marketing = Some(Marketing::default());
     }
     attrs.marketing.as_mut()
+}
+
+/// Locate a Fixed- or ChangeableLightSource by id and vivify its
+/// `ColorInformation` block. The XSD declares `ColorInformation` on both
+/// `FixedLightSource` and `ChangeableLightSource` with identical shape
+/// (CRI, CCT, adjusting range, chromaticity, TLCI, …). Returns `None`
+/// when no light source carries the requested id.
+fn ensure_color_information<'a>(
+    state: &'a mut GldfState,
+    light_source_id: &str,
+) -> Option<&'a mut gldf_rs::gldf::general_definitions::lightsources::ColorInformation> {
+    use gldf_rs::gldf::general_definitions::lightsources::ColorInformation;
+    let ls = state.product.general_definitions.light_sources.as_mut()?;
+    for fls in ls.fixed_light_source.iter_mut() {
+        if fls.id == light_source_id {
+            if fls.color_information.is_none() {
+                fls.color_information = Some(ColorInformation::default());
+            }
+            return fls.color_information.as_mut();
+        }
+    }
+    for cls in ls.changeable_light_source.iter_mut() {
+        if cls.id == light_source_id {
+            if cls.color_information.is_none() {
+                cls.color_information = Some(ColorInformation::default());
+            }
+            return cls.color_information.as_mut();
+        }
+    }
+    None
 }
 
 fn ensure_applications(state: &mut GldfState, scope: Scope) -> Option<&mut Applications> {

@@ -39,6 +39,18 @@ pub enum LightEmitterKind {
     Sensor,
 }
 
+/// One row of a [`SetVariantGeometryModel`] action — binds an Emitter
+/// to a named object inside the 3D model. The optional model-type
+/// marker (`l3d` / `m3d` / `r3d`) disambiguates when a variant ships
+/// multiple 3D model formats; most files leave it empty.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ModelEmitterBinding {
+    pub emitter_id: String,
+    pub external_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_model_type: Option<String>,
+}
+
 /// Actions that can be performed on the GLDF state.
 ///
 /// Serialized as `{"action": "<variant>", "data": <variant payload>}`
@@ -90,6 +102,105 @@ pub enum GldfAction {
     /// Add a product variant by name (English locale). Delegates to
     /// `EditableGldf::add_variant_simple`.
     AddVariantSimple { name: String },
+    /// Rename a Variant id. Variant refs are auto-generated; only the
+    /// id changes, no cascade needed.
+    RenameVariant { old_id: String, new_id: String },
+    /// Remove a Variant by id. Delegates to `GldfProduct::remove_variant`.
+    RemoveVariant { id: String },
+    /// Deep-clone an existing Variant. The new variant gets a fresh
+    /// auto-generated id and "(copy)" appended to its Name; everything
+    /// else (GTIN, mountings, geometry, DescriptiveAttributes, etc.) is
+    /// duplicated verbatim. The most common multi-SKU workflow is
+    /// "clone, then change CCT/length/whatever".
+    DuplicateVariant { src_idx: usize },
+    /// Set / clear the GTIN attribute on the n-th Variant.
+    SetVariantGTIN { index: usize, gtin: Option<String> },
+    /// Set / clear the `@sortOrder` attribute on the n-th Variant.
+    /// XSD: lower numbers are shown first; missing falls back to
+    /// document order.
+    SetVariantSortOrder { index: usize, sort_order: Option<i32> },
+    /// Move the n-th Variant up or down in the document order. `delta`
+    /// is -1 / +1 in normal use. No-op if the move would go out of
+    /// bounds. Note: document order is the canonical fallback when
+    /// `sortOrder` is missing; sortOrder is a hint, not a guarantee.
+    MoveVariant { index: usize, delta: i32 },
+    /// Set / clear the variant `<Symbol fileId="…"/>` — a 2D CAD graphic
+    /// (SVG/DXF). The referenced File must already exist under
+    /// GeneralDefinitions/Files; the reducer does not validate (the
+    /// Linkage view flags dangling ids).
+    SetVariantSymbol {
+        index: usize,
+        file_id: Option<String>,
+    },
+    /// Replace Variant[idx].Geometry with a list of bare EmitterReferences
+    /// (no 3D geometry attached). The variant's Geometry's other
+    /// `xs:choice` branches (simple, model) are cleared. The XSD
+    /// requires *at least one* binding for a valid GLDF; an empty list
+    /// clears the Geometry entirely.
+    SetVariantGeometryEmitterRefs {
+        variant_idx: usize,
+        emitter_ids: Vec<String>,
+    },
+    /// Replace Variant[idx].Geometry with a SimpleGeometryReference.
+    /// Clears the other choice branches. Both ids must reference
+    /// existing entries (geometry under `GeneralDefinitions/Geometries`,
+    /// emitter under `GeneralDefinitions/Emitters`); the reducer does
+    /// not validate.
+    SetVariantGeometrySimple {
+        variant_idx: usize,
+        geometry_id: String,
+        emitter_id: String,
+    },
+    /// Replace Variant[idx].Geometry with a ModelGeometryReference.
+    /// `bindings` lists each emitter slot inside the 3D model, with
+    /// the named object inside the model and an optional model-type
+    /// disambiguator (l3d / m3d / r3d).
+    SetVariantGeometryModel {
+        variant_idx: usize,
+        geometry_id: String,
+        bindings: Vec<ModelEmitterBinding>,
+    },
+    /// Clear Variant[idx].Geometry to None.
+    ClearVariantGeometry { variant_idx: usize },
+    /// One-shot L3D import: stores the bytes as an embedded `<File>`
+    /// with `contentType="application/x-gldf-l3d"`, auto-registers a
+    /// matching `<ModelGeometry>` entry, and the new geometry id can
+    /// be read off the resulting GldfProduct. The wizard's Geometry
+    /// step and the Files page (`.l3d` drop) both use this.
+    ImportL3dFile {
+        bytes: Vec<u8>,
+        filename: String,
+    },
+    /// Register a new `<SimpleGeometry>` with a single Cuboid child.
+    /// Dimensions are in millimetres (matches XSD). Auto-generates an
+    /// id; the new id ends up as the last entry in
+    /// `general_definitions.geometries.simple_geometry`.
+    AddSimpleGeometryCuboid {
+        width_mm: i32,
+        length_mm: i32,
+        height_mm: i32,
+    },
+    /// Register a new `<SimpleGeometry>` with a single Cylinder child.
+    /// `plane` is optional (defaults to "XY" per XSD).
+    AddSimpleGeometryCylinder {
+        plane: Option<String>,
+        diameter_mm: i32,
+        height_mm: i32,
+    },
+    /// Remove a SimpleGeometry by id from
+    /// `general_definitions.geometries.simple_geometry`. Any variant
+    /// `SimpleGeometryReference` pointing at this id will dangle;
+    /// surfaced by the Linkage page.
+    RemoveSimpleGeometry { id: String },
+    /// Drop an `.spd` file: embed bytes as a `<File>` and auto-register
+    /// a matching `<Spectrum>` entry. Unlike `AddSpectrumFile` this
+    /// does NOT bind to a light source — the user picks the binding
+    /// afterwards in the LightSources page. Same pattern as
+    /// `ImportL3dFile` for L3D drops.
+    ImportSpectrumFile {
+        bytes: Vec<u8>,
+        filename: String,
+    },
     /// Replace the file behind an existing `<Photometry>` (id stable so
     /// emitter references survive). Delegates to
     /// `EditableGldf::replace_photometry_file`.
@@ -240,6 +351,15 @@ pub enum GldfAction {
         emitter_id: String,
         index: usize,
         photometry_id: String,
+    },
+    /// Set `RatedLuminousFlux` on the n-th FixedLightEmitter child of
+    /// the named Emitter (lumens, integer per rc.3 XSD). Used by the
+    /// Trahe ACME e2e to give wizard-built emitters realistic light
+    /// output so the Bevy 3D viewer doesn't render a dark scene.
+    SetFixedLightEmitterFlux {
+        emitter_id: String,
+        index: usize,
+        rated_luminous_flux: i32,
     },
     /// Swap the `LightSourceReference` on the n-th FixedLightEmitter
     /// child. Pass `None` to clear (schema invalid, but the user might
@@ -395,20 +515,29 @@ pub enum GldfAction {
     SetMechanicalWidth(Scope, Option<i32>),
     SetMechanicalHeight(Scope, Option<i32>),
     SetMechanicalSealingMaterial(Scope, LocaleFoo),
-    // --- Pictures (ProductMetaData.Pictures) ---
+    // --- Pictures (ProductMetaData.Pictures · Variant.Pictures) ---
+    // Scope-aware: Scope::Product writes into ProductMetaData.Pictures;
+    // Scope::Variant(idx) writes into Variants/Variant[idx].Pictures.
     AddProductMetaPicture {
+        scope: Scope,
         file_id: String,
         image_type: String,
     },
     UpdateProductMetaPicture {
+        scope: Scope,
         index: usize,
         file_id: String,
         image_type: String,
     },
-    RemoveProductMetaPicture(usize),
-    // --- Hyperlinks (ProductMetaData.DescriptiveAttributes.Marketing.Hyperlinks) ---
-    AddHyperlink,
+    RemoveProductMetaPicture {
+        scope: Scope,
+        index: usize,
+    },
+    // --- Hyperlinks (ProductMetaData.DescriptiveAttributes.Marketing.Hyperlinks ·
+    //                 Variant.DescriptiveAttributes.Marketing.Hyperlinks) ---
+    AddHyperlink(Scope),
     UpdateHyperlink {
+        scope: Scope,
         index: usize,
         href: String,
         language: Option<String>,
@@ -416,16 +545,170 @@ pub enum GldfAction {
         country_code: Option<String>,
         value: String,
     },
-    RemoveHyperlink(usize),
-    // --- Emergency (ProductMetaData.DescriptiveAttributes.Emergency) ---
-    SetDedicatedEmergencyLightingType(Option<String>),
-    AddEmergencyFlux,
+    RemoveHyperlink {
+        scope: Scope,
+        index: usize,
+    },
+    // --- Marketing.HousingColors (RAL + locale name, scope-aware) ---
+    AddHousingColor(Scope),
+    UpdateHousingColor {
+        scope: Scope,
+        index: usize,
+        ral: Option<i32>,
+        language: String,
+        value: String,
+    },
+    RemoveHousingColor {
+        scope: Scope,
+        index: usize,
+    },
+    // --- Marketing.Markets.Region (Locale entries, scope-aware) ---
+    AddMarketRegion(Scope),
+    UpdateMarketRegion {
+        scope: Scope,
+        index: usize,
+        language: String,
+        value: String,
+    },
+    RemoveMarketRegion {
+        scope: Scope,
+        index: usize,
+    },
+    // --- Marketing.ApprovalMarks.ApprovalMark (string list, scope-aware) ---
+    AddApprovalMark(Scope),
+    UpdateApprovalMark {
+        scope: Scope,
+        index: usize,
+        value: String,
+    },
+    RemoveApprovalMark {
+        scope: Scope,
+        index: usize,
+    },
+    // --- Marketing.DesignAwards.DesignAward (string list, scope-aware) ---
+    AddDesignAward(Scope),
+    UpdateDesignAward {
+        scope: Scope,
+        index: usize,
+        value: String,
+    },
+    RemoveDesignAward {
+        scope: Scope,
+        index: usize,
+    },
+    // --- ControlGear (GeneralDefinitions/ControlGears/ControlGear) ---
+    AddControlGear {
+        prefix: Option<String>,
+    },
+    UpdateControlGear {
+        id: String,
+        name: String,
+        nominal_voltage_value: Option<f64>,
+        standby_power: Option<f64>,
+        dimmable: Option<bool>,
+        color_controllable: Option<bool>,
+        constant_light_output_start_power: Option<f64>,
+        constant_light_output_end_power: Option<f64>,
+    },
+    RemoveControlGear {
+        id: String,
+    },
+    RenameControlGear {
+        old_id: String,
+        new_id: String,
+    },
+    // --- Equipment (GeneralDefinitions/Equipments/Equipment) ---
+    AddEquipment {
+        prefix: Option<String>,
+    },
+    UpdateEquipment {
+        id: String,
+        light_source_id: Option<String>,
+        light_source_kind: Option<LightEmitterKind>,
+        control_gear_id: Option<String>,
+        rated_input_power: f64,
+        emergency_ballast_lumen_factor: Option<f64>,
+        emergency_rated_luminous_flux: Option<i32>,
+    },
+    RemoveEquipment {
+        id: String,
+    },
+    RenameEquipment {
+        old_id: String,
+        new_id: String,
+    },
+    /// Bind/clear ControlGearReference on a Fixed/Changeable/MultiChannel
+    /// LightEmitter inside a given Emitter. The emitter is found by id,
+    /// then the right sub-array is updated by `kind` + `index`.
+    SetEmitterControlGearReference {
+        emitter_id: String,
+        kind: LightEmitterKind,
+        light_emitter_index: usize,
+        control_gear_id: Option<String>,
+    },
+    // --- LightSource.ColorInformation (per fixed/changeable light source) ---
+    SetLightSourceCri {
+        light_source_id: String,
+        value: Option<i32>,
+    },
+    SetLightSourceCct {
+        light_source_id: String,
+        value: Option<i32>,
+    },
+    SetLightSourceCctRange {
+        light_source_id: String,
+        lower: Option<i32>,
+        upper: Option<i32>,
+    },
+    SetLightSourceInitialColorTolerance {
+        light_source_id: String,
+        value: Option<String>,
+    },
+    SetLightSourceMaintainedColorTolerance {
+        light_source_id: String,
+        value: Option<String>,
+    },
+    SetLightSourceTlci {
+        light_source_id: String,
+        value: Option<i32>,
+    },
+    SetLightSourceMelanopicFactor {
+        light_source_id: String,
+        value: Option<f64>,
+    },
+    // --- Emergency (ProductMetaData.DescriptiveAttributes.Emergency ·
+    //                Variant.DescriptiveAttributes.Emergency) ---
+    SetDedicatedEmergencyLightingType(Scope, Option<String>),
+    AddEmergencyFlux(Scope),
     UpdateEmergencyFlux {
+        scope: Scope,
         index: usize,
         hours: i32,
         flux: i32,
     },
-    RemoveEmergencyFlux(usize),
+    RemoveEmergencyFlux {
+        scope: Scope,
+        index: usize,
+    },
+    /// Replace the n-th Variant's `<Mountings>` block. Passing `None`
+    /// clears it. The XSD allows any combination of the four top-level
+    /// branches (Ceiling / Wall / Ground / WorkingPlane), so the action
+    /// takes the full `Mountings` payload — the WASM editor builds it
+    /// up from its sub-pickers.
+    SetVariantMountings {
+        index: usize,
+        payload: Option<Box<gldf_rs::gldf::product_definitions::Mountings>>,
+    },
+    /// Replace the n-th Variant's `<ProductSeries>` block. Each entry
+    /// carries an `@id` plus an optional `<Name>` Locale (other XSD
+    /// slots — Description, Pictures, Hyperlinks — exist on the
+    /// `ProductSerie` struct but stay defaulted by the basic editor;
+    /// future cuts can expand). Passing an empty Vec clears the field
+    /// entirely (XSD makes it optional).
+    SetVariantProductSeries {
+        index: usize,
+        payload: Vec<gldf_rs::gldf::general_definitions::ProductSerie>,
+    },
     /// Reset state to default
     #[allow(dead_code)]
     Reset,
