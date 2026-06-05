@@ -1,0 +1,20 @@
+[package]
+name = "gldf-rs-i18n"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Translation store for gldf-rs (gldf.* keys + RAL Classic names). Bundles per-locale JSON for de/en/es/fr/it/ru/zh."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+gldf-rs = { workspace = true }
+
+[features]
+default = []

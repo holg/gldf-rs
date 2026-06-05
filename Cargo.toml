@@ -5,6 +5,7 @@ members = [
     "crates/gldf-bevy",
     "crates/gldf-rs-egui",
     "crates/gldf-rs-ffi",
+    "crates/gldf-rs-i18n",
     "crates/gldf-rs-lib",
     "crates/gldf-rs-python",
     "crates/gldf-rs-cli",
@@ -32,14 +33,24 @@ homepage = "https://github.com/holg/gldf-rs"
 gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
 # Editor API (frontend-agnostic) — all consumers (WASM, TUI, CLI, Python, FFI) drive this.
 gldf-rs-editor = { version = "0.4.0", path = "crates/gldf-rs-editor" }
+# Translation store (gldf.* keys + RAL Classic names). Frontends depend on this crate;
+# the lib only references its Translator trait.
+gldf-rs-i18n = { version = "0.4.0", path = "crates/gldf-rs-i18n" }
 
 # Serde helper for binary fields (Vec<u8> → JSON byte arrays without UTF-8 lossy detour).
 serde_bytes = "0.11"
 
 # TUI dependencies
-ratatui = "0.29"
+ratatui = { version = "0.29", features = ["unstable-widget-ref"] }
+# 0.2.x is the ratatui-0.29-compatible line; 0.3+ moved to ratatui 0.30.
+ratatui-explorer = "0.2"
 crossterm = "0.28"
+# OBJ parser — the TUI's L3D viewer extracts triangles from the OBJ
+# files inside the .l3d archive and renders them as a braille-canvas
+# wireframe. Used only by gldf-rs-tui.
+tobj = "4"
 clap = { version = "4", features = ["derive"] }
+dialoguer = { version = "0.11", default-features = false }
 dirs = "5"
 insta = { version = "1", features = ["yaml"] }
 

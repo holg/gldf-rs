@@ -9,6 +9,7 @@
 
 use crate::components::edit_util::event_value;
 use crate::components::ScopePicker;
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use gldf_rs::gldf::product_definitions::{
     ApprovalMarks, DesignAwards, HousingColors, Markets,
@@ -18,12 +19,19 @@ use leptos::prelude::*;
 #[component]
 pub fn MarketingEditorPage() -> impl IntoView {
     let scope = use_active_scope();
+    let state = use_gldf();
+    // Translator helper closure. Re-reads `ui_language` on every call so
+    // a language switch causes Leptos's reactive system to re-render
+    // wherever the closure is invoked. The closure is `Copy` (only
+    // captures the `state` signal, which is Copy), so we can hand it to
+    // any number of view sub-expressions without cloning.
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
 
     view! {
         <div class="editor-section marketing-editor">
-            <h2>{ "Marketing" }</h2>
+            <h2>{ move || tr("gldf.marketing.title") }</h2>
             <p class="section-description">
-                { "Housing colors (RAL + name), target markets, and design awards. All scope-aware — variants may override the product-wide defaults. Approval marks have moved to their own sidebar entry (✅ Approval Marks) so the Labels/ApprovalMarks XSD overlap is explained in one place." }
+                { move || tr("gldf.marketing.description") }
             </p>
 
             <ScopePicker scope=scope />
@@ -33,7 +41,7 @@ pub fn MarketingEditorPage() -> impl IntoView {
             <DesignAwardsSection scope=scope />
 
             <p style="font-size: 11px; color: var(--text-tertiary); margin-top: 16px;">
-                { "Other Marketing fields (designer, list prices, hyperlinks) are edited on their own pages — Hyperlinks has its own sidebar entry, and List Prices/Designer are part of the Marketing schema but not yet exposed." }
+                { move || tr("gldf.marketing.other_fields_note") }
             </p>
         </div>
     }
@@ -148,6 +156,7 @@ fn read_design_awards(s: &crate::state::GldfState, scope: Scope) -> Vec<String> 
 #[component]
 fn HousingColorsSection(scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let on_add = move |_| {
         let scp = scope.get();
         state.update(|s| s.apply(GldfAction::AddHousingColor(scp)));
@@ -155,15 +164,16 @@ fn HousingColorsSection(scope: RwSignal<Scope>) -> impl IntoView {
 
     view! {
         <div style="margin-top: 16px;">
-            <h3 style="margin-bottom: 8px;">{ "🎨 Housing colors" }</h3>
+            <h3 style="margin-bottom: 8px;">{ move || tr("gldf.marketing.housing_colors.title") }</h3>
             <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                { "Each entry is a RAL number plus an optional localized name (e.g. \"white\" in en, \"weiß\" in de). RAL is a 4-digit integer — 9016 for traffic white, 9005 for jet black. Type a RAL name in either language and the number snaps to match." }
+                { move || tr("gldf.marketing.housing_colors.description") }
             </p>
             <RalNamesDatalist />
             {move || state.with(|s| {
                 let entries = read_housing_colors(s, scope.get());
                 if entries.is_empty() {
-                    view! { <p class="empty-message">{ "No housing colors." }</p> }.into_any()
+                    let empty = tr("gldf.marketing.housing_colors.empty");
+                    view! { <p class="empty-message">{ empty }</p> }.into_any()
                 } else {
                     view! {
                         <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -174,7 +184,7 @@ fn HousingColorsSection(scope: RwSignal<Scope>) -> impl IntoView {
                     }.into_any()
                 }
             })}
-            <button type="button" on:click=on_add data-testid="marketing-add-housing-color" style="margin-top: 8px;">{ "+ Add housing color" }</button>
+            <button type="button" on:click=on_add data-testid="marketing-add-housing-color" style="margin-top: 8px;">{ move || tr("gldf.marketing.housing_colors.add") }</button>
         </div>
     }
 }
@@ -204,6 +214,7 @@ fn HousingColorRow(
 ) -> impl IntoView {
     let state = use_gldf();
     let ui_language = state.with(|s| s.ui_language.clone());
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let s_ral = RwSignal::new(ral.unwrap_or(0));
     let s_lang = RwSignal::new(if language.is_empty() {
         ui_language.clone()
@@ -322,10 +333,10 @@ fn HousingColorRow(
                 on:change=on_pick_ral
                 prop:value=move || s_ral.get().to_string()
                 style="font-family: var(--font-mono); font-size: 12px; padding: 4px 6px; min-width: 240px;"
-                title="Pick a RAL Classic colour"
+                title=tr("gldf.marketing.housing_colors.ral_title")
                 data-testid=format!("marketing-ral-select-{}", idx)
             >
-                <option value="0" selected=move || s_ral.get() == 0>{ "— select RAL —" }</option>
+                <option value="0" selected=move || s_ral.get() == 0>{ tr("gldf.marketing.housing_colors.select_ral") }</option>
                 {gldf_rs::ral::RAL_CLASSIC.iter().map(|e| {
                     let n = e.number;
                     let selected = s_ral.get() == n;
@@ -343,28 +354,28 @@ fn HousingColorRow(
                     }
                 }).collect::<Vec<_>>()}
             </select>
-            <label style="font-size: 11px; color: var(--text-secondary);">{ "lang:" }</label>
+            <label style="font-size: 11px; color: var(--text-secondary);">{ tr("gldf.common.lang") }</label>
             <input type="text" maxlength="5" placeholder="en" prop:value=s_lang.get() on:change=on_lang style="width: 60px;" />
-            <label style="font-size: 11px; color: var(--text-secondary);">{ "name:" }</label>
+            <label style="font-size: 11px; color: var(--text-secondary);">{ tr("gldf.common.name") }</label>
             <input
                 type="text"
-                placeholder="(auto from RAL — or type a RAL name)"
+                placeholder=tr("gldf.marketing.housing_colors.name_placeholder")
                 prop:value=s_value.get()
                 on:change=on_value
                 style="flex: 1;"
                 list="gldf-ral-names"
-                title="Type a RAL Classic colour name (DE or EN) to autofill the RAL number."
+                title=tr("gldf.marketing.housing_colors.name_title")
             />
             {move || is_variant_scope().then(|| view! {
                 <button
                     type="button"
-                    title="Force a fresh L3D MTL sync from this RAL. Auto-fires on RAL change; this button covers the case where you dropped a new L3D file AFTER setting the RAL."
+                    title=tr("gldf.marketing.housing_colors.sync_mtl_title")
                     on:click=on_sync_mtl
                     data-testid=format!("marketing-sync-mtl-{}", idx)
                     style="font-size: 11px; padding: 2px 8px;"
-                >{ "🎨 Sync .mtl" }</button>
+                >{ tr("gldf.marketing.housing_colors.sync_mtl") }</button>
             })}
-            <button type="button" title="Remove" on:click=on_remove>{ "✕" }</button>
+            <button type="button" title=tr("gldf.common.remove") on:click=on_remove>{ "✕" }</button>
         </div>
     }
 }
@@ -400,6 +411,7 @@ fn RalNamesDatalist() -> impl IntoView {
 #[component]
 fn MarketsSection(scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let on_add = move |_| {
         let scp = scope.get();
         state.update(|s| s.apply(GldfAction::AddMarketRegion(scp)));
@@ -407,14 +419,15 @@ fn MarketsSection(scope: RwSignal<Scope>) -> impl IntoView {
 
     view! {
         <div style="margin-top: 16px;">
-            <h3 style="margin-bottom: 8px;">{ "🌍 Markets" }</h3>
+            <h3 style="margin-bottom: 8px;">{ move || tr("gldf.marketing.markets.title") }</h3>
             <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                { "Target market regions per locale (e.g. \"EU\" in en, \"Europe\" in de)." }
+                { move || tr("gldf.marketing.markets.description") }
             </p>
             {move || state.with(|s| {
                 let entries = read_markets(s, scope.get());
                 if entries.is_empty() {
-                    view! { <p class="empty-message">{ "No markets." }</p> }.into_any()
+                    let empty = tr("gldf.marketing.markets.empty");
+                    view! { <p class="empty-message">{ empty }</p> }.into_any()
                 } else {
                     view! {
                         <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -425,7 +438,7 @@ fn MarketsSection(scope: RwSignal<Scope>) -> impl IntoView {
                     }.into_any()
                 }
             })}
-            <button type="button" on:click=on_add style="margin-top: 8px;">{ "+ Add market" }</button>
+            <button type="button" on:click=on_add style="margin-top: 8px;">{ move || tr("gldf.marketing.markets.add") }</button>
         </div>
     }
 }
@@ -438,6 +451,7 @@ fn MarketRow(
     scope: RwSignal<Scope>,
 ) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let s_lang = RwSignal::new(language.clone());
     let s_value = RwSignal::new(value.clone());
 
@@ -475,11 +489,11 @@ fn MarketRow(
 
     view! {
         <div style="display: flex; gap: 6px; align-items: center; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px;">
-            <label style="font-size: 11px; color: var(--text-secondary);">{ "lang:" }</label>
+            <label style="font-size: 11px; color: var(--text-secondary);">{ tr("gldf.common.lang") }</label>
             <input type="text" maxlength="5" placeholder="en" prop:value=s_lang.get() on:change=on_lang style="width: 60px;" />
-            <label style="font-size: 11px; color: var(--text-secondary);">{ "region:" }</label>
-            <input type="text" placeholder="EU" prop:value=s_value.get() on:change=on_value style="flex: 1;" />
-            <button type="button" title="Remove" on:click=on_remove>{ "✕" }</button>
+            <label style="font-size: 11px; color: var(--text-secondary);">{ tr("gldf.common.region") }</label>
+            <input type="text" placeholder=tr("gldf.marketing.markets.region_placeholder") prop:value=s_value.get() on:change=on_value style="flex: 1;" />
+            <button type="button" title=tr("gldf.common.remove") on:click=on_remove>{ "✕" }</button>
         </div>
     }
 }
@@ -490,39 +504,49 @@ fn MarketRow(
 #[component]
 fn DesignAwardsSection(scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let on_add = move |_| {
         let scp = scope.get();
         state.update(|s| s.apply(GldfAction::AddDesignAward(scp)));
     };
+    // Resolve the placeholder once per section render; StringListRow
+    // takes a `String` so we hand it a fresh clone per row inside the
+    // map below.
+    let placeholder = tr("gldf.marketing.design_awards.placeholder");
 
     view! {
         <div style="margin-top: 16px;">
-            <h3 style="margin-bottom: 8px;">{ "🏆 Design awards" }</h3>
+            <h3 style="margin-bottom: 8px;">{ move || tr("gldf.marketing.design_awards.title") }</h3>
             <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                { "Awards the luminaire has received (e.g. Red Dot 2024, iF Design Award)." }
+                { move || tr("gldf.marketing.design_awards.description") }
             </p>
             {move || state.with(|s| {
                 let entries = read_design_awards(s, scope.get());
                 if entries.is_empty() {
-                    view! { <p class="empty-message">{ "No design awards." }</p> }.into_any()
+                    let empty = tr("gldf.marketing.design_awards.empty");
+                    view! { <p class="empty-message">{ empty }</p> }.into_any()
                 } else {
+                    let placeholder = placeholder.clone();
                     view! {
                         <div style="display: flex; flex-direction: column; gap: 6px;">
-                            {entries.into_iter().enumerate().map(|(idx, value)| view! {
-                                <StringListRow
-                                    idx=idx
-                                    value=value
-                                    scope=scope
-                                    on_update=Box::new(|scope, idx, value| GldfAction::UpdateDesignAward { scope, index: idx, value })
-                                    on_remove=Box::new(|scope, idx| GldfAction::RemoveDesignAward { scope, index: idx })
-                                    placeholder="Red Dot 2024"
-                                />
+                            {entries.into_iter().enumerate().map(|(idx, value)| {
+                                let ph = placeholder.clone();
+                                view! {
+                                    <StringListRow
+                                        idx=idx
+                                        value=value
+                                        scope=scope
+                                        on_update=Box::new(|scope, idx, value| GldfAction::UpdateDesignAward { scope, index: idx, value })
+                                        on_remove=Box::new(|scope, idx| GldfAction::RemoveDesignAward { scope, index: idx })
+                                        placeholder=ph
+                                    />
+                                }
                             }).collect::<Vec<_>>()}
                         </div>
                     }.into_any()
                 }
             })}
-            <button type="button" on:click=on_add style="margin-top: 8px;">{ "+ Add design award" }</button>
+            <button type="button" on:click=on_add style="margin-top: 8px;">{ move || tr("gldf.marketing.design_awards.add") }</button>
         </div>
     }
 }
@@ -534,9 +558,10 @@ fn StringListRow(
     scope: RwSignal<Scope>,
     on_update: Box<dyn Fn(Scope, usize, String) -> GldfAction + Send + Sync>,
     on_remove: Box<dyn Fn(Scope, usize) -> GldfAction + Send + Sync>,
-    placeholder: &'static str,
+    placeholder: String,
 ) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let s_value = RwSignal::new(value.clone());
     let update_arc = std::sync::Arc::new(on_update);
     let remove_arc = std::sync::Arc::new(on_remove);
@@ -563,7 +588,7 @@ fn StringListRow(
     view! {
         <div style="display: flex; gap: 6px; align-items: center; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px;">
             <input type="text" placeholder=placeholder prop:value=s_value.get() on:change=on_input style="flex: 1;" />
-            <button type="button" title="Remove" on:click=on_click_remove>{ "✕" }</button>
+            <button type="button" title=tr("gldf.common.remove") on:click=on_click_remove>{ "✕" }</button>
         </div>
     }
 }

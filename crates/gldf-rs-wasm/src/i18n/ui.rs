@@ -1,36 +1,36 @@
-//! Thin wrapper around [`eulumdat_i18n::t`] for the GLDF viewer's UI chrome.
+//! Translation entry point for the GLDF viewer's UI chrome.
 //!
 //! Every visible English string the viewer hardcodes (sidebar nav, toolbar
 //! buttons, welcome screen, headings, hints, empty-state messages…) is
-//! translated by looking up a namespaced key in the family-shared
-//! `eulumdat-i18n` `extra` map. Keys are prefixed `gldf.*` so they don't
-//! collide with eulumdat-rs's own UI strings.
+//! translated by looking up a namespaced `gldf.*` key. The translation
+//! store lives in the `gldf-rs-i18n` crate (which owns the JSON locale
+//! files and exposes a `gldf_rs::i18n::Translator` impl); this module
+//! is the thin facade the viewer's pages call.
 //!
-//! Lookup order (provided by `eulumdat_i18n::t`): target language's `extra`
-//! → English's `extra` → the key itself (so a missing translation
-//! produces a visible string). For perf, the underlying API loads the
-//! locale JSON on every call; in this viewer that's tens of calls per
-//! render, sub-millisecond — fine until proven otherwise.
+//! Lookup order:
+//! 1. The target language's `gldf-rs-i18n` table
+//! 2. English fallback (handled inside `GldfStaticTranslator`)
+//! 3. The key itself (so a missing translation produces a visible
+//!    string that the user can flag)
+//!
+//! The translator is cached in a `OnceLock` so locale-JSON parsing
+//! happens exactly once per page load.
 
-use eulumdat_i18n::{t as ei18n_t, Language};
+use gldf_rs::i18n::Translator;
+use gldf_rs_i18n::GldfStaticTranslator;
+use std::sync::OnceLock;
 
-/// Translate a `gldf.*` key in the active UI language. Falls back to
-/// English, then to the key itself.
-pub fn t(key: &str, ui_language: &str) -> String {
-    let lang = lang_from_code(ui_language);
-    ei18n_t(key, lang)
+/// Shared static translator. Cheap to call; the underlying JSON parse
+/// runs on the first lookup and is reused for every subsequent call.
+fn translator() -> &'static GldfStaticTranslator {
+    static TRANSLATOR: OnceLock<GldfStaticTranslator> = OnceLock::new();
+    TRANSLATOR.get_or_init(GldfStaticTranslator::new)
 }
 
-/// Map our supported UI-language code to `eulumdat_i18n::Language`.
-fn lang_from_code(code: &str) -> Language {
-    match code {
-        "de" => Language::German,
-        "en" => Language::English,
-        "es" => Language::Spanish,
-        "fr" => Language::French,
-        "it" => Language::Italian,
-        "ru" => Language::Russian,
-        "zh" => Language::Chinese,
-        _ => Language::English,
-    }
+/// Translate a `gldf.*` key in the active UI language. Falls back to
+/// English, then to the key itself if nothing is registered.
+pub fn t(key: &str, ui_language: &str) -> String {
+    translator()
+        .t(key, ui_language)
+        .unwrap_or_else(|| key.to_string())
 }
