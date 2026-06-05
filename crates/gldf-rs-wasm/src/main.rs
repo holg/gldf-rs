@@ -612,6 +612,29 @@ fn BevyCanvasShell() -> impl IntoView {
             display
         )
     };
+
+    // Wake-up on return-to-page. While `display:none`, Bevy's `fit_canvas_to_parent`
+    // sees a 0×0 parent and the WebGL renderer stops producing new frames; the
+    // last-rendered frame stays on the canvas. When the user navigates back, the
+    // canvas reappears with its stale frame and Bevy's poll loop hasn't yet
+    // detected any timestamp change (because we don't bump it without a real
+    // data update). Result: stale-looking 3D until the user clicks/touches.
+    //
+    // Fix: on the `not-on-page → on-page` transition, (1) dispatch a window
+    // resize so Bevy's fit_canvas_to_parent recomputes, and (2) bump the
+    // `gldf_timestamp` so `poll_gldf_changes` re-spawns the scene on its next
+    // Update tick. Both are idempotent — re-bumping the timestamp with the
+    // current data is harmless, and a synthetic resize is what window resizes
+    // do anyway.
+    Effect::new(move |prev_on_page: Option<bool>| {
+        let on_page = shell.nav.get() == NavItem::BevyViewer;
+        let was_on_page = prev_on_page.unwrap_or(false);
+        if on_page && !was_on_page {
+            wake_bevy_canvas();
+        }
+        on_page
+    });
+
     view! {
         <div style=style>
             <canvas
@@ -620,6 +643,34 @@ fn BevyCanvasShell() -> impl IntoView {
             ></canvas>
             <BevyKeyboardHelp />
         </div>
+    }
+}
+
+/// Force the Bevy renderer to redraw the next frame after the canvas
+/// transitions from hidden to visible. Two nudges, both cheap:
+///
+/// * **Window resize event** — Bevy's `fit_canvas_to_parent` listens
+///   on window resize; firing a synthetic one makes it re-measure the
+///   newly-visible canvas parent.
+/// * **gldf_timestamp bump** — the in-Bevy poll system keys on this
+///   localStorage value; bumping it on every visibility transition
+///   triggers a `poll_gldf_changes` re-spawn that paints a fresh frame.
+fn wake_bevy_canvas() {
+    let Some(window) = web_sys::window() else { return };
+    // Bump the timestamp so the poll system fires on the next Update.
+    // Using `performance.now()` keeps the values monotonic without
+    // pulling `js_sys::Date::now()` (which is fine here, but matches
+    // bevy-loader.js's existing convention).
+    if let Ok(Some(storage)) = window.local_storage() {
+        let perf = window.performance().map(|p| p.now()).unwrap_or(0.0);
+        let _ = storage.set_item("gldf_timestamp", &format!("{perf}"));
+    }
+    // Synthetic resize — Bevy's web backend listens here for
+    // `fit_canvas_to_parent`. `Event::new("resize")` is enough; we
+    // don't need the `bubbles` flag because window is the dispatch
+    // target for the listener.
+    if let Ok(event) = web_sys::Event::new("resize") {
+        let _ = window.dispatch_event(&event);
     }
 }
 
