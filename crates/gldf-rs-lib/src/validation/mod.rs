@@ -26,7 +26,7 @@ pub mod xsd_enums;
 // Engine surface — original schema-rule validator. Re-exported flat so
 // existing `gldf_rs::validation::ValidationError` paths keep working
 // after the file → folder split.
-pub use engine::{ValidationError, ValidationLevel, ValidationResult};
+pub use engine::{validate_gldf, ValidationError, ValidationLevel, ValidationResult};
 
 // Canonical-enum walker surface.
 pub use canonical::{validate, Violation};

@@ -3,8 +3,10 @@
 //! Mirrors `view_overview` + `view_files_overview` + `view_light_sources_overview`
 //! + `view_variants_overview` from the Yew side.
 
-use crate::components::LocaleFooView;
+use crate::components::{LocaleFooView, ValidationBanner};
 use crate::state::use_gldf;
+use gldf_rs::gldf::general_definitions::lightsources::ColorInformation;
+use gldf_rs::gldf::product_definitions::Variant;
 use leptos::prelude::*;
 
 #[component]
@@ -32,6 +34,22 @@ pub fn OverviewPage() -> impl IntoView {
                 .as_ref()
                 .map(|p| p.photometry.len())
                 .unwrap_or(0);
+            let control_gears = s
+                .product
+                .general_definitions
+                .control_gears
+                .as_ref()
+                .map(|c| c.control_gear.clone())
+                .unwrap_or_default();
+            let control_gear_count = control_gears.len();
+            let dimmable_count = control_gears.iter().filter(|g| g.dimmable == Some(true)).count();
+            let equipment_count = s
+                .product
+                .general_definitions
+                .equipments
+                .as_ref()
+                .map(|e| e.equipment.len())
+                .unwrap_or(0);
 
             let manufacturer = if header.manufacturer.is_empty() {
                 "Unknown Manufacturer".to_string()
@@ -53,6 +71,7 @@ pub fn OverviewPage() -> impl IntoView {
 
             view! {
                 <>
+                    <ValidationBanner />
                     <div class="card product-info-card">
                         <div class="card-body">
                             <div class="product-info-header">
@@ -104,6 +123,31 @@ pub fn OverviewPage() -> impl IntoView {
                             <div class="value">{ photometries_count }</div>
                             <div class="label">{ "Photometries" }</div>
                         </div>
+                        {if control_gear_count > 0 {
+                            let label = if dimmable_count == control_gear_count {
+                                "Control Gear · all dimmable".to_string()
+                            } else if dimmable_count > 0 {
+                                format!("Control Gear · {} dimmable", dimmable_count)
+                            } else {
+                                "Control Gear".to_string()
+                            };
+                            view! {
+                                <div class="stat-card">
+                                    <div class="icon" style="color: var(--accent-yellow);">{ "⚡" }</div>
+                                    <div class="value">{ control_gear_count }</div>
+                                    <div class="label">{ label }</div>
+                                </div>
+                            }.into_any()
+                        } else { ().into_any() }}
+                        {if equipment_count > 0 {
+                            view! {
+                                <div class="stat-card">
+                                    <div class="icon" style="color: var(--accent-blue);">{ "🔌" }</div>
+                                    <div class="value">{ equipment_count }</div>
+                                    <div class="label">{ "Equipment" }</div>
+                                </div>
+                            }.into_any()
+                        } else { ().into_any() }}
                     </div>
 
                     <div class="content-columns">
@@ -229,16 +273,22 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                             } else { None };
                             view! {
                                 <div class="file-category-title">{ "Fixed" }</div>
-                                {take.into_iter().map(|ls| view! {
-                                    <div class="light-source-item">
-                                        <span class="icon" style="color: var(--accent-yellow);">{ "💡" }</span>
-                                        <div class="info">
-                                            <div class="name">
-                                                <LocaleFooView value=ls.name compact=true />
+                                {take.into_iter().map(|ls| {
+                                    let chips = color_info_chips(ls.color_information.as_ref());
+                                    view! {
+                                        <div class="light-source-item">
+                                            <span class="icon" style="color: var(--accent-yellow);">{ "💡" }</span>
+                                            <div class="info">
+                                                <div class="name">
+                                                    <LocaleFooView value=ls.name compact=true />
+                                                </div>
+                                                <div class="id">{ format!("ID: {}", ls.id) }</div>
+                                                {if !chips.is_empty() {
+                                                    view! { <ColorChipsRow chips=chips /> }.into_any()
+                                                } else { ().into_any() }}
                                             </div>
-                                            <div class="id">{ format!("ID: {}", ls.id) }</div>
                                         </div>
-                                    </div>
+                                    }
                                 }).collect::<Vec<_>>()}
                                 {extra.map(|e| view! { <div class="more-items">{ e }</div> })}
                             }.into_any()
@@ -250,16 +300,22 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                             } else { None };
                             view! {
                                 <div class="file-category-title" style="margin-top: 12px;">{ "Changeable" }</div>
-                                {take.into_iter().map(|ls| view! {
-                                    <div class="light-source-item">
-                                        <span class="icon" style="color: var(--accent-orange);">{ "💡" }</span>
-                                        <div class="info">
-                                            <div class="name">
-                                                <LocaleFooView value=ls.name compact=true />
+                                {take.into_iter().map(|ls| {
+                                    let chips = color_info_chips(ls.color_information.as_ref());
+                                    view! {
+                                        <div class="light-source-item">
+                                            <span class="icon" style="color: var(--accent-orange);">{ "💡" }</span>
+                                            <div class="info">
+                                                <div class="name">
+                                                    <LocaleFooView value=ls.name compact=true />
+                                                </div>
+                                                <div class="id">{ format!("ID: {}", ls.id) }</div>
+                                                {if !chips.is_empty() {
+                                                    view! { <ColorChipsRow chips=chips /> }.into_any()
+                                                } else { ().into_any() }}
                                             </div>
-                                            <div class="id">{ format!("ID: {}", ls.id) }</div>
                                         </div>
-                                    </div>
+                                    }
                                 }).collect::<Vec<_>>()}
                                 {extra.map(|e| view! { <div class="more-items">{ e }</div> })}
                             }.into_any()
@@ -310,6 +366,7 @@ fn VariantsOverviewCard() -> impl IntoView {
                                     let id_str = v.id.clone();
                                     let name = v.name.clone();
                                     let desc = v.description.clone();
+                                    let colors = variant_housing_color_chips(&v);
                                     view! {
                                         <div class="variant-item">
                                             <div class="variant-item-header">
@@ -327,6 +384,9 @@ fn VariantsOverviewCard() -> impl IntoView {
                                                 </div>
                                             })}
                                             <div class="id">{ format!("ID: {}", id_str) }</div>
+                                            {if !colors.is_empty() {
+                                                view! { <ColorChipsRow chips=colors /> }.into_any()
+                                            } else { ().into_any() }}
                                         </div>
                                     }
                                 }).collect::<Vec<_>>()}
@@ -337,5 +397,80 @@ fn VariantsOverviewCard() -> impl IntoView {
                 </div>
             }
         })}
+    }
+}
+
+/// Build a compact chip list for a `ColorInformation` block — only the
+/// most-recognized scalars (CCT, CRI, tunable range, TLCI). Used inline
+/// on Light Source overview rows so the user sees "3000 K · Ra 90"
+/// without drilling into the card.
+fn color_info_chips(ci: Option<&ColorInformation>) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let Some(ci) = ci else { return out };
+    if let Some(cct) = ci.correlated_color_temperature {
+        out.push(("cct".to_string(), format!("{} K", cct)));
+    }
+    if let Some(range) = ci.color_temperature_adjusting_range.as_ref() {
+        if let (Some(lo), Some(hi)) = (range.lower, range.upper) {
+            out.push(("range".to_string(), format!("{}–{} K", lo, hi)));
+        }
+    }
+    if let Some(cri) = ci.color_rendering_index {
+        out.push(("cri".to_string(), format!("Ra {}", cri)));
+    }
+    if let Some(t) = ci.tlci {
+        out.push(("tlci".to_string(), format!("TLCI {}", t)));
+    }
+    out
+}
+
+/// Build a compact chip list for a variant's `HousingColors`. Each chip
+/// is `RAL <num> — <name>` where either side may be empty. Capped at
+/// 4 chips so a noisy variant doesn't blow up the overview row.
+fn variant_housing_color_chips(v: &Variant) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let Some(marketing) = v
+        .descriptive_attributes
+        .as_ref()
+        .and_then(|a| a.marketing.as_ref())
+    else {
+        return out;
+    };
+    let Some(hc) = marketing.housing_colors.as_ref() else {
+        return out;
+    };
+    for c in hc.housing_color.iter().take(4) {
+        let label = match (c.ral, c.locale.value.trim()) {
+            (Some(r), "") => format!("RAL {}", r),
+            (Some(r), name) => format!("RAL {} — {}", r, name),
+            (None, "") => continue,
+            (None, name) => name.to_string(),
+        };
+        out.push(("color".to_string(), label));
+    }
+    out
+}
+
+#[component]
+fn ColorChipsRow(chips: Vec<(String, String)>) -> impl IntoView {
+    view! {
+        <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+            {chips.into_iter().map(|(kind, text)| {
+                let color = match kind.as_str() {
+                    "cct" => "var(--accent-yellow)",
+                    "range" => "var(--accent-orange)",
+                    "cri" => "var(--accent-blue)",
+                    "tlci" => "var(--accent-purple)",
+                    "color" => "var(--accent-green)",
+                    _ => "var(--text-secondary)",
+                };
+                view! {
+                    <span style=format!(
+                        "font-size: 10px; padding: 1px 6px; border: 1px solid {}; border-radius: 8px; color: {};",
+                        color, color
+                    )>{ text }</span>
+                }
+            }).collect::<Vec<_>>()}
+        </div>
     }
 }
