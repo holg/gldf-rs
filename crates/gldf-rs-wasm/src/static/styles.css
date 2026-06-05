@@ -3239,6 +3239,10 @@ input#file-upload {
         width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
+        /* Cap the sidebar so the stacked nav doesn't push content far below the fold.
+           ~40 % of viewport keeps the nav scrollable but leaves the editor visible. */
+        max-height: 40vh;
+        height: auto;
     }
 
     .sidebar-section {
@@ -3264,6 +3268,40 @@ input#file-upload {
     .nav-tab {
         padding: 10px 14px;
         font-size: 12px;
+    }
+
+    /* IFC viewer's two-pane layout doesn't fit at ≤768; stack the STEP
+       text and the parsed tree vertically. The page targets `.ifc-panes`
+       explicitly to keep the inline style override-friendly. */
+    .ifc-viewer .ifc-panes {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Validation-banner findings row: stack path / field / hint so long
+       paths or XSD-canon hints don't push the message column off-screen. */
+    .xsd-violation-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}
+
+/* Phone-portrait breakpoint. ≤480 covers most phones in portrait; the
+   only intent here is to keep single-column for everything that's still
+   2-up at the tablet breakpoint and avoid the sidebar swallowing the
+   viewport. */
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        max-height: 30vh;
+    }
+
+    /* Validation banner header: avoid the "Hide ▼" chip pushing off the
+       right edge when the headline is long; allow wrapping. */
+    [data-testid="validation-banner"] > div:first-child {
+        flex-wrap: wrap;
     }
 }
 
