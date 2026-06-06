@@ -296,10 +296,27 @@ fn spawn_l3d_model(
         return;
     }
 
-    // Default material for luminaire body
+    // Default material for luminaire body. When the editor pushed a
+    // housing-color override into localStorage (driven by the active
+    // variant's `HousingColor.@ral` value), use it instead of light
+    // grey — this is the renderer-side variant preview, independent
+    // of any MTL inside the L3D archive itself.
+    let (housing_base, housing_metallic) = match scene_data.housing_color_rgb {
+        Some([r, g, b]) => {
+            log(&format!(
+                "[L3D] Applying housing-color override: ({:.3}, {:.3}, {:.3})",
+                r, g, b
+            ));
+            // Coloured housings are painted, so back off the metallic
+            // factor — high-metallic samples mute strong colours into
+            // grey. Painted/anodised RAL surfaces sit around 0.05–0.1.
+            (Color::srgb(r, g, b), 0.05_f32)
+        }
+        None => (Color::srgb(0.9, 0.9, 0.9), 0.3_f32),
+    };
     let luminaire_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.9, 0.9, 0.9),
-        metallic: 0.3,
+        base_color: housing_base,
+        metallic: housing_metallic,
         perceptual_roughness: 0.5,
         ..default()
     });
@@ -577,6 +594,68 @@ fn extract_light_emitters(
         }
     }
 
+    // SensorObjects → also treat as candidate light mounts. The L3D
+    // schema models SensorObjects (presence sensors, dimmers, …) as
+    // partName-pinned anchors with Position+Rotation only — no shape,
+    // no LuminousHeights. We push them into the same emitter list
+    // because the downstream config-match (`target_name() ==
+    // emitter.name`) is what decides whether a light spawns; if no
+    // variant config targets this partName the entry is harmless.
+    // Practical use: an integrator pins a small "Sensor" partName at
+    // the centre of a fixture and routes the emergency LED through
+    // that mount point.
+    if let Some(sensors) = &geometry.sensor_objects {
+        log(&format!(
+            "[L3D] Found SensorObjects with {} objects",
+            sensors.objects().len()
+        ));
+        for obj in sensors.objects() {
+            let (px, py, pz): (f32, f32, f32) = obj.position();
+            let (rx, ry, rz): (f32, f32, f32) = obj.rotation();
+
+            let sens_pos = l3d_rs::Vec3f {
+                x: px,
+                y: py,
+                z: pz,
+            };
+            let sens_rot = l3d_rs::Vec3f {
+                x: rx,
+                y: ry,
+                z: rz,
+            };
+            let sens_matrix_raw = l3d_rs::build_transform(&sens_pos, &sens_rot);
+            let sens_matrix = l3d_mat_to_bevy(&sens_matrix_raw);
+
+            let final_matrix = current_matrix * sens_matrix;
+            let world_pos = Vec3::new(
+                final_matrix.w_axis.x,
+                final_matrix.w_axis.y,
+                final_matrix.w_axis.z,
+            );
+            let world_rot = Vec3::new(rx, ry, rz);
+
+            // Default a tiny size — SensorObjects have no native shape.
+            // Used only when a light actually spawns here and the
+            // photometry doesn't override the disc size.
+            let size = (0.05f32, 0.05f32);
+
+            log(&format!(
+                "[L3D] *** SENSOR EMITTER '{}': world({:.3},{:.3},{:.3})",
+                obj.part_name(),
+                world_pos.x,
+                world_pos.y,
+                world_pos.z,
+            ));
+
+            emitters.push(LightEmitter {
+                world_position: world_pos,
+                world_rotation: world_rot,
+                size,
+                name: obj.part_name().to_string(),
+            });
+        }
+    }
+
     // Recurse into joints if present
     if let Some(joints) = &geometry.joints {
         log(&format!(
@@ -653,14 +732,25 @@ fn spawn_lights_from_emitters(
     // Log all config names
     for c in emitter_configs {
         log(&format!(
-            "[L3D] Config leo_name: '{}', flux: {:?}, temp: {:?}",
-            c.leo_name, c.luminous_flux, c.color_temperature
+            "[L3D] Config target_name: '{}' (leo_name: '{}', external_name: {:?}), flux: {:?}, temp: {:?}",
+            c.target_name(),
+            c.leo_name,
+            c.external_name,
+            c.luminous_flux,
+            c.color_temperature
         ));
     }
 
     for emitter in emitters {
-        // Look up per-emitter configuration by LEO name
-        let config = emitter_configs.iter().find(|c| c.leo_name == emitter.name);
+        // Look up per-emitter configuration by partName. `target_name()`
+        // prefers the new `external_name` field when present (so a config
+        // can target a SensorObject's partName like "Sensor"), falling
+        // back to `leo_name` for older configs. The match is the same
+        // either way — `emitter.name` is the L3D partName, whether it
+        // came from `<LightEmittingObject>` or `<SensorObject>`.
+        let config = emitter_configs
+            .iter()
+            .find(|c| c.target_name() == emitter.name);
         log(&format!(
             "[L3D] Matching '{}' -> config found: {}",
             emitter.name,

@@ -48,53 +48,97 @@ OUT_DIR = REPO_ROOT / "tmp" / "e2e-trahe-out"
 URL = "http://localhost:8052/"
 EXPORTED_GLDF = OUT_DIR / "lumina-pro.gldf"
 
-# Variant fixtures. Each one gets its own (LDT, LightSource CCT, RAL paint,
-# named Emitter). Order matters: the script duplicates variant 0 twice in
-# Act 2 so that variants 1+2 exist BEFORE Marketing tries to scope-switch
-# to them.
+# Variant fixtures.
+#
+# Each normal variant binds the L3D's TWO physical head LEOs (LEO0 = left,
+# LEO1 = right) with the per-variant photometry pair the user specified:
+#   * V0 (yellow green): narrow on LEO0, wide on LEO1
+#   * V1 (traffic yellow): wide on LEO0, narrow on LEO1
+#   * V2 (signal white): middle on both LEOs
+# Each variant therefore needs TWO Emitters (one per binding) so each can
+# carry its own PhotometryReference; this is the XSD-clean shape.
+#
+# Variant 3 ("Emergency only") binds the centre <SensorObject partName="Sensor">
+# with a third photometry (sensor.ldt) and emergency_behavior=EmergencyOnly
+# so Bevy dims the spot to ~60 lm via the existing 0.1× emergency multiplier.
+#
+# `bindings` shape: list of dicts with
+#   `leo_name` — the L3D partName the Bevy loader matches against
+#                (LEO0 / LEO1 / Sensor — used as external_name in the
+#                Variant geometry binding so emitter.name == config.target_name)
+#   `emitter_id` — Emitter created in Act 6
+#   `photometry_id` — Photometry resolved by Act 8b id-rename
 VARIANTS = [
     {
         "idx": 0,
         "ral": 6018,
         "ral_name": "yellow green",
-        "ldt": "middle.ldt",
         "cct": 4000,
         "flux": 1600,
         "weight_kg": 0.379,
         "ls_name": "LED 4000K module",
-        # The wizard's emitter draft is skipped in Act 1 (we click Next
-        # through the Emitter step without filling fields), so no
-        # emitter is auto-created. Act 6 adds 3 fresh ones via the
-        # form → emitter_1, emitter_2, emitter_3, one per variant.
-        "emitter_id": "emitter_1",
-        "photometry_id": "photometry_1",
+        # The wizard's emitter draft is skipped in Act 1, so Act 6
+        # creates fresh emitters from scratch. lightsource_1 is the
+        # wizard's; lightsource_{2..4} land in Act 3.
         "lightsource_id": "lightsource_1",
+        "emergency_behavior": None,
+        "bindings": [
+            # leo_name pins the binding to a partName in the L3D
+            # (LightEmittingObject "LEO0"/"LEO1" or SensorObject "Sensor").
+            # emitter_auto_id is the auto-generated emitter id Act 6 mints
+            # via AddEmitterWithChild; Act 8c renames it but bindings
+            # cascade so the link survives.
+            # photometry_auto_id is the live photometry id at Act 6 time
+            # (photometry_1 = wizard middle, _2 = narrow, _3 = wide, _4 = sensor).
+            {"leo_name": "LEO0", "emitter_auto_id": "emitter_1", "photometry_auto_id": "photometry_2"},
+            {"leo_name": "LEO1", "emitter_auto_id": "emitter_2", "photometry_auto_id": "photometry_3"},
+        ],
     },
     {
         "idx": 1,
         "ral": 1023,
         "ral_name": "traffic yellow",
-        "ldt": "narrow.ldt",
         "cct": 3000,
         "flux": 1800,
         "weight_kg": 0.479,
         "ls_name": "LED 3000K module",
-        "emitter_id": "emitter_2",
-        "photometry_id": "photometry_2",
         "lightsource_id": "lightsource_2",
+        "emergency_behavior": None,
+        "bindings": [
+            {"leo_name": "LEO0", "emitter_auto_id": "emitter_3", "photometry_auto_id": "photometry_3"},
+            {"leo_name": "LEO1", "emitter_auto_id": "emitter_4", "photometry_auto_id": "photometry_2"},
+        ],
     },
     {
         "idx": 2,
         "ral": 9003,
         "ral_name": "signal white",
-        "ldt": "wide.ldt",
         "cct": 5000,
         "flux": 2200,
         "weight_kg": 0.479,
         "ls_name": "LED 5000K module",
-        "emitter_id": "emitter_3",
-        "photometry_id": "photometry_3",
         "lightsource_id": "lightsource_3",
+        "emergency_behavior": None,
+        "bindings": [
+            {"leo_name": "LEO0", "emitter_auto_id": "emitter_5", "photometry_auto_id": "photometry_1"},
+            {"leo_name": "LEO1", "emitter_auto_id": "emitter_6", "photometry_auto_id": "photometry_1"},
+        ],
+    },
+    {
+        "idx": 3,
+        "ral": 9005,  # jet black housing for the discreet emergency-only SKU
+        "ral_name": "jet black",
+        "cct": 3000,
+        # Low flux: the 0.1× emergency multiplier in gldf-bevy's l3d_loader
+        # will dim this to ~60 lm — a realistic emergency LED level.
+        "flux": 600,
+        "weight_kg": 0.479,
+        "ls_name": "LED Emergency 3000K",
+        "lightsource_id": "lightsource_4",
+        "emergency_behavior": "EmergencyOnly",
+        "bindings": [
+            {"leo_name": "Sensor", "emitter_auto_id": "emitter_7", "photometry_auto_id": "photometry_4"},
+        ],
     },
 ]
 
@@ -226,19 +270,26 @@ def act_1_wizard(page: Page) -> None:
 
 
 def act_2_files(page: Page) -> None:
-    """Files page: drop narrow.ldt + wide.ldt + product picture + 2700K SPD.
+    """Files page: drop narrow.ldt + wide.ldt + sensor.ldt + product picture + 2700K SPD.
+
+    The wizard's middle.ldt arrived in Act 1, registered as
+    `photometryFile_1`. This Act adds three more LDTs in order:
+    narrow → `photometryFile_2`, wide → `photometryFile_3`, sensor →
+    `photometryFile_4`. The Act-8c rename pass then maps the auto ids
+    to semantic names (`ldt_narrow / ldt_wide / ldt_middle / ldt_sensor`).
 
     The .spd auto-registers a `<Spectrum>` entry (per the Files-page
     drop handler — see crates/gldf-rs-editor action AddSpectrumFile-by-
     drop path). Act 3 then binds it to lightsource_2 so the TM-33
     export in Act 23 has both a photometric matrix AND an SPD curve to
     embed in ONE file."""
-    print("\n[Act 2] Files — drop 2 LDTs + product picture + SPD")
+    print("\n[Act 2] Files — drop 3 LDTs + product picture + SPD")
     tid(page, "nav-files").click()
     wait_idle(page)
     extras = [
         str(ASSETS / "narrow.ldt"),
         str(ASSETS / "wide.ldt"),
+        str(ASSETS / "sensor.ldt"),
     ]
     pic = ASSETS / "product_picture.png"
     if pic.is_file():
@@ -438,83 +489,128 @@ def act_5_equipment(page: Page) -> None:
 
 
 def act_6_emitters(page: Page) -> None:
-    """Emitters: add 3 fresh emitters (the wizard skipped its emitter
-    step), then set each emitter's RatedLuminousFlux via the JS bridge.
+    """Emitters: mint one Emitter per variant binding (7 total for the
+    4 variants — V0/V1/V2 have left+right LEO bindings, V3 has the
+    centre Sensor binding only). Each emitter carries its own
+    PhotometryReference + LightSourceReference + flux. EmergencyBehavior
+    flags the V3 emitter so gldf-bevy's 0.1× emergency multiplier dims
+    the centre LED appropriately.
 
-    The form's AddFixedLightEmitter reducer hard-codes RatedLuminousFlux=0
-    (the wizard doesn't expose a flux field); that makes the Bevy 3D
-    viewer render the scene dark because spot-light intensity scales by
-    flux. Patch each emitter post-hoc with SetFixedLightEmitterFlux."""
-    print("\n[Act 6] Emitters — add 3, set flux")
+    All dispatches go through the JS bridge: that's 7 emitters × 3
+    actions = 21 calls; using the in-page form would make this Act
+    long and slow. The form is still showcased in the demo via the
+    wizard's Emitter step in Act 1.
+
+    AddEmitterWithChild auto-generates ids — they land as
+    `emitter_1..7` in the order of dispatch. Act 8c renames to
+    semantic names afterwards.
+    """
+    print("\n[Act 6] Emitters — mint 7 across 4 variants (multi-LEO)")
     tid(page, "nav-emitters").click()
     wait_idle(page)
     import json as _json
 
     for v in VARIANTS:
-        tid(page, "emitter-add").click()
-        wait_idle(page, 400)
-        safe_select(page, tid(page, "emitter-form-photometry"), v["photometry_id"])
-        safe_select(page, tid(page, "emitter-form-lightsource"), v["lightsource_id"])
-        wait_idle(page, 200)
-        tid(page, "emitter-form-submit").click()
-        wait_idle(page, 600)
-        print(
-            f"  · {v['emitter_id']} = {v['photometry_id']} ↔ {v['lightsource_id']}"
-        )
+        for b in v["bindings"]:
+            add_payload = {
+                "action": "AddEmitterWithChild",
+                "data": {
+                    "child_name": b["leo_name"],
+                    "kind": "Fixed",
+                    "photometry_id": b["photometry_auto_id"],
+                    "fixed_light_source_id": v["lightsource_id"],
+                    "multi_channel_light_source_id": "",
+                    "sensor_id": "",
+                },
+            }
+            err = page.evaluate(
+                "(json) => window.gldf_apply_action_json(json)",
+                _json.dumps(add_payload),
+            )
+            if err:
+                print(
+                    f"  · v{v['idx']} {b['leo_name']} AddEmitter ERR: {err}"
+                )
+            else:
+                print(
+                    f"  · v{v['idx']} {b['leo_name']} → {b['emitter_auto_id']}"
+                    f" ({b['photometry_auto_id']} ↔ {v['lightsource_id']})"
+                )
 
-    # Set RatedLuminousFlux per emitter via the JS bridge.
+    # Per-emitter flux + ControlGear binding. The flux belongs to the
+    # variant, not the binding (both heads of a normal variant share
+    # the same LightSource and therefore the same module wattage), so
+    # we just stamp each binding's emitter with the variant's flux.
     for v in VARIANTS:
-        flux_payload = {
-            "action": "SetFixedLightEmitterFlux",
-            "data": {
-                "emitter_id": v["emitter_id"],
-                "index": 0,
-                "rated_luminous_flux": v["flux"],
-            },
-        }
-        err = page.evaluate(
-            "(json) => window.gldf_apply_action_json(json)",
-            _json.dumps(flux_payload),
-        )
-        if err:
-            print(f"  · {v['emitter_id']} flux set ERR: {err}")
-        else:
-            print(f"  · {v['emitter_id']} flux → {v['flux']} lm")
+        for b in v["bindings"]:
+            flux_payload = {
+                "action": "SetFixedLightEmitterFlux",
+                "data": {
+                    "emitter_id": b["emitter_auto_id"],
+                    "index": 0,
+                    "rated_luminous_flux": v["flux"],
+                },
+            }
+            err = page.evaluate(
+                "(json) => window.gldf_apply_action_json(json)",
+                _json.dumps(flux_payload),
+            )
+            if err:
+                print(
+                    f"  · {b['emitter_auto_id']} flux set ERR: {err}"
+                )
 
-    # Bind each emitter to controlGear_1 so the per-variant driver
-    # wiring lands in product.xml. The Equipment row binds the LS
-    # globally; per-emitter binding is what variant-aware viewers
-    # actually read.
-    for v in VARIANTS:
-        cg_payload = {
-            "action": "SetEmitterControlGearReference",
-            "data": {
-                "emitter_id": v["emitter_id"],
-                "kind": "Fixed",
-                "light_emitter_index": 0,
-                "control_gear_id": "controlGear_1",
-            },
-        }
-        err = page.evaluate(
-            "(json) => window.gldf_apply_action_json(json)",
-            _json.dumps(cg_payload),
-        )
-        if err:
-            print(f"  · {v['emitter_id']} ControlGear bind ERR: {err}")
-        else:
-            print(f"  · {v['emitter_id']} → controlGear_1")
+            # EmergencyOnly behaviour for the V3 sensor binding. Bevy
+            # reads this off the EmitterConfig and applies a 0.1×
+            # flux multiplier so the centre LED renders dim.
+            if v["emergency_behavior"]:
+                emerg_payload = {
+                    "action": "SetFixedLightEmitterEmergencyBehaviour",
+                    "data": {
+                        "emitter_id": b["emitter_auto_id"],
+                        "index": 0,
+                        "behaviour": v["emergency_behavior"],
+                    },
+                }
+                err = page.evaluate(
+                    "(json) => window.gldf_apply_action_json(json)",
+                    _json.dumps(emerg_payload),
+                )
+                if err:
+                    print(
+                        f"  · {b['emitter_auto_id']} EmergencyOnly ERR: {err}"
+                    )
+
+            cg_payload = {
+                "action": "SetEmitterControlGearReference",
+                "data": {
+                    "emitter_id": b["emitter_auto_id"],
+                    "kind": "Fixed",
+                    "light_emitter_index": 0,
+                    "control_gear_id": "controlGear_1",
+                },
+            }
+            err = page.evaluate(
+                "(json) => window.gldf_apply_action_json(json)",
+                _json.dumps(cg_payload),
+            )
+            if err:
+                print(
+                    f"  · {b['emitter_auto_id']} ControlGear ERR: {err}"
+                )
     screenshot(page, "11-emitters")
 
 
 def act_7_variants_duplicate(page: Page) -> None:
-    """Variants page → duplicate variant 0 twice so 3 variants exist,
-    then assign a GTIN-13 to each. GTINs are de-facto required by ERP/
-    BIM consumers — without one most catalog systems silently drop
-    the variant. Trahe-prefixed fake EAN values."""
-    print("\n[Act 7] Variants — duplicate × 2 + GTINs")
+    """Variants page → duplicate variant 0 three times so 4 variants
+    exist (3 normal + 1 emergency-only), then assign a GTIN-13 to each.
+    GTINs are de-facto required by ERP/BIM consumers — without one most
+    catalog systems silently drop the variant. Trahe-prefixed fake EAN
+    values."""
+    print("\n[Act 7] Variants — duplicate × 3 + GTINs")
     tid(page, "nav-variants").click()
     wait_idle(page)
-    for n in (1, 2):
+    for n in (1, 2, 3):
         btn = tid(page, "variant-duplicate-0")
         if btn.count() == 0:
             print(f"  · variant-duplicate-0 missing — stopped at {n - 1}")
@@ -527,7 +623,12 @@ def act_7_variants_duplicate(page: Page) -> None:
     # editor GTIN input lives inside the edit modal and has no
     # data-testid, so the bridge is the robust path.
     import json as _json
-    variant_gtins = ["4260000000017", "4260000000024", "4260000000031"]
+    variant_gtins = [
+        "4260000000017",  # V0 yellow green
+        "4260000000024",  # V1 traffic yellow
+        "4260000000031",  # V2 signal white
+        "4260000000048",  # V3 jet black emergency-only
+    ]
     for idx, gtin in enumerate(variant_gtins):
         payload = {
             "action": "SetVariantGTIN",
@@ -557,24 +658,32 @@ def act_8_rebind_emitters_per_variant(page: Page) -> None:
     # SetVariantGeometryModel via the JS bridge. The in-modal binding
     # picker has a Leptos signal race (#136) that closes the modal
     # before state.apply settles; running the action through
-    # window.gldf_apply_action_json avoids that path. SLV TRIA 2's
-    # per-variant CCT colours in the 3D viewer rely on each variant
-    # pointing at its own emitter, so we MUST land this rebind.
+    # window.gldf_apply_action_json avoids that path.
+    #
+    # NEW (Track B): each variant gets MULTIPLE bindings — one per LEO
+    # the variant uses. The binding's `external_name` IS the L3D
+    # partName (LEO0 / LEO1 / Sensor), so gldf-bevy can match each
+    # emitter config against the real LEO and spawn a tinted light
+    # at the right position.
     import json as _json
     for v in VARIANTS:
         idx = v["idx"]
         # GldfAction is `#[serde(tag = "action", content = "data")]` —
         # see crates/gldf-rs-editor/src/action.rs:60.
+        bindings_payload = [
+            {
+                "emitter_id": b["emitter_auto_id"],
+                "external_name": b["leo_name"],
+                "target_model_type": "l3d",
+            }
+            for b in v["bindings"]
+        ]
         payload = {
             "action": "SetVariantGeometryModel",
             "data": {
                 "variant_idx": idx,
                 "geometry_id": "geometry_1",
-                "bindings": [{
-                    "emitter_id": v["emitter_id"],
-                    "external_name": "Primary",
-                    "target_model_type": "l3d",
-                }],
+                "bindings": bindings_payload,
             },
         }
         result = page.evaluate(
@@ -582,9 +691,12 @@ def act_8_rebind_emitters_per_variant(page: Page) -> None:
             _json.dumps(payload),
         )
         if result:
-            print(f"  · variant {idx} → {v['emitter_id']}: ERR {result}")
+            print(
+                f"  · variant {idx} → {len(bindings_payload)} bindings: ERR {result}"
+            )
         else:
-            print(f"  · variant {idx} → {v['emitter_id']}")
+            slots = ", ".join(f"{b['leo_name']}={b['emitter_auto_id']}" for b in v["bindings"])
+            print(f"  · variant {idx} → {slots}")
         wait_idle(page, 200)
     screenshot(page, "13-variants-after-rebind")
 
@@ -600,11 +712,15 @@ def act_8c_rename_ids(page: Page) -> None:
     """
     print("\n[Act 8c] Rename auto-ids → semantic names")
     import json as _json
-    # File renames — semantic by content (narrow/middle/wide LDT + l3d + image + spd).
+    # File renames — semantic by content. Order matters: the wizard's
+    # middle.ldt arrives as photometryFile_1 in Act 1, Act 2 then drops
+    # narrow.ldt → photometryFile_2, wide.ldt → photometryFile_3, and
+    # sensor.ldt → photometryFile_4.
     file_renames = [
-        ("photometryFile_1", "ldt_narrow"),
-        ("photometryFile_2", "ldt_middle"),
+        ("photometryFile_1", "ldt_middle"),
+        ("photometryFile_2", "ldt_narrow"),
         ("photometryFile_3", "ldt_wide"),
+        ("photometryFile_4", "ldt_sensor"),
         ("file_1", "geom_tria2_l3d"),
         ("file_2", "img_product_main"),
         ("spectrumFile_1", "spd_2700k_warm"),
@@ -623,6 +739,7 @@ def act_8c_rename_ids(page: Page) -> None:
         ("lightsource_1", "ls_led_4000k"),
         ("lightsource_2", "ls_led_3000k_warm"),
         ("lightsource_3", "ls_led_5000k_cool"),
+        ("lightsource_4", "ls_led_emergency_3000k"),
     ]
     for old, new in ls_renames:
         payload = {
@@ -636,11 +753,23 @@ def act_8c_rename_ids(page: Page) -> None:
             print(f"  · LS {old} → {new} ERR: {err}")
         else:
             print(f"  · LS {old} → {new}")
-    # Emitter semantic ids — by beam.
+    # Emitter semantic ids — `em_v<variant>_<role>`. Act 6 creates 7
+    # emitters in this exact order (one per binding in VARIANTS):
+    #   V0 LEO0 (narrow) → emitter_1
+    #   V0 LEO1 (wide)   → emitter_2
+    #   V1 LEO0 (wide)   → emitter_3
+    #   V1 LEO1 (narrow) → emitter_4
+    #   V2 LEO0 (middle) → emitter_5
+    #   V2 LEO1 (middle) → emitter_6
+    #   V3 Sensor (sensor) → emitter_7
     em_renames = [
-        ("emitter_1", "em_narrow_4000k"),
-        ("emitter_2", "em_middle_3000k"),
-        ("emitter_3", "em_wide_5000k"),
+        ("emitter_1", "em_v0_left_narrow"),
+        ("emitter_2", "em_v0_right_wide"),
+        ("emitter_3", "em_v1_left_wide"),
+        ("emitter_4", "em_v1_right_narrow"),
+        ("emitter_5", "em_v2_left_middle"),
+        ("emitter_6", "em_v2_right_middle"),
+        ("emitter_7", "em_v3_sensor_emergency"),
     ]
     for old, new in em_renames:
         payload = {"action": "RenameEmitter", "data": {"old_id": old, "new_id": new}}
@@ -651,11 +780,18 @@ def act_8c_rename_ids(page: Page) -> None:
             print(f"  · Emitter {old} → {new} ERR: {err}")
         else:
             print(f"  · Emitter {old} → {new}")
-    # Variant ids — by RAL housing colour.
+    # Variant ids — by RAL housing colour. `DuplicateVariant` inserts
+    # right after the source, so duplications of variant_0 three times
+    # produce array order [variant_1, variant_4, variant_3, variant_2]
+    # (each new clone slots into position 1 and pushes prior clones
+    # down). The idx→auto-id map below is therefore non-monotonic;
+    # see crates/gldf-rs-editor/src/state.rs:362 for the insertion
+    # rule that justifies it.
     variant_renames = [
-        ("variant_1", "v_ral6018_yellowgreen"),
-        ("variant_3", "v_ral1023_trafficyellow"),
-        ("variant_2", "v_ral9003_signalwhite"),
+        ("variant_1", "v_ral6018_yellowgreen"),       # idx 0
+        ("variant_4", "v_ral1023_trafficyellow"),     # idx 1 (latest dup)
+        ("variant_3", "v_ral9003_signalwhite"),       # idx 2
+        ("variant_2", "v_ral9005_emergency_only"),    # idx 3 (oldest dup)
     ]
     for old, new in variant_renames:
         payload = {"action": "RenameVariant", "data": {"old_id": old, "new_id": new}}

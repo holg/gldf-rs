@@ -369,6 +369,17 @@ pub enum GldfAction {
         index: usize,
         light_source_id: Option<String>,
     },
+    /// Set / clear `EmergencyBehaviour` on the n-th FixedLightEmitter
+    /// child. Empty string → `None`; otherwise stores the XSD enum
+    /// verbatim (e.g. `"EmergencyOnly"`, `"Combined"`, `"NormalOnly"`).
+    /// gldf-bevy reads this off the per-emitter config and applies its
+    /// 0.1× dim multiplier when the value is `"EmergencyOnly"` so the
+    /// 3D viewer shows a realistic emergency-mode brightness.
+    SetFixedLightEmitterEmergencyBehaviour {
+        emitter_id: String,
+        index: usize,
+        behaviour: Option<String>,
+    },
     /// Swap the `PhotometryReference` on the n-th ChangeableLightEmitter
     /// child.
     SetChangeableLightEmitterPhotometry {

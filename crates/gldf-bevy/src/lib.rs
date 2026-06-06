@@ -13,7 +13,7 @@ pub mod scene;
 pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
 
 use bevy::prelude::*;
-use eulumdat_bevy::viewer::{EulumdatViewerPlugin, SceneType};
+use eulumdat_bevy::viewer::{EulumdatViewerPlugin, FirstPersonCamera, SceneType};
 pub use eulumdat_bevy::SceneSettings;
 
 /// Resource to store the current GLDF scene data
@@ -29,6 +29,18 @@ pub struct GldfSceneData {
     pub emitter_config: Vec<EmitterConfig>,
     /// Mounting information for positioning
     pub mounting: MountingConfig,
+    /// Optional housing-color override (sRGB 0..=1). When `Some`, the
+    /// renderer applies it to the luminaire body instead of the
+    /// default light grey. Driven by `HousingColor.@ral` on the
+    /// active variant — the editor resolves the RAL number to sRGB
+    /// via `gldf_rs::ral::RalEntry` and pushes the triple into
+    /// localStorage before starting the Bevy viewer.
+    ///
+    /// This is a **renderer-side override** — the underlying L3D
+    /// bytes aren't mutated, so the same L3D archive can preview
+    /// different variants in different colours without rewriting
+    /// the MTL each time.
+    pub housing_color_rgb: Option<[f32; 3]>,
 }
 
 /// Mounting configuration for luminaire positioning (serializable for WASM)
@@ -110,19 +122,44 @@ pub const EMITTER_CONFIG_KEY: &str = "gldf_emitter_config";
 #[cfg(target_arch = "wasm32")]
 pub const MOUNTING_CONFIG_KEY: &str = "gldf_mounting_config";
 #[cfg(target_arch = "wasm32")]
+pub const HOUSING_COLOR_KEY: &str = "gldf_housing_color_rgb";
+#[cfg(target_arch = "wasm32")]
 pub const GLDF_TIMESTAMP_KEY: &str = "gldf_timestamp";
 
 /// Per-emitter configuration from GLDF
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct EmitterConfig {
-    /// LEO name from L3D structure.xml
+    /// LEO name from L3D structure.xml. Kept for backwards compatibility
+    /// with the original "one config per LEO" wiring; new flows should
+    /// prefer `external_name` so SensorObject partNames can be targeted
+    /// just like LEO partNames.
     pub leo_name: String,
+    /// Optional override — the L3D partName this config targets. When
+    /// present, the loader matches against ANY partName in the
+    /// structure tree (LEOs OR SensorObjects), not just LEOs. Lets
+    /// callers spawn a tinted light at a SensorObject (e.g. a centre
+    /// emergency LED) without inventing a synthetic LEO. Backwards
+    /// compatible: `None` → fall back to `leo_name`.
+    pub external_name: Option<String>,
     /// Luminous flux in lumens
     pub luminous_flux: Option<i32>,
     /// Color temperature in Kelvin
     pub color_temperature: Option<i32>,
     /// Emergency behavior
     pub emergency_behavior: Option<String>,
+}
+
+impl EmitterConfig {
+    /// The partName this config targets. Prefers `external_name` when
+    /// set (the newer surface that can pin against a SensorObject);
+    /// falls back to `leo_name` for older configs that only know about
+    /// LEOs.
+    pub fn target_name(&self) -> &str {
+        match self.external_name.as_deref() {
+            Some(name) if !name.is_empty() => name,
+            _ => self.leo_name.as_str(),
+        }
+    }
 }
 
 /// Log to browser console (WASM only)
@@ -231,6 +268,26 @@ pub fn load_mounting_config_from_storage() -> MountingConfig {
     MountingConfig::default()
 }
 
+/// Load the variant's housing-color override from localStorage.
+///
+/// Format: a JSON array of three floats in sRGB 0..=1, e.g.
+/// `[0.733, 0.118, 0.063]` for RAL 3020 Traffic red. Absent / unparseable
+/// → `None`, which falls back to the default light-grey luminaire material.
+#[cfg(target_arch = "wasm32")]
+pub fn load_housing_color_from_storage() -> Option<[f32; 3]> {
+    let window = web_sys::window()?;
+    let storage = window.local_storage().ok()??;
+    let json = storage.get_item(HOUSING_COLOR_KEY).ok()??;
+    log(&format!("[Bevy] Loading housing color: {}", json));
+    let triple: [f32; 3] = serde_json::from_str(&json).ok()?;
+    Some(triple)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_housing_color_from_storage() -> Option<[f32; 3]> {
+    None
+}
+
 /// Get timestamp from localStorage
 #[cfg(target_arch = "wasm32")]
 pub fn get_gldf_timestamp() -> Option<String> {
@@ -293,6 +350,15 @@ pub fn poll_gldf_changes(
                     ));
                     scene_data.mounting = mounting_config;
                 }
+                // Load housing-color override. We pick it up
+                // unconditionally — `None` means "drop back to the
+                // grey default" so a variant without HousingColor
+                // resets properly when the user flips back to it.
+                scene_data.housing_color_rgb = load_housing_color_from_storage();
+                log(&format!(
+                    "[Bevy] Housing color override: {:?}",
+                    scene_data.housing_color_rgb
+                ));
                 last_timestamp.0 = new_timestamp;
             }
         }
@@ -336,6 +402,287 @@ pub fn ui_controls_system(
     if keyboard.just_pressed(KeyCode::Digit4) {
         settings.scene_type = SceneType::Outdoor;
         scene_data.scene_type = SceneType::Outdoor;
+    }
+}
+
+/// Frame the camera on the L3D model the FIRST time one spawns. After
+/// that the user's camera (orbited via mouse / WASD / arrows or set
+/// via the JS bridge) is preserved across variant swaps — so they can
+/// pick a vantage on variant A and compare it side-by-side with
+/// variant B without having to re-orbit each time. Pressing R still
+/// re-frames manually (handled by eulumdat-bevy's camera_reset
+/// system). Without this the user lost their angle every time they
+/// clicked a different variant chip.
+fn frame_camera_on_l3d(
+    _timestamp: Res<GldfTimestamp>,
+    settings: Res<SceneSettings>,
+    mut already_framed: Local<bool>,
+    l3d_models: Query<&Transform, (With<l3d_loader::L3dModel>, Without<FirstPersonCamera>)>,
+    l3d_lights: Query<&Transform, (With<l3d_loader::L3dLight>, Without<FirstPersonCamera>)>,
+    mut camera_q: Query<(&mut Transform, &mut FirstPersonCamera)>,
+) {
+    if l3d_models.is_empty() {
+        return; // No model spawned yet; wait.
+    }
+    if *already_framed {
+        return; // Honour the user's current camera; only auto-frame once per session.
+    }
+    // Centroid of the L3D's actual light-emitting objects (LEOs).
+    // Those are the user-visible lamp positions; the eulumdat / Bevy
+    // loader places them at the spot/point lights it spawns alongside
+    // each LEO in the L3D structure.xml. Falls back to the part-
+    // translation AABB if no LEO lights are present (rare — only when
+    // the L3D has no <LightEmittingObject> entries at all).
+    let (target, source_label) = if !l3d_lights.is_empty() {
+        let mut sum = Vec3::ZERO;
+        let mut n = 0u32;
+        for t in l3d_lights.iter() {
+            sum += t.translation;
+            n += 1;
+        }
+        (sum / n as f32, format!("{} LEO lights", n))
+    } else {
+        let mut sum = Vec3::ZERO;
+        let mut n = 0u32;
+        for t in l3d_models.iter() {
+            sum += t.translation;
+            n += 1;
+        }
+        (sum / n as f32, format!("{} model parts", n))
+    };
+
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    for t in l3d_models.iter() {
+        min = min.min(t.translation);
+        max = max.max(t.translation);
+    }
+    let extent = (max - min).abs();
+    let diag = extent.length().max(0.2);
+
+    // Camera offset baked from a hand-tuned vantage that frames the
+    // SLV TRIA 2 nicely with both heads + housing colour visible:
+    // pressed `P` in the live viewer with the lamp well-framed and
+    // logged cam-pos=(2.561, 2.093, 4.558) relative to LEO centroid
+    // (2.000, 2.493, 2.500). That gives this offset:
+    //
+    //   target → cam = (+0.56, -0.40, +2.06)   ~2.1 m behind, 40 cm down
+    //   yaw   = -6.142  ≈ -0.14 rad after mod-2π (looks down -Z, slight -X)
+    //   pitch = -0.041  (~ -2.3°, near-level)
+    //
+    // The 3/4 angle and near-horizontal pitch matter — straight-on
+    // shots of a recessed lamp at the ceiling are claustrophobic;
+    // this gives breathing room and shows two LEOs distinctly.
+    let cam_pos = target + Vec3::new(0.561, -0.400, 2.058);
+    // Preserve the hand-tuned yaw/pitch verbatim instead of
+    // recomputing via looking_at(target), so the slight -X drift
+    // stays intact (looking_at would dead-centre the target and lose
+    // the 3/4 angle).
+    let yaw = -6.142_f32;
+    let pitch = -0.041_f32;
+
+    for (mut transform, mut camera) in camera_q.iter_mut() {
+        transform.translation = cam_pos;
+        camera.yaw = yaw;
+        camera.pitch = pitch;
+        transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
+    }
+    *already_framed = true;
+
+    // Fat coord dump. The e2e camera_probe.py captures console logs and
+    // writes them to tmp/e2e-out/bevy-coords.log so the user can sanity-
+    // check what the scene actually looks like + tell us where the
+    // camera *should* go.
+    log("[CAMERA-PROBE] ── L3D framing dump ──");
+    log(&format!(
+        "[CAMERA-PROBE] target source: {}  centroid=({:.3}, {:.3}, {:.3})",
+        source_label, target.x, target.y, target.z
+    ));
+    for (i, t) in l3d_lights.iter().enumerate() {
+        log(&format!(
+            "[CAMERA-PROBE]   LEO light #{}: ({:.3}, {:.3}, {:.3})",
+            i, t.translation.x, t.translation.y, t.translation.z
+        ));
+    }
+    for (i, t) in l3d_models.iter().enumerate() {
+        log(&format!(
+            "[CAMERA-PROBE]   mesh part #{}: ({:.3}, {:.3}, {:.3})",
+            i, t.translation.x, t.translation.y, t.translation.z
+        ));
+    }
+    log(&format!(
+        "[CAMERA-PROBE] aabb-min=({:.3}, {:.3}, {:.3}) aabb-max=({:.3}, {:.3}, {:.3})",
+        min.x, min.y, min.z, max.x, max.y, max.z
+    ));
+    log(&format!(
+        "[CAMERA-PROBE] extent=({:.3}, {:.3}, {:.3}) diag={:.3}",
+        extent.x, extent.y, extent.z, diag
+    ));
+    log(&format!(
+        "[CAMERA-PROBE] room w×h×l = {:.2} × {:.2} × {:.2} (ceiling y={:.2})",
+        settings.room_width, settings.room_height, settings.room_length, settings.room_height
+    ));
+    log(&format!(
+        "[CAMERA-PROBE] cam-pos=({:.3}, {:.3}, {:.3}) yaw={:.3} pitch={:.3}",
+        cam_pos.x, cam_pos.y, cam_pos.z, yaw, pitch
+    ));
+    let offset_from_target = cam_pos - target;
+    log(&format!(
+        "[CAMERA-PROBE] cam-offset-from-target=({:.3}, {:.3}, {:.3})",
+        offset_from_target.x, offset_from_target.y, offset_from_target.z
+    ));
+    log("[CAMERA-PROBE] ── end ──");
+}
+
+// ─── JS ↔ Bevy camera bridge ─────────────────────────────────────────
+//
+// Two `#[wasm_bindgen]` functions exposed to JS:
+//
+//   window.gldf_bevy_set_camera(x, y, z, yaw, pitch)   // write request
+//   window.gldf_bevy_get_camera()  -> {x,y,z,yaw,pitch,fwd:[..]}
+//
+// Mechanism: a pair of `Mutex<Option<…>>` static cells. `set_camera`
+// just stores a `CamRequest`. A Bevy system reads + clears that on
+// every frame and applies it to the FirstPersonCamera. `get_camera`
+// reads the most recent snapshot the same system writes back each
+// frame.
+//
+// Why not crossbeam channels / Bevy Events? The JS side needs to be
+// callable at any time (DevTools console, Playwright `page.evaluate`)
+// without holding a Bevy World handle. A `OnceLock<Mutex<…>>` static is
+// the smallest thing that works.
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug)]
+struct CamRequest {
+    pos: Vec3,
+    yaw: f32,
+    pitch: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug, Default)]
+struct CamSnapshot {
+    pos: Vec3,
+    yaw: f32,
+    pitch: f32,
+    forward: Vec3,
+}
+
+#[cfg(target_arch = "wasm32")]
+static CAM_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<CamRequest>>> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+static CAM_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<CamSnapshot>> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn cam_request_cell() -> &'static std::sync::Mutex<Option<CamRequest>> {
+    CAM_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn cam_snapshot_cell() -> &'static std::sync::Mutex<CamSnapshot> {
+    CAM_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(CamSnapshot::default()))
+}
+
+/// JS entry: set the camera position + orientation. Yaw / pitch in
+/// radians, matching the `[CAMERA-PROBE-LIVE]` log output, so you can
+/// paste log values straight back in:
+///
+///     window.gldf_bevy_set_camera(2.561, 2.093, 4.558, -6.142, -0.041)
+///
+/// Applied on the next Bevy frame.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_camera)]
+pub fn set_camera_from_js(x: f32, y: f32, z: f32, yaw: f32, pitch: f32) {
+    if let Ok(mut slot) = cam_request_cell().lock() {
+        *slot = Some(CamRequest {
+            pos: Vec3::new(x, y, z),
+            yaw,
+            pitch,
+        });
+    }
+}
+
+/// JS entry: return the current camera state as a JSON object:
+///
+///     { x, y, z, yaw, pitch, fx, fy, fz }
+///
+/// `fx/fy/fz` is the unit forward vector (handy for sanity-checking
+/// what the camera is pointed at). Returns the last snapshot written
+/// by the apply system — could be one frame stale, never more.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_get_camera)]
+pub fn get_camera_from_js() -> wasm_bindgen::JsValue {
+    let snap = cam_snapshot_cell()
+        .lock()
+        .ok()
+        .map(|s| *s)
+        .unwrap_or_default();
+    let json = format!(
+        "{{\"x\":{:.6},\"y\":{:.6},\"z\":{:.6},\"yaw\":{:.6},\"pitch\":{:.6},\"fx\":{:.6},\"fy\":{:.6},\"fz\":{:.6}}}",
+        snap.pos.x, snap.pos.y, snap.pos.z, snap.yaw, snap.pitch,
+        snap.forward.x, snap.forward.y, snap.forward.z,
+    );
+    // Parse-and-return: JsValue from a Rust serde-less JSON is a tiny
+    // bit of plumbing, but `js_sys::JSON::parse` on the string keeps
+    // this dep-free and gives the caller a real JS object, not a
+    // string they have to JSON.parse themselves.
+    js_sys::JSON::parse(&json).unwrap_or(wasm_bindgen::JsValue::NULL)
+}
+
+/// Bevy system: consume a pending `CamRequest` (if any) and apply it
+/// to the FirstPersonCamera, then write the current camera state back
+/// to `CAM_SNAPSHOT` so `get_camera_from_js` can read it.
+#[cfg(target_arch = "wasm32")]
+fn js_camera_bridge_apply(
+    mut camera_q: Query<(&mut Transform, &mut FirstPersonCamera)>,
+) {
+    // Take any pending request.
+    let req = cam_request_cell().lock().ok().and_then(|mut s| s.take());
+    for (mut transform, mut camera) in camera_q.iter_mut() {
+        if let Some(r) = req {
+            transform.translation = r.pos;
+            camera.yaw = r.yaw;
+            camera.pitch = r.pitch.clamp(-1.5, 1.5);
+            transform.rotation =
+                Quat::from_euler(EulerRot::YXZ, camera.yaw, camera.pitch, 0.0);
+        }
+        // Refresh snapshot every frame (cheap; one Mutex lock).
+        if let Ok(mut snap) = cam_snapshot_cell().lock() {
+            let fwd = transform.forward();
+            *snap = CamSnapshot {
+                pos: transform.translation,
+                yaw: camera.yaw,
+                pitch: camera.pitch,
+                forward: Vec3::new(fwd.x, fwd.y, fwd.z),
+            };
+        }
+    }
+}
+
+/// Press `P` to dump the current camera position + yaw + pitch to the
+/// browser console as a `[CAMERA-PROBE-LIVE]` line. Pair with
+/// `tests/e2e/camera_probe.py`: orbit the scene with mouse / arrow keys
+/// until the luminaire is framed, hit P, then read the coords back from
+/// `tmp/e2e-out/bevy-coords.log` to bake them into `frame_camera_on_l3d`.
+fn print_camera_on_key(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    camera_q: Query<(&Transform, &FirstPersonCamera)>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyP) {
+        return;
+    }
+    for (t, cam) in camera_q.iter() {
+        let fwd = t.forward();
+        log(&format!(
+            "[CAMERA-PROBE-LIVE] cam-pos=({:.3}, {:.3}, {:.3}) yaw={:.3} pitch={:.3} forward=({:.3}, {:.3}, {:.3})",
+            t.translation.x, t.translation.y, t.translation.z,
+            cam.yaw, cam.pitch,
+            fwd.x, fwd.y, fwd.z,
+        ));
     }
 }
 
@@ -387,13 +734,15 @@ pub fn run_on_canvas(canvas_selector: &str) {
     let ldt_data = load_ldt_from_storage();
     let emitter_config = load_emitter_config_from_storage();
     let mounting_config = load_mounting_config_from_storage();
+    let housing_color_rgb = load_housing_color_from_storage();
 
     log(&format!(
-        "[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}, Mounting: {:?}",
+        "[Bevy] Initial load - L3D: {} bytes, LDT: {}, Emitters: {}, Mounting: {:?}, Housing: {:?}",
         l3d_data.as_ref().map(|d| d.len()).unwrap_or(0),
         ldt_data.is_some(),
         emitter_config.len(),
-        mounting_config.mounting_type
+        mounting_config.mounting_type,
+        housing_color_rgb
     ));
 
     // Create settings with LDT data
@@ -411,6 +760,7 @@ pub fn run_on_canvas(canvas_selector: &str) {
         scene_type: SceneType::Room,
         emitter_config,
         mounting: mounting_config,
+        housing_color_rgb,
     };
 
     // Build app with resources inserted FIRST, before ANY plugins
@@ -442,6 +792,9 @@ pub fn run_on_canvas(canvas_selector: &str) {
     app.add_systems(Update, ui_controls_system);
     app.add_systems(Update, poll_gldf_changes);
     app.add_systems(Update, ensure_visible_scene);
+    app.add_systems(Update, frame_camera_on_l3d);
+    app.add_systems(Update, print_camera_on_key);
+    app.add_systems(Update, js_camera_bridge_apply);
 
     app.run();
 }
@@ -480,6 +833,8 @@ pub fn run_native() {
         .add_systems(Update, ui_controls_system)
         .add_systems(Update, poll_gldf_changes)
         .add_systems(Update, ensure_visible_scene)
+        .add_systems(Update, frame_camera_on_l3d)
+        .add_systems(Update, print_camera_on_key)
         .run();
 }
 

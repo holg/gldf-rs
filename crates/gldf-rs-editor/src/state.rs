@@ -1215,6 +1215,37 @@ impl GldfState {
                 fle.light_source_reference.changeable_light_source_id = None;
                 self.last_error = None;
             }
+            GldfAction::SetFixedLightEmitterEmergencyBehaviour {
+                emitter_id,
+                index,
+                behaviour,
+            } => {
+                let Some(emitter) = self.product.get_emitter_mut(&emitter_id) else {
+                    self.last_error = Some(format!("Emitter '{}' not found", emitter_id));
+                    self.is_modified = prev_modified;
+                    return;
+                };
+                let Some(fle) = emitter.fixed_light_emitter.get_mut(index) else {
+                    self.last_error = Some(format!(
+                        "Fixed light emitter index {} out of range on emitter '{}'",
+                        index, emitter_id
+                    ));
+                    self.is_modified = prev_modified;
+                    return;
+                };
+                // Empty string → clear so we don't persist `<EmergencyBehaviour/>`
+                // with empty content. Any other value rides through as-is;
+                // XSD-enum policing happens elsewhere (canonical validator).
+                fle.emergency_behaviour = behaviour.and_then(|s| {
+                    let s = s.trim().to_string();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                });
+                self.last_error = None;
+            }
             GldfAction::SetChangeableLightEmitterPhotometry {
                 emitter_id,
                 index,
