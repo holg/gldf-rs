@@ -642,6 +642,42 @@ def act_7_variants_duplicate(page: Page) -> None:
             print(f"  · variant[{idx}] GTIN ERR: {err}")
         else:
             print(f"  · variant[{idx}] GTIN → {gtin}")
+
+    # Set a per-variant ProductNumber too. The XSD makes it optional on
+    # Variant (minOccurs=0), but some downstream readers (gldf-search.de,
+    # certain BIM importers) hard-deref `.ProductNumber.Locale` and
+    # crash with "null is not an object" when the element is absent.
+    # Emitting an empty-but-present <ProductNumber><Locale/></ProductNumber>
+    # silences those readers without breaking the spec. We tag each
+    # variant with a Trahe-ACME-style product number derived from RAL.
+    product_numbers = [
+        "LP-Y-6018",  # V0 yellow green
+        "LP-Y-1023",  # V1 traffic yellow
+        "LP-W-9003",  # V2 signal white
+        "LP-E-9005",  # V3 jet black emergency-only
+    ]
+    for idx, pn in enumerate(product_numbers):
+        payload = {
+            "action": "SetVariantProductNumber",
+            # SetVariantProductNumber is a tuple-variant
+            # `SetVariantProductNumber(usize, LocaleFoo)` so the `data`
+            # field is a positional array. LocaleFoo's serde shape is
+            # XML-flavored — `Locale` is PascalCase (per the lib's
+            # `rename = "Locale"`) and each Locale entry uses `@language`
+            # / `$text` as quick-xml's attribute / text markers. See
+            # crates/gldf-rs-lib/src/gldf/header.rs:339 for the typed
+            # surface and crates/gldf-rs-editor/tests/
+            # set_variant_product_number_json.rs for the JSON contract.
+            "data": [idx, {"Locale": [{"@language": "en", "$text": pn}]}],
+        }
+        err = page.evaluate(
+            "(json) => window.gldf_apply_action_json(json)",
+            _json.dumps(payload),
+        )
+        if err:
+            print(f"  · variant[{idx}] ProductNumber ERR: {err}")
+        else:
+            print(f"  · variant[{idx}] ProductNumber → {pn}")
     screenshot(page, "12-variants-after-dup")
 
 
