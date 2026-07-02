@@ -42,11 +42,37 @@ enum Cmd {
     },
     /// Round-trip an input GLDF through the loader and writer. Useful
     /// for canonicalising or smoke-testing the writer.
+    ///
+    /// `--dialux-compat` strips `#` comment lines from every
+    /// `spectrum/text` payload (DIALux silently rejects them; real
+    /// GLDF readers tolerate them). Off by default — the output is
+    /// canonical GLDF unless you opt in.
+    ///
+    /// `--inline-spectrum` embeds every external `.spd` as
+    /// `<Intensity wavelength=…>` rows inside product.xml; the
+    /// `.spd` file entries are dropped.
+    ///
+    /// `--tm33` merges paired (photometry, spectrum) into a single
+    /// `.iesxml` file. Photometries without a spectrum stay as
+    /// `.ldt`/`.ies`.
     Save {
         #[arg(long, short = 'i')]
         input: PathBuf,
         #[arg(long, short = 'o')]
         output: PathBuf,
+        /// Apply DIALux-import compatibility transforms (currently:
+        /// strip `#` lines from `spectrum/text` payloads). Off by
+        /// default; see [`gldf_rs::dialux_compat`].
+        #[arg(long, default_value_t = false)]
+        dialux_compat: bool,
+        /// Inline every external `spectrum/text` SPD into
+        /// `<Intensity wavelength=…>` rows; drop the .spd files.
+        #[arg(long, default_value_t = false)]
+        inline_spectrum: bool,
+        /// Merge each (photometry, spectrum) pair into a single
+        /// TM-33 (`ldc/iesxml`) file. Bare photometries unchanged.
+        #[arg(long, default_value_t = false)]
+        tm33: bool,
     },
     /// Print the loaded product as JSON to stdout.
     Dump {
@@ -67,6 +93,54 @@ enum Cmd {
         #[arg(long, short = 'o')]
         output: PathBuf,
     },
+    /// Batch-convert photometry files (.ldt / .ies) to GLDF (and
+    /// optionally IFC) driven by a JSON template. The template is either
+    /// a `WizardDraft` object (same shape as `wizard --draft`; fields
+    /// left out are auto-filled from each input LDT) or a `GldfAction`
+    /// array (same shape as `apply --script`). String values may use
+    /// placeholders like `{input.stem}`, `{ldt.name}`,
+    /// `{ldt.manufacturer}`, `{ldt.watts}`; `{"@file": "@input"}`
+    /// resolves to the current input's bytes, other `@file` paths
+    /// resolve relative to the template.
+    Batch {
+        /// Photometry files and/or directories (searched recursively
+        /// for .ldt / .ies).
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// JSON template (`WizardDraft` object or `GldfAction` array).
+        #[arg(long, short = 't')]
+        template: PathBuf,
+        /// Output directory; one `<stem>.gldf` (and `<stem>.ifc`) per
+        /// input file. Created if missing.
+        #[arg(long, short = 'o')]
+        out_dir: PathBuf,
+        /// Also write an IFC STEP file per input.
+        #[arg(long, default_value_t = false)]
+        ifc: bool,
+        /// Skip the .gldf output (e.g. IFC-only runs).
+        #[arg(long, default_value_t = false)]
+        no_gldf: bool,
+        /// XSD-validate every written .gldf and report violations.
+        #[arg(long, default_value_t = false)]
+        validate: bool,
+    },
+    /// Validate a `.gldf` against the rc-3 XSD. Prints findings to
+    /// stderr. Exit code 0 means clean, 1 means violations, 2 means
+    /// the input couldn't be read/parsed.
+    Validate {
+        /// `.gldf` archive to validate.
+        #[arg(long, short = 'i')]
+        input: PathBuf,
+    },
+    /// Dump the L3D structure of a GLDF (or raw .l3d): every joint,
+    /// LightEmittingObject and SensorObject with its position +
+    /// rotation. Used to debug gldf-bevy's emitter walker without
+    /// spinning up the WASM viewer.
+    DumpL3d {
+        /// `.gldf` or `.l3d` archive.
+        #[arg(long, short = 'i')]
+        input: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -78,10 +152,160 @@ fn main() -> Result<()> {
             input,
             output,
         } => cmd_apply(&script, input.as_deref(), &output),
-        Cmd::Save { input, output } => cmd_save(&input, &output),
+        Cmd::Save {
+            input,
+            output,
+            dialux_compat,
+            inline_spectrum,
+            tm33,
+        } => cmd_save(&input, &output, dialux_compat, inline_spectrum, tm33),
         Cmd::Dump { input } => cmd_dump(&input),
+        Cmd::Batch {
+            inputs,
+            template,
+            out_dir,
+            ifc,
+            no_gldf,
+            validate,
+        } => cmd_batch(&inputs, &template, &out_dir, ifc, no_gldf, validate),
         Cmd::Wizard { draft, output } => cmd_wizard(draft.as_deref(), &output),
+        Cmd::Validate { input } => cmd_validate(&input),
+        Cmd::DumpL3d { input } => cmd_dump_l3d(&input),
     }
+}
+
+fn cmd_dump_l3d(input: &Path) -> Result<()> {
+    let bytes = std::fs::read(input).with_context(|| format!("read {}", input.display()))?;
+
+    // Accept either .gldf (find embedded .l3d) or raw .l3d.
+    let l3d_bytes: Vec<u8> = match input.extension().and_then(|s| s.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("l3d") => bytes,
+        _ => {
+            // GLDF: load via the editor's parser and pluck the
+            // embedded l3d from the loaded archive.
+            let state = load_state(Some(input))?;
+            // GLDF archives nest the .l3d under various directories
+            // (`geo/`, `geometry/`, root, etc.); rather than relying on
+            // the product.xml `<File>` reference matching the archive
+            // path verbatim, just scan the zip for any `.l3d` member
+            // and read the first one.
+            let _ = state; // loaded above purely to validate the GLDF.
+            let archive_bytes = std::fs::read(input)?;
+            let cursor = std::io::Cursor::new(&archive_bytes);
+            let mut zip = zip::ZipArchive::new(cursor).context("open gldf archive")?;
+            let mut found: Option<Vec<u8>> = None;
+            for i in 0..zip.len() {
+                let mut entry = zip.by_index(i)?;
+                if entry.name().to_ascii_lowercase().ends_with(".l3d") {
+                    use std::io::Read as _;
+                    let mut buf = Vec::new();
+                    entry.read_to_end(&mut buf)?;
+                    println!("# embedded l3d found at: {}", entry.name());
+                    found = Some(buf);
+                    break;
+                }
+            }
+            found.context("no .l3d member found inside gldf archive")?
+        }
+    };
+
+    let l3d = l3d_rs::from_buffer(&l3d_bytes);
+    let lum = l3d_rs::Luminaire::from_xml(&l3d.file.structure)
+        .context("parse structure.xml")?;
+    println!("# L3D dump for {}", input.display());
+    println!("# parts in <Model>: {}", l3d.model.parts.len());
+    for p in &l3d.model.parts {
+        println!("  part: {}", p.path);
+    }
+    println!("# structure tree:");
+    dump_geom(&lum.structure.geometry, 0);
+    Ok(())
+}
+
+fn dump_geom(g: &l3d_rs::Geometry, depth: usize) {
+    let pad = "  ".repeat(depth);
+    println!("{}geometry partName={:?}", pad, g.part_name);
+    println!(
+        "{}  pos=({}, {}, {})  rot=({}, {}, {})",
+        pad, g.position.x, g.position.y, g.position.z, g.rotation.x, g.rotation.y, g.rotation.z
+    );
+    if let Some(leos) = &g.light_emitting_objects {
+        for o in leos.objects() {
+            let (px, py, pz) = o.position();
+            let (rx, ry, rz) = o.rotation();
+            let size = if let Some(r) = o.rectangle() {
+                let (w, h) = r.size();
+                format!("rect {}x{}", w, h)
+            } else if let Some(c) = o.circle() {
+                format!("circle d={}", c.diameter())
+            } else {
+                "?".to_string()
+            };
+            println!(
+                "{}  LEO partName={:?} pos=({}, {}, {}) rot=({}, {}, {}) [{}]",
+                pad,
+                o.part_name(),
+                px,
+                py,
+                pz,
+                rx,
+                ry,
+                rz,
+                size
+            );
+        }
+    }
+    if let Some(sens) = &g.sensor_objects {
+        for o in sens.objects() {
+            let (px, py, pz) = o.position();
+            let (rx, ry, rz) = o.rotation();
+            println!(
+                "{}  SENSOR partName={:?} pos=({}, {}, {}) rot=({}, {}, {})",
+                pad,
+                o.part_name(),
+                px,
+                py,
+                pz,
+                rx,
+                ry,
+                rz
+            );
+        }
+    }
+    if let Some(joints) = &g.joints {
+        for j in &joints.joint {
+            println!(
+                "{}  joint partName={:?} pos=({}, {}, {}) rot=({}, {}, {})",
+                pad,
+                j.part_name,
+                j.position.x,
+                j.position.y,
+                j.position.z,
+                j.rotation.x,
+                j.rotation.y,
+                j.rotation.z
+            );
+            for child in &j.geometries.geometry {
+                dump_geom(child, depth + 2);
+            }
+        }
+    }
+}
+
+fn cmd_validate(input: &Path) -> Result<()> {
+    let bytes = std::fs::read(input)
+        .with_context(|| format!("read {}", input.display()))?;
+    let findings = gldf_rs::validation::xsd_validate_gldf_archive(&bytes)
+        .with_context(|| format!("validate {}", input.display()))?;
+    if findings.is_empty() {
+        eprintln!("✓ {} — XSD-clean", input.display());
+        return Ok(());
+    }
+    eprintln!("✗ {} — {} violation(s):", input.display(), findings.len());
+    for (i, f) in findings.iter().enumerate() {
+        eprintln!("  [{:>3}] {}", i + 1, f);
+    }
+    std::process::exit(1);
 }
 
 fn cmd_apply(
@@ -101,15 +325,136 @@ fn cmd_apply(
     write_state(&state, output)
 }
 
-fn cmd_save(input: &std::path::Path, output: &std::path::Path) -> Result<()> {
+fn cmd_save(
+    input: &std::path::Path,
+    output: &std::path::Path,
+    dialux_compat: bool,
+    inline_spectrum: bool,
+    tm33: bool,
+) -> Result<()> {
     let state = load_state(Some(input))?;
-    write_state(&state, output)
+    let any_opt = dialux_compat || inline_spectrum || tm33;
+    if any_opt {
+        let opts = gldf_rs::editable::ExportOptions {
+            dialux_compat,
+            inline_spectrum,
+            merge_into_tm33: tm33,
+        };
+        let bytes = state.save_to_buf_with_options(&opts)?;
+        std::fs::write(output, bytes)
+            .with_context(|| format!("write {}", output.display()))?;
+        let mut tags = Vec::new();
+        if dialux_compat { tags.push("dialux-compat"); }
+        if inline_spectrum { tags.push("inline-spectrum"); }
+        if tm33 { tags.push("tm33"); }
+        eprintln!("wrote {} ({})", output.display(), tags.join(", "));
+        Ok(())
+    } else {
+        write_state(&state, output)
+    }
 }
 
 fn cmd_dump(input: &std::path::Path) -> Result<()> {
     let state = load_state(Some(input))?;
     let json = serde_json::to_string_pretty(&state.product)?;
     println!("{}", json);
+    Ok(())
+}
+
+fn cmd_batch(
+    inputs: &[PathBuf],
+    template_path: &Path,
+    out_dir: &Path,
+    ifc: bool,
+    no_gldf: bool,
+    validate: bool,
+) -> Result<()> {
+    use gldf_rs_editor::batch::{
+        collect_inputs, run_batch, BatchEvent, BatchJob, BatchOptions, BatchTemplate,
+    };
+
+    let raw = std::fs::read_to_string(template_path)
+        .with_context(|| format!("read template {}", template_path.display()))?;
+    let template = BatchTemplate::parse(&raw)
+        .with_context(|| format!("parse template {}", template_path.display()))?;
+    let template_dir = template_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    let files = collect_inputs(inputs);
+    if files.is_empty() {
+        anyhow::bail!("no .ldt / .ies files found in the given inputs");
+    }
+    eprintln!("batch: {} photometry file(s) → {}", files.len(), out_dir.display());
+
+    let job = BatchJob {
+        template,
+        template_dir,
+        inputs: files,
+        out_dir: out_dir.to_path_buf(),
+        options: BatchOptions {
+            write_gldf: !no_gldf,
+            write_ifc: ifc,
+        },
+    };
+
+    let reports = run_batch(&job, &mut |ev| {
+        if let BatchEvent::Finished { index, total, report } = ev {
+            let name = report
+                .input
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?");
+            match &report.error {
+                Some(err) => eprintln!("[{}/{}] ✗ {} — {}", index + 1, total, name, err),
+                None => {
+                    let mut wrote = Vec::new();
+                    if let Some(p) = &report.gldf_path {
+                        wrote.push(p.display().to_string());
+                    }
+                    if let Some(p) = &report.ifc_path {
+                        wrote.push(p.display().to_string());
+                    }
+                    eprintln!("[{}/{}] ✓ {} → {}", index + 1, total, name, wrote.join(", "));
+                }
+            }
+        }
+        true
+    })?;
+
+    let mut violations_total = 0usize;
+    if validate {
+        for report in reports.iter().filter(|r| r.error.is_none()) {
+            if let Some(path) = &report.gldf_path {
+                let bytes = std::fs::read(path)?;
+                let findings = gldf_rs::validation::xsd_validate_gldf_archive(&bytes)
+                    .with_context(|| format!("validate {}", path.display()))?;
+                if !findings.is_empty() {
+                    violations_total += findings.len();
+                    eprintln!("✗ {} — {} XSD violation(s):", path.display(), findings.len());
+                    for f in &findings {
+                        eprintln!("    {}", f);
+                    }
+                }
+            }
+        }
+    }
+
+    let failed = reports.iter().filter(|r| r.error.is_some()).count();
+    eprintln!(
+        "batch done: {} ok, {} failed{}",
+        reports.len() - failed,
+        failed,
+        if validate {
+            format!(", {} XSD violation(s)", violations_total)
+        } else {
+            String::new()
+        }
+    );
+    if failed > 0 || violations_total > 0 {
+        std::process::exit(1);
+    }
     Ok(())
 }
 
@@ -309,6 +654,18 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
         driver_name: String::new(),
         driver_dimmable: false,
         driver_standby_power: String::new(),
+        // Mounting step — same story as Driver. CLI flow leaves the
+        // variant's <Mountings> empty; the WASM editor's
+        // VariantMountingsEditor lets the user add one after Finish.
+        mounting_type: String::new(),
+        mounting_recessed_depth_mm: String::new(),
+        mounting_pendant_length_mm: String::new(),
+        mounting_height_mm: String::new(),
+        mounting_pole_height_mm: String::new(),
+    sensor_bytes: None,
+    sensor_filename: String::new(),
+        emergency_bytes: None,
+        emergency_filename: String::new(),
     })
 }
 

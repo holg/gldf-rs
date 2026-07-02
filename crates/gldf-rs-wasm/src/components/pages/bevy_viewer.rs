@@ -28,6 +28,7 @@
 //! has its own memory space. localStorage is the only inter-module
 //! bus we have. Same pattern the eulumdat viewer + IFC viewer use.
 
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_active_scope, use_gldf, Scope};
 use gldf_rs::gldf::product_definitions::Variant;
 use leptos::prelude::*;
@@ -141,20 +142,133 @@ pub fn BevyViewerPage() -> impl IntoView {
     // page's perspective the canvas is "just there"; we leave a
     // placeholder div with the same height so the layout doesn't
     // collapse.
+    let state_for_text = use_gldf();
+    let title_signal = move || ui_t("gldf.bevy_viewer.title", &state_for_text.with(|s| s.ui_language.clone()));
+    let desc_signal = move || ui_t("gldf.bevy_viewer.description", &state_for_text.with(|s| s.ui_language.clone()));
+
     view! {
         <div class="editor-section bevy-viewer-page" style="display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 120px);">
             <div>
-                <h2>{ "🎬 3D variant viewer" }</h2>
+                <h2>{ title_signal }</h2>
                 <p class="section-description">
-                    { "Pick a variant to preview its housing colour live in the Bevy 3D viewer. The colour comes from each variant's Marketing → HousingColor RAL value; variants without one render in the default light grey." }
+                    { desc_signal }
                 </p>
             </div>
+            <ViewerHelp />
             <VariantPicker scope=scope />
             // Placeholder that reserves the layout slot. The actual
             // canvas is rendered by the app shell and overlaid on
             // this region via fixed positioning (see `BevyCanvasShell`).
             <div style="flex: 1; min-height: 400px;"></div>
         </div>
+    }
+}
+
+/// Collapsible help block surfaced above the 3D viewer. Two sections:
+/// keyboard / mouse shortcuts (right-drag to look, C to dump camera,
+/// K to toggle cones, P for the console probe), and a Lisp-primitive
+/// reference (`CAMERA-SET`, `ANIMATE-CAMERA`, `LUMINAIRE-TILT`,
+/// `ANIMATE-TILT`, `GLDF-VARIANT-SET`, `SLEEP`).
+///
+/// Uses native `<details>` for the disclosure triangle — matches the
+/// pattern in [`super::link_hint::LinkHint`] and the `<details>` blocks
+/// on the Files / Photometry pages.
+#[component]
+fn ViewerHelp() -> impl IntoView {
+    let pre_style =
+        "margin: 4px 0 0 0; padding: 6px 8px; background: var(--bg-tertiary, #0a0a0a); \
+         color: var(--text-secondary, #bbb); font-family: var(--font-mono, monospace); \
+         font-size: 11px; border-radius: 4px; white-space: pre-wrap;";
+    view! {
+        <details
+            class="viewer-help"
+            style="margin: 0; padding: 8px 10px; border: 1px dashed var(--accent-blue); \
+                   border-radius: 6px; background: var(--bg-secondary); font-size: 12px;"
+        >
+            <summary style="cursor: pointer; color: var(--accent-blue); font-weight: 600;">
+                { "ℹ Viewer shortcuts & Lisp reference" }
+            </summary>
+
+            <div style="margin: 8px 0 4px 0;">
+                <strong>{ "Mouse / keyboard" }</strong>
+            </div>
+            <ul style="margin: 4px 0 0 18px; color: var(--text-secondary); line-height: 1.6;">
+                <li><b>{ "Right-click + drag" }</b> { " — look around (rotate)" }</li>
+                <li><b>{ "Right-click held + arrows" }</b> { " — rotate yaw / pitch (fine control)" }</li>
+                <li><b>{ "W A S D" }</b> { " — translate forward / back / strafe; " } <b>{ "Q E" }</b> { " — up / down" }</li>
+                <li><b>{ "Scroll wheel" }</b> { " — zoom" }</li>
+                <li><b>{ "C" }</b> { " — copy the current camera pose into the λ Lisp panel as " } <code>{ "(CAMERA-SET …)" }</code></li>
+                <li><b>{ "K" }</b> { " — toggle translucent light cones (off by default)" }</li>
+                <li><b>{ "P" }</b> { " — log camera pose to browser console as " } <code>{ "[CAMERA-PROBE-LIVE]" }</code></li>
+            </ul>
+            <p style="margin: 6px 0 0 0; font-size: 11px; color: var(--text-tertiary);">
+                { "Rotation requires the right mouse button held — so the camera stays still while you type into the Lisp panel. WASD / scroll / Q / E always work; the browser sends them to the canvas only when no text input has focus." }
+            </p>
+
+            <div style="margin: 12px 0 4px 0;">
+                <strong>{ "Lisp primitives (acadlisp + gldf-rs)" }</strong>
+            </div>
+            <pre style=pre_style>{
+"(CAMERA-SET     ex ey ez tx ty tz)         ; snap camera; eye + target in metres
+(ANIMATE-CAMERA ex ey ez tx ty tz ms)      ; smooth glide over `ms` milliseconds
+(LUMINAIRE-TILT  joint x-deg y-deg z-deg)  ; snap one joint, target Euler XYZ
+(ANIMATE-TILT    joint x-deg y-deg z-deg ms) ; smooth rotation over `ms`
+(RESET-TILTS)                              ; snap all joints back to L3D defaults
+(SLEEP ms)                                 ; pause before the next command
+(GLDF-VARIANT-SET idx)                     ; swap active variant (housing + emitters)
+(GLDF-VARIANT-COUNT)                       ; returns the variant count
+(GLDF-VARIANT-NAMES)                       ; returns a list of variant ids
+(GLDF-MANUFACTURER)                        ; returns the header manufacturer
+
+; ── Room tweaks (write) ──────────────────────────────────────
+(SET-AMBIENT brightness)                   ; 0 = off; ~50 dramatic; 150 neutral
+(SET-ROOM-SIZE w l h)                      ; metres along X / Z / Y
+(SET-WALLS-COLOR    r g b)                 ; 0–1 linear sRGB
+(SET-FLOOR-COLOR    r g b)
+(SET-CEILING-COLOR  r g b)
+(SET-WALLS-REFLECTANCE    v)               ; 0–1 albedo (neutral grey luminance)
+(SET-FLOOR-REFLECTANCE    v)
+(SET-CEILING-REFLECTANCE  v)
+(SET-WALLS-EMISSIVE   r g b)               ; surface glows on its own; 0 0 0 = off
+(SET-FLOOR-EMISSIVE   r g b)
+(SET-CEILING-EMISSIVE r g b)
+
+; ── Read state (for save/restore patterns) ───────────────────
+(GET-AMBIENT)                              ; → current brightness as Real
+(GET-ROOM-SIZE)                            ; → (w l h)
+(GET-WALLS-COLOR)                          ; → (r g b)
+(GET-FLOOR-COLOR)
+(GET-CEILING-COLOR)
+(GET-WALLS-REFLECTANCE)                    ; → Real, 0–1
+(GET-FLOOR-REFLECTANCE)
+(GET-CEILING-REFLECTANCE)
+(GET-WALLS-EMISSIVE)                       ; → (er eg eb)
+(GET-FLOOR-EMISSIVE)
+(GET-CEILING-EMISSIVE)
+(GET-CAMERA)                               ; → (ex ey ez tx ty tz)"
+            }</pre>
+            <p style="margin: 6px 0 0 0; font-size: 11px; color: var(--text-tertiary);">
+                { "Joint names are L3D partNames addressed as " } <code>{ "\"l3d://LEO0\"" }</code>
+                { " / " } <code>{ "\"l3d://LEO1\"" }</code>
+                { ". The three angle args are ONE target Euler rotation (x, y, z), not three keyframes — " }
+                { "the joint animates from its current pose to the target over the given duration." }
+            </p>
+
+            <div style="margin: 12px 0 4px 0;">
+                <strong>{ "Starter script — pendular tilt with reset" }</strong>
+            </div>
+            <pre style=pre_style>{
+"; Reset both heads, then swing them outward and back
+(LUMINAIRE-TILT \"l3d://LEO0\" 0.0 0.0 0.0)
+(LUMINAIRE-TILT \"l3d://LEO1\" 0.0 0.0 0.0)
+(SLEEP 800)
+(ANIMATE-TILT \"l3d://LEO0\"  30.0 0.0 0.0  3000.0)
+(ANIMATE-TILT \"l3d://LEO1\" -30.0 0.0 0.0  3000.0)
+(SLEEP 3500)
+(ANIMATE-TILT \"l3d://LEO0\" 0.0 0.0 0.0  3000.0)
+(ANIMATE-TILT \"l3d://LEO1\" 0.0 0.0 0.0  3000.0)"
+            }</pre>
+        </details>
     }
 }
 
@@ -172,17 +286,20 @@ fn VariantPicker(scope: RwSignal<Scope>) -> impl IntoView {
                 .as_ref()
                 .map(|vs| vs.variant.clone())
                 .unwrap_or_default();
+            let lang = ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             if variants.is_empty() {
+                let msg = tr("gldf.bevy_viewer.no_variants");
                 return view! {
                     <p class="empty-message">
-                        { "This document has no variants. Add one on the Variants page to see it here." }
+                        { msg }
                     </p>
                 }.into_any();
             }
-            let lang = ui_language.clone();
+            let variant_label_str = tr("gldf.bevy_viewer.variant_label");
             view! {
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-                    <strong style="font-size: 12px; color: var(--text-secondary);">{ "Variant:" }</strong>
+                    <strong style="font-size: 12px; color: var(--text-secondary);">{ variant_label_str }</strong>
                     {variants.iter().enumerate().map(|(idx, v)| {
                         let active_idx = match scope.get() {
                             Scope::Variant(i) => Some(i),
@@ -308,8 +425,56 @@ fn build_payload(state: &crate::state::GldfState, variant_idx: usize) -> Option<
         Some(serde_json::to_string(&configs).unwrap_or_default())
     };
 
-    // 5. Mounting — defer.
-    let mounting_config_json = None;
+    // 5. Mounting — translate the variant's `<Mountings>` block into
+    //    the Bevy-side `MountingConfig` shape (gldf-bevy/src/lib.rs).
+    //    Any of the four XSD top-level branches (Ceiling / Wall /
+    //    Ground / WorkingPlane) maps to the same flat record on the
+    //    Bevy side; pick whichever is set. Variants with no Mountings
+    //    push `None` so Bevy falls back to its default scene-type
+    //    placement.
+    let mounting_config_json = variant.mountings.as_ref().and_then(|m| {
+        let (mounting_type, recessed_depth_mm, pendant_length_mm, mounting_height_mm,
+             pole_height_mm, is_surface_mounted, is_free_standing) =
+            if let Some(c) = m.ceiling.as_ref() {
+                let recessed = c.recessed.as_ref().map(|r| r.recessed_depth);
+                let pendant = c.pendant.as_ref().map(|p| p.pendant_length);
+                let surface = c.surface_mounted.is_some();
+                (Some("ceiling"), recessed, pendant, None, None, surface, false)
+            } else if let Some(w) = m.wall.as_ref() {
+                let rd = w.recessed.as_ref().map(|r| r.recessed_depth);
+                let surface = w.surface_mounted.is_some();
+                (Some("wall"), rd, None, Some(w.mounting_height), None, surface, false)
+            } else if let Some(g) = m.ground.as_ref() {
+                // Pole height: try PoleTop first, then PoleIntegrated;
+                // honours both attribute and legacy-element forms via
+                // `get_pole_height` helpers.
+                let pole = g.pole_top.as_ref()
+                    .and_then(gldf_rs::gldf::product_definitions::PoleTop::get_pole_height)
+                    .or_else(|| g.pole_integrated.as_ref()
+                        .and_then(gldf_rs::gldf::product_definitions::PoleIntegrated::get_pole_height));
+                let surface = g.surface_mounted.is_some();
+                let free = g.free_standing.is_some();
+                (Some("ground"), None, None, None, pole, surface, free)
+            } else if m.working_plane.is_some() {
+                (Some("working_plane"), None, None, None, None, false, false)
+            } else {
+                (None, None, None, None, None, false, false)
+            };
+
+        let mt = mounting_type?;
+        // Build a manual JSON value so the lib doesn't need to know the
+        // Bevy `MountingConfig` struct (it's WASM-only there).
+        let json = serde_json::json!({
+            "mounting_type": mt,
+            "recessed_depth_mm": recessed_depth_mm,
+            "pendant_length_mm": pendant_length_mm,
+            "mounting_height_mm": mounting_height_mm,
+            "pole_height_mm": pole_height_mm,
+            "is_surface_mounted": is_surface_mounted,
+            "is_free_standing": is_free_standing,
+        });
+        Some(serde_json::to_string(&json).unwrap_or_default())
+    });
 
     Some(BevyPayload {
         l3d_bytes,
@@ -358,7 +523,7 @@ fn resolve_variant_ldt_text(
     Some(String::from_utf8_lossy(bytes).into_owned())
 }
 
-fn resolve_variant_l3d_bytes(
+pub(crate) fn resolve_variant_l3d_bytes(
     product: &gldf_rs::GldfProduct,
     embedded: &std::collections::HashMap<String, Vec<u8>>,
     variant: &Variant,
@@ -370,6 +535,17 @@ fn resolve_variant_l3d_bytes(
         .as_ref()?
         .geometry_id
         .clone();
+    resolve_l3d_bytes_for_geometry(product, embedded, &geometry_id)
+}
+
+/// Resolve a ModelGeometry's embedded `.l3d` bytes by its id. Shared by
+/// the variant resolver above and the graphical LEO picker (which has
+/// the geometry id directly rather than the whole Variant).
+pub(crate) fn resolve_l3d_bytes_for_geometry(
+    product: &gldf_rs::GldfProduct,
+    embedded: &std::collections::HashMap<String, Vec<u8>>,
+    geometry_id: &str,
+) -> Option<Vec<u8>> {
     let model_geom = product
         .general_definitions
         .geometries
@@ -398,10 +574,13 @@ fn housing_label(v: &Variant, ui_language: &str) -> Option<String> {
         .and_then(|hc| hc.housing_color.first())?;
     if let Some(ral) = c.ral.and_then(gldf_rs::ral::by_number) {
         Some(ral.fallback_name(ui_language).to_string())
-    } else if !c.locale.value.is_empty() {
-        Some(c.locale.value.clone())
     } else {
-        None
+        // First Locale entry; HousingColor wraps the complex Locale type now.
+        c.locale
+            .locale
+            .first()
+            .filter(|l| !l.value.is_empty())
+            .map(|l| l.value.clone())
     }
 }
 

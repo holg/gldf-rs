@@ -12,9 +12,12 @@ name = "gldf-cli"
 path = "src/main.rs"
 
 [dependencies]
-gldf-rs = { workspace = true, features = ["eulumdat"] }
-gldf-rs-editor = { workspace = true }
+gldf-rs = { workspace = true, features = ["eulumdat", "xsd"] }
+gldf-rs-editor = { workspace = true, features = ["uld"] }
+l3d_rs = { workspace = true }
+zip = { workspace = true }
 clap = { workspace = true }
+dialoguer = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

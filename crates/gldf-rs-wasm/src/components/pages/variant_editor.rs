@@ -12,6 +12,7 @@
 
 use crate::components::edit_util::{event_i32, event_value, optional_string};
 use crate::components::{EditModal, LocaleFooEditor};
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
 use gldf_rs::gldf::product_definitions::{Ceiling, Ground, Mountings, Variant, Wall};
 use gldf_rs::gldf::LocaleFoo;
@@ -151,8 +152,13 @@ pub fn VariantEditorPage() -> impl IntoView {
 /// Wraps `EditModal` and renders the body for whichever variant index
 /// is in `editing`. Splitting this out so the closures don't fight over
 /// captures with the outer page.
+///
+/// Visible to siblings so the read-mode `VariantsPage` can mount the
+/// same modal — opening Edit on a read-mode card flips the same signal
+/// the editor page would. Lets us avoid duplicating the Mountings /
+/// ProductSeries / Geometry editors.
 #[component]
-fn VariantModalHost(
+pub(crate) fn VariantModalHost(
     editing: RwSignal<Option<usize>>,
     open: Memo<bool>,
     on_close: Arc<dyn Fn() + Send + Sync>,
@@ -804,6 +810,7 @@ fn ModelGeometryEditor(
     };
 
     let geometry_id_for_opts = geometry_id.clone();
+    let geometry_id_for_picker = geometry_id.clone();
     let empty_model_warning = model_ids.is_empty();
 
     view! {
@@ -826,7 +833,18 @@ fn ModelGeometryEditor(
                     }).collect::<Vec<_>>()}
                 </select>
             </div>
-            <div>
+            // Graphical LEO→photometry picker: a 2D plan view of the
+            // L3D's Light Emitting Objects. Shown only when a model
+            // geometry is selected (it reads the L3D bytes by id). The
+            // manual binding list below stays as an "Advanced" fallback.
+            {(!geometry_id_for_picker.is_empty()).then(|| view! {
+                <crate::components::pages::leo_plan_picker::LeoPlanPicker
+                    idx=idx geometry_id=geometry_id_for_picker.clone() />
+            })}
+            <details style="margin-top: 6px;">
+                <summary style="cursor: pointer; font-size: 12px; color: var(--text-secondary);">
+                    { "Advanced: raw emitter ↔ object bindings" }
+                </summary>
                 <strong>{ "Per-object emitter bindings" }</strong>
                 <ul style="margin: 4px 0 0; padding-left: 18px;">
                     {bindings_init.iter().enumerate().map(|(i, b)| {
@@ -896,9 +914,9 @@ fn ModelGeometryEditor(
                     { "+ Add binding" }
                 </button>
                 <p class="hint" style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
-                    { "Each binding pairs an Emitter id with the named object inside the 3D model. Per-binding editing of external_name lands in a follow-up cut; for now the wizard's 'Primary' default works for single-emitter cases." }
+                    { "Each binding pairs an Emitter id with the named object inside the 3D model. The plan-view picker above sets these graphically; this list is the raw fallback." }
                 </p>
-            </div>
+            </details>
         </div>
     }
 }
@@ -938,6 +956,7 @@ use gldf_rs::gldf::product_definitions::{
 #[component]
 fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let init = mountings.unwrap_or_default();
 
     // Per-branch state. Each branch holds its enable flag + the few fields
@@ -963,7 +982,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             .as_ref()
             .and_then(|c| c.pendant.as_ref())
             .map(|p| p.pendant_length)
-            .unwrap_or(0.0),
+            .unwrap_or(0),
     );
 
     let wall_enabled = RwSignal::new(init.wall.is_some());
@@ -1209,7 +1228,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
         let dispatch = dispatch.clone();
         move |e: web_sys::Event| {
             ceiling_pendant_length.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );
             dispatch();
         }
@@ -1242,37 +1261,44 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
         }
     };
 
-    let row_style = "display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px;";
+    // Each top-level branch row reuses `.application-checkbox-row` — the
+    // same class Applications and Labels use. That style caps the
+    // checkbox at `width: auto` (the global `input { width: 100% }`
+    // reset would otherwise stretch every native checkbox to fill the
+    // card, hiding the label) AND pins `color: var(--text-primary)` so
+    // the row label is legible on the dark card background. Without
+    // this, Mountings rendered as a column of fat checkboxes with a
+    // grey-on-dark label that almost disappeared.
     let sub_style = "margin-left: 22px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px;";
 
     view! {
         <div class="variant-mountings-editor" style="margin-top: 12px; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
-            <h4 style="margin: 0 0 6px; font-size: 13px;">{ "Mountings" }</h4>
+            <h4 style="margin: 0 0 6px; font-size: 13px;">{ tr("gldf.mountings.title") }</h4>
             <p style="font-size: 11px; color: var(--text-tertiary); margin: 0 0 8px;">
-                { "Tick the mounting situations this variant supports. Each branch surfaces the most-used primitive; less common fields (cutout dimensions, legacy poleHeight element) stay defaulted on the model but aren't editable here yet." }
+                { tr("gldf.mountings.description") }
             </p>
 
             // Ceiling
-            <div style=row_style>
+            <label class="application-checkbox-row">
                 <input type="checkbox" prop:checked=move || ceiling_enabled.get() on:change=toggle_ceiling data-testid=format!("variant-mountings-ceiling-{}", idx) />
-                <strong>{ "Ceiling" }</strong>
-            </div>
+                <span><strong>{ tr("gldf.mountings.ceiling") }</strong></span>
+            </label>
             {move || ceiling_enabled.get().then(|| view! {
                 <div style=sub_style>
                     <select on:change=set_ceiling_mode.clone() prop:value=move || ceiling_mode.get().to_string()>
-                        <option value="0">{ "Recessed" }</option>
-                        <option value="1">{ "Surface mounted" }</option>
-                        <option value="2">{ "Pendant" }</option>
+                        <option value="0">{ tr("gldf.mountings.recessed") }</option>
+                        <option value="1">{ tr("gldf.mountings.surface_mounted") }</option>
+                        <option value="2">{ tr("gldf.mountings.pendant") }</option>
                     </select>
                     {move || (ceiling_mode.get() == 0).then(|| view! {
                         <>
-                            <label>{ "depth (mm):" }</label>
+                            <label>{ tr("gldf.mountings.depth_mm") }</label>
                             <input type="number" min="0" prop:value=move || ceiling_recessed_depth.get().to_string() on:change=set_ceiling_depth.clone() style="width: 80px;" />
                         </>
                     })}
                     {move || (ceiling_mode.get() == 2).then(|| view! {
                         <>
-                            <label>{ "length (mm):" }</label>
+                            <label>{ tr("gldf.mountings.length_mm") }</label>
                             <input type="number" min="0" step="any" prop:value=move || ceiling_pendant_length.get().to_string() on:change=set_ceiling_pendant.clone() style="width: 80px;" />
                         </>
                     })}
@@ -1280,21 +1306,21 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             })}
 
             // Wall
-            <div style=row_style>
+            <label class="application-checkbox-row">
                 <input type="checkbox" prop:checked=move || wall_enabled.get() on:change=toggle_wall data-testid=format!("variant-mountings-wall-{}", idx) />
-                <strong>{ "Wall" }</strong>
-            </div>
+                <span><strong>{ tr("gldf.mountings.wall") }</strong></span>
+            </label>
             {move || wall_enabled.get().then(|| view! {
                 <div style=sub_style>
-                    <label>{ "mounting height (mm):" }</label>
+                    <label>{ tr("gldf.mountings.mounting_height_mm") }</label>
                     <input type="number" min="0" prop:value=move || wall_mounting_height.get().to_string() on:change=set_wall_height.clone() style="width: 100px;" />
                     <label style="margin-left: 8px;">
                         <input type="checkbox" prop:checked=move || wall_use_recessed.get() on:change=toggle_wall_recessed.clone() />
-                        { " recessed" }
+                        { format!(" {}", tr("gldf.mountings.recessed_label")) }
                     </label>
                     {move || wall_use_recessed.get().then(|| view! {
                         <>
-                            <label>{ "depth (mm):" }</label>
+                            <label>{ tr("gldf.mountings.depth_mm") }</label>
                             <input type="number" min="0" prop:value=move || wall_recessed_depth.get().to_string() on:change=set_wall_depth.clone() style="width: 80px;" />
                         </>
                     })}
@@ -1302,21 +1328,21 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             })}
 
             // Ground
-            <div style=row_style>
+            <label class="application-checkbox-row">
                 <input type="checkbox" prop:checked=move || ground_enabled.get() on:change=toggle_ground data-testid=format!("variant-mountings-ground-{}", idx) />
-                <strong>{ "Ground" }</strong>
-            </div>
+                <span><strong>{ tr("gldf.mountings.ground") }</strong></span>
+            </label>
             {move || ground_enabled.get().then(|| view! {
                 <div style=sub_style>
                     <select on:change=set_ground_mode.clone() prop:value=move || ground_mode.get().to_string()>
-                        <option value="0">{ "Pole top" }</option>
-                        <option value="1">{ "Pole integrated" }</option>
-                        <option value="2">{ "Free standing" }</option>
-                        <option value="3">{ "Surface mounted" }</option>
+                        <option value="0">{ tr("gldf.mountings.pole_top") }</option>
+                        <option value="1">{ tr("gldf.mountings.pole_integrated") }</option>
+                        <option value="2">{ tr("gldf.mountings.free_standing") }</option>
+                        <option value="3">{ tr("gldf.mountings.surface_mounted") }</option>
                     </select>
                     {move || matches!(ground_mode.get(), 0 | 1).then(|| view! {
                         <>
-                            <label>{ "pole height (mm):" }</label>
+                            <label>{ tr("gldf.mountings.pole_height_mm") }</label>
                             <input type="number" min="0" prop:value=move || ground_pole_height.get().to_string() on:change=set_ground_height.clone() style="width: 100px;" />
                         </>
                     })}
@@ -1324,11 +1350,10 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             })}
 
             // Working plane
-            <div style=row_style>
+            <label class="application-checkbox-row">
                 <input type="checkbox" prop:checked=move || working_plane_enabled.get() on:change=toggle_working_plane data-testid=format!("variant-mountings-working-plane-{}", idx) />
-                <strong>{ "Working plane" }</strong>
-                <span style="color: var(--text-tertiary); font-size: 11px;">{ "(free standing, no further fields)" }</span>
-            </div>
+                <span><strong>{ tr("gldf.mountings.working_plane") }</strong>{ " " }<span style="color: var(--text-tertiary); font-size: 11px;">{ tr("gldf.mountings.working_plane_hint") }</span></span>
+            </label>
         </div>
     }
 }

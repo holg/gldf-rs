@@ -14,11 +14,25 @@
 #include <stddef.h>
 
 /*
- String-field selector for [`gldf_unreal_variant_string`].
+ String-field selector for [`gldf_unreal_variant_string`] and
+ [`gldf_unreal_variant_emitter_string`].
  */
 #define GLDF_VARIANT_FIELD_ID 0
 
 #define GLDF_VARIANT_FIELD_PHOTOMETRY_ID 1
+
+/*
+ The emitter's L3D LEO partName (EmitterObjectExternalName). Only
+ meaningful for the per-emitter string getter.
+ */
+#define GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME 2
+
+/*
+ The variant's human display name (`Variant.Name`, localized → en/first;
+ falls back to the id if unnamed). For the variant string getter — shown
+ in the UE variant dropdown.
+ */
+#define GLDF_VARIANT_FIELD_NAME 3
 
 #define GLDF_LEO_POINT 0
 
@@ -115,11 +129,35 @@ typedef struct GldfVariantInfo {
  `kind`: 0 = Point/none, 1 = Rectangle, 2 = Circle.
  For Rectangle, `dim_a`/`dim_b` are width/height in **metres**.
  For Circle, `dim_a` is the diameter in metres (`dim_b` unused).
+ `pos_*` are the emitter center in **centimetres**, in the same
+ right-handed Z-up frame as the mesh vertices (C++ applies the UE
+ basis flip on Y). Use them to place the light actor at the emitter,
+ not at the scene root.
+
+ `ax_*` / `ay_*` / `az_*` are the world-space images of the LEO's local
+ +X / +Y / +Z axes after the accumulated geometry·joint·LEO rotation
+ (unit vectors, L3D right-handed Z-up frame; C++ applies the UE Y-flip).
+ L3D LEO convention: rect lies in local XY, emits along local −Z, width
+ along +X, height along +Y. So emission direction = −(az_*), rect width
+ axis = (ax_*), height axis = (ay_*). Lets the consumer aim the light
+ correctly instead of assuming "straight down".
  */
 typedef struct GldfLeoShape {
   uint8_t kind;
   float dim_a;
   float dim_b;
+  float pos_x;
+  float pos_y;
+  float pos_z;
+  float ax_x;
+  float ax_y;
+  float ax_z;
+  float ay_x;
+  float ay_y;
+  float ay_z;
+  float az_x;
+  float az_y;
+  float az_z;
 } GldfLeoShape;
 
 #ifdef __cplusplus
@@ -304,6 +342,54 @@ int32_t gldf_unreal_variant_ies(uint64_t handle,
                                 uint32_t *out_len);
 
 /*
+ Number of emitters for variant `idx`. Returns the count, or -1 on an
+ invalid handle / variant index.
+
+ # Safety
+ `handle` must be live.
+ */
+int32_t gldf_unreal_variant_emitter_count(uint64_t handle, uint32_t idx);
+
+/*
+ Fill `*out` with the scalar data of emitter `eidx` within variant
+ `vidx`. Returns 0 on success, non-zero on invalid handle / indices.
+
+ # Safety
+ `handle` must be live; `out` may be null.
+ */
+int32_t gldf_unreal_variant_emitter_info(uint64_t handle,
+                                         uint32_t vidx,
+                                         uint32_t eidx,
+                                         struct GldfVariantInfo *out);
+
+/*
+ String field (`GLDF_VARIANT_FIELD_*`) for emitter `eidx` within variant
+ `vidx`, as a Rust CString (caller frees via [`gldf_unreal_string_free`]).
+ Null on invalid handle / indices / field.
+
+ # Safety
+ `handle` must be live.
+ */
+char *gldf_unreal_variant_emitter_string(uint64_t handle,
+                                         uint32_t vidx,
+                                         uint32_t eidx,
+                                         uint32_t field);
+
+/*
+ Borrow emitter `eidx`'s IES bytes within variant `vidx`. `*out_ptr`
+ valid until close(). Returns 0 on success, non-zero on invalid
+ handle / indices.
+
+ # Safety
+ `handle` must be live; out-pointers may be null.
+ */
+int32_t gldf_unreal_variant_emitter_ies(uint64_t handle,
+                                        uint32_t vidx,
+                                        uint32_t eidx,
+                                        const uint8_t **out_ptr,
+                                        uint32_t *out_len);
+
+/*
  Drop a variant-table handle. No-op on zero / unknown.
 
  # Safety
@@ -320,6 +406,38 @@ void gldf_unreal_variants_close(uint64_t handle);
  `gldf_path` is a NUL-terminated UTF-8 C string; `out` may be null.
  */
 int32_t gldf_unreal_first_leo_shape(const char *gldf_path, struct GldfLeoShape *out);
+
+/*
+ Number of Light Emitting Objects in the GLDF at `gldf_path`. Returns
+ the count (>= 0), or -1 on a null/invalid path. A twin-head spotlight
+ returns 2. Pair with [`gldf_unreal_leo_at`] + [`gldf_unreal_leo_part_name`]
+ to enumerate them.
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string.
+ */
+int32_t gldf_unreal_leo_count(const char *gldf_path);
+
+/*
+ Fill `*out` with LEO `idx`'s shape + world position. Returns 0 on
+ success; non-zero on null/invalid path, null `out`, or out-of-range
+ index.
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string; `out` may be null.
+ */
+int32_t gldf_unreal_leo_at(const char *gldf_path, uint32_t idx, struct GldfLeoShape *out);
+
+/*
+ LEO `idx`'s `partName` as a Rust CString (caller frees via
+ [`gldf_unreal_string_free`]). Null on null/invalid path or out-of-range
+ index. Match this against an emitter's
+ `GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME` to drive the right light.
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string.
+ */
+char *gldf_unreal_leo_part_name(const char *gldf_path, uint32_t idx);
 
 #ifdef __cplusplus
 }  // extern "C"

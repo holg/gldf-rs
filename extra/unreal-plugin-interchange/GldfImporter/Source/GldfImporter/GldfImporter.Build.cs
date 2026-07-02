@@ -1,15 +1,17 @@
 // Build rules for the GldfImporter UE 5.7 plugin.
 //
-// Links the Rust-produced `libgldf_unreal.a` (release build) and pulls
-// in the Interchange runtime modules our translator subclasses.
+// Links the Rust-produced `gldf_unreal` staticlib + its C header, both
+// bundled INSIDE the plugin under ThirdParty/GldfUnreal/ so the plugin is
+// self-contained — no env vars, no external workspace, drop-in portable.
 //
-// Layout assumption: this plugin lives at
-//   <UEProject>/Plugins/GldfImporter/
-// and the gldf-rs workspace is reachable via relative paths. If the
-// plugin is copied elsewhere, set the env var GLDF_RS_WORKSPACE to an
-// absolute path to the gldf-rs root.
+//   ThirdParty/GldfUnreal/include/gldf_unreal.h
+//   ThirdParty/GldfUnreal/lib/{Mac,Linux,Win64}/<lib>
+//
+// Mac + Linux (x86_64) + Win64 (x86_64 MSVC) libs are prebuilt + shipped —
+// all cross-built from macOS via extra/unreal-plugin-interchange/
+// build_thirdparty_libs.sh (Win64 uses clang-cl + rust-lld + an xwin-style
+// sysroot; a pure C-ABI staticlib needs no Windows linker, so this works).
 
-using System;
 using System.IO;
 using UnrealBuildTool;
 
@@ -24,12 +26,14 @@ public class GldfImporter : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "InterchangeCore",       // UInterchangeTranslatorBase
-            "InterchangeEngine",     // UInterchangeManager
-            "InterchangeNodes",      // UInterchangeTextureLightProfileNode + UInterchangeMeshNode
-            "InterchangeImport",     // payload interfaces + FMeshPayloadData
-            "MeshDescription",       // FMeshDescription (mesh payload, Phase 2)
-            "StaticMeshDescription", // FStaticMeshAttributes (Phase 2)
+            "InterchangeCore",         // UInterchangeTranslatorBase + UInterchangePipelineBase
+            "InterchangeEngine",       // UInterchangeManager
+            "InterchangeNodes",        // UInterchangeTextureLightProfileNode + UInterchangeMeshNode
+            "InterchangeFactoryNodes", // UInterchangeActorFactoryNode (pipeline retypes root, Phase 3b.2)
+            "InterchangeImport",       // payload interfaces + FMeshPayloadData
+            "InterchangePipelines",    // UInterchangeGenericLevelPipeline (stack ordering)
+            "MeshDescription",         // FMeshDescription (mesh payload, Phase 2)
+            "StaticMeshDescription",   // FStaticMeshAttributes (Phase 2)
         });
 
         // Private deps — implementation-only.
@@ -41,45 +45,27 @@ public class GldfImporter : ModuleRules
             "IESFile",               // FIESConverter (used in GetLightProfilePayloadData)
         });
 
-        // ── locate the gldf-rs workspace ───────────────────────────────────
-        string WorkspaceRoot = Environment.GetEnvironmentVariable("GLDF_RS_WORKSPACE");
-        if (string.IsNullOrEmpty(WorkspaceRoot))
-        {
-            // ModuleDirectory == .../GldfImporter/Source/GldfImporter/
-            // Walk up: Source/ → GldfImporter/ → unreal-plugin-interchange/ → extra/ → workspace root
-            WorkspaceRoot = Path.GetFullPath(
-                Path.Combine(ModuleDirectory, "..", "..", "..", "..")
-            );
-        }
+        // ── bundled Rust staticlib + header (plugin-local ThirdParty) ──────
+        // PluginDirectory == .../GldfImporter/ ; ModuleDirectory is
+        // .../GldfImporter/Source/GldfImporter/. Use the plugin dir so this
+        // works no matter where the plugin is dropped (incl. via symlink).
+        string ThirdParty = Path.Combine(PluginDirectory, "ThirdParty", "GldfUnreal");
+        string CrateInclude = Path.Combine(ThirdParty, "include");
 
-        string CrateInclude = Path.Combine(WorkspaceRoot, "crates", "gldf-unreal", "include");
-        string CrateLibDir  = Path.Combine(WorkspaceRoot, "target", "release");
-
-        if (!Directory.Exists(CrateInclude))
-        {
-            throw new BuildException(
-                "GldfImporter: could not find gldf-unreal include dir at " + CrateInclude
-                + ". Set GLDF_RS_WORKSPACE to the absolute path of the gldf-rs workspace."
-            );
-        }
-        if (!Directory.Exists(CrateLibDir))
-        {
-            throw new BuildException(
-                "GldfImporter: could not find Rust release output at " + CrateLibDir
-                + ". Run `cargo build -p gldf-unreal --release` from " + WorkspaceRoot + " first."
-            );
-        }
-
-        PublicIncludePaths.Add(CrateInclude);
-
+        // Per-platform lib subdir + name.
+        string PlatformDir;
         string LibName;
-        if (Target.Platform == UnrealTargetPlatform.Mac || Target.Platform == UnrealTargetPlatform.Linux)
+        if (Target.Platform == UnrealTargetPlatform.Mac)
         {
-            LibName = "libgldf_unreal.a";
+            PlatformDir = "Mac"; LibName = "libgldf_unreal.a";
+        }
+        else if (Target.Platform == UnrealTargetPlatform.Linux)
+        {
+            PlatformDir = "Linux"; LibName = "libgldf_unreal.a";
         }
         else if (Target.Platform == UnrealTargetPlatform.Win64)
         {
-            LibName = "gldf_unreal.lib";
+            PlatformDir = "Win64"; LibName = "gldf_unreal.lib";
         }
         else
         {
@@ -88,14 +74,18 @@ public class GldfImporter : ModuleRules
             );
         }
 
-        string LibPath = Path.Combine(CrateLibDir, LibName);
+        string LibPath = Path.Combine(ThirdParty, "lib", PlatformDir, LibName);
         if (!File.Exists(LibPath))
         {
             throw new BuildException(
-                "GldfImporter: " + LibPath + " not found. Run "
-                + "`cargo build -p gldf-unreal --release` from " + WorkspaceRoot + " first."
+                "GldfImporter: bundled Rust staticlib not found at " + LibPath + ".\n"
+                + "All platforms cross-build from macOS — run\n"
+                + "  extra/unreal-plugin-interchange/build_thirdparty_libs.sh\n"
+                + "in the gldf-rs workspace to rebuild and refresh ThirdParty/."
             );
         }
+
+        PublicIncludePaths.Add(CrateInclude);
         PublicAdditionalLibraries.Add(LibPath);
 
         // Transitive system libs the Rust staticlib needs.

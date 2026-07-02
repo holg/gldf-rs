@@ -14,4 +14,10 @@ public:
     // IModuleInterface
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
+
+private:
+    /** Inject the GLDF per-translator pipeline into the Interchange "Scene"
+     *  stack so .gldf scene imports retype the root to AGldfLuminaireActor.
+     *  Done in code (not ini) for reliability + log feedback. */
+    void RegisterGldfScenePipeline();
 };

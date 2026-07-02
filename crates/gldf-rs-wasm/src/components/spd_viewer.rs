@@ -174,9 +174,36 @@ pub fn SpdPanel(bytes: Vec<u8>) -> impl IntoView {
                 <em style="color: #c00;">{ format!("Not UTF-8 .spd content: {}", e) }</em>
             }.into_any(),
         };
-        match spd_loader::parse(content) {
-            Ok(loaded) => Ok((loaded.spd, "embedded .spd".to_string())),
-            Err(e) => Err(format!("Parse error: {}", e)),
+        // TM-33 fallback: the GLDF Spectrum may point at a TM-33 XML
+        // file (shared with Photometry via the same @fileId — see
+        // tm33_to_gldf). Detect by `<` opener + atla::xml::parse and
+        // pull the SpectralDistribution out directly.
+        let trimmed = content.trim_start_matches('\u{feff}').trim_start();
+        if trimmed.starts_with('<') {
+            if let Ok(doc) = eulumdat::atla::xml::parse(content) {
+                if let Some(spd) = doc
+                    .emitters
+                    .first()
+                    .and_then(|e| e.spectral_distribution.clone())
+                {
+                    if !spd.wavelengths.is_empty()
+                        && spd.wavelengths.len() == spd.values.len()
+                    {
+                        Ok((spd, "embedded TM-33 XML".to_string()))
+                    } else {
+                        Err("TM-33 carries no SpectralDistribution".to_string())
+                    }
+                } else {
+                    Err("TM-33 has no <Emitter><SpectralDistribution>".to_string())
+                }
+            } else {
+                Err("Looks like XML but not TM-33".to_string())
+            }
+        } else {
+            match spd_loader::parse(content) {
+                Ok(loaded) => Ok((loaded.spd, "embedded .spd".to_string())),
+                Err(e) => Err(format!("Parse error: {}", e)),
+            }
         }
     };
     match parsed {
@@ -423,10 +450,43 @@ fn resolve_spd(
     spectrum: &Spectrum,
     embedded_files: &std::collections::HashMap<String, Vec<u8>>,
 ) -> Option<(SpectralDistribution, String)> {
-    // (a) File reference — load bytes, parse via eulumdat's auto-format loader.
+    // (a) File reference — load bytes. Three parsers in order:
+    //   (a1) TM-33 XML: file may carry TM-33 (content_type ldc/iesxml)
+    //        where the SpectralDistribution lives under the Emitter.
+    //        Shared with Photometry via the same @fileId — see
+    //        gldf_rs::convert::tm33_to_gldf.
+    //   (a2) Generic SPD via spd_loader::parse (Luxeon `.spd`,
+    //        Signify CSV, two-column whitespace, etc.).
     if let Some(file_ref) = spectrum.spectrum_file_reference.as_ref() {
         if let Some(bytes) = embedded_files.get(&file_ref.file_id) {
             let content = std::str::from_utf8(bytes).ok()?;
+            let trimmed = content.trim_start_matches('\u{feff}').trim_start();
+            if trimmed.starts_with('<') {
+                if let Ok(doc) = eulumdat::atla::xml::parse(content) {
+                    if let Some(spd) = doc
+                        .emitters
+                        .first()
+                        .and_then(|e| e.spectral_distribution.clone())
+                    {
+                        if !spd.wavelengths.is_empty()
+                            && spd.wavelengths.len() == spd.values.len()
+                        {
+                            return Some((
+                                spd,
+                                format!("TM-33 XML in file {}", file_ref.file_id),
+                            ));
+                        }
+                    }
+                    return Some((
+                        SpectralDistribution::default(),
+                        format!(
+                            "file {} parses as TM-33 but carries no <SpectralDistribution>",
+                            file_ref.file_id
+                        ),
+                    ));
+                }
+                // XML but not TM-33 — fall through to spd_loader.
+            }
             match spd_loader::parse(content) {
                 Ok(loaded) => return Some((loaded.spd, format!("file {}", file_ref.file_id))),
                 Err(e) => {

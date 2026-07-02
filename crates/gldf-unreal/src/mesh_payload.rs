@@ -60,51 +60,141 @@ pub enum LeoShape {
     Point,
 }
 
+/// A LEO's shape plus its emitter center in UE centimetres (world frame
+/// of the merged mesh). The position lets the C++ side place the light
+/// actor at the emitter rather than at the scene root — without it, the
+/// light sits at the mesh origin (one end of a linear strip) and the body
+/// appears to trail off from the light.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LeoPlacement {
+    pub shape: LeoShape,
+    /// Emitter center, L3D→UE basis NOT yet applied (still right-handed
+    /// Z-up). C++ applies PositionToUEBasis (negate Y) for consistency
+    /// with the mesh. Units are centimetres.
+    pub position_cm: [f32; 3],
+    /// The LEO's `partName` (e.g. "LEO0"). Lets the consumer match this
+    /// emitter object to its per-emitter photometry
+    /// (`EmitterReference.EmitterObjectExternalName`). Empty if unnamed.
+    pub part_name: String,
+    /// World-space images of the LEO's local +X, +Y, +Z axes, after the
+    /// accumulated geometry·joint·LEO rotation (unit vectors, still in the
+    /// L3D right-handed Z-up frame — C++ applies the UE Y-flip).
+    ///
+    /// L3D LEO convention (see l3d-rs fbx.rs `make_rect_emitter_mesh`): the
+    /// emitter rectangle lies in the local XY plane and emits along local
+    /// −Z; rect width runs along local +X, height along local +Y. So:
+    ///   `axis_x` = world dir of the rect's width axis,
+    ///   `axis_y` = world dir of the rect's height axis,
+    ///   `axis_z` = world dir of local +Z; emission direction = −`axis_z`.
+    pub axis_x: [f32; 3],
+    pub axis_y: [f32; 3],
+    pub axis_z: [f32; 3],
+}
+
 /// Find the first Light Emitting Object's shape in the GLDF's first L3D.
-/// LEOs are geometry (variant-invariant in v0), so one lookup suffices.
-/// Returns `Point` if there's no LEO or no L3D.
-pub fn first_leo_shape(buf: &FileBufGldf) -> LeoShape {
+/// Returns `Point` at the origin if there's no LEO or no L3D.
+///
+/// Kept for the single-light FFI path; multi-emitter luminaires (twin
+/// spotlights etc.) should use [`collect_all_leos`] to get every emitter.
+pub fn first_leo_shape(buf: &FileBufGldf) -> LeoPlacement {
+    collect_all_leos(buf).into_iter().next().unwrap_or(LeoPlacement {
+        shape: LeoShape::Point,
+        position_cm: [0.0; 3],
+        part_name: String::new(),
+        // Identity basis: emission = −Z (straight down), the safe default.
+        axis_x: [1.0, 0.0, 0.0],
+        axis_y: [0.0, 1.0, 0.0],
+        axis_z: [0.0, 0.0, 1.0],
+    })
+}
+
+/// Collect EVERY Light Emitting Object in the GLDF's first L3D, in tree
+/// order, each with its `partName`, shape, and world position (cm).
+///
+/// LEOs are geometry (variant-invariant in v0), so one lookup serves all
+/// variants. A twin-head spotlight yields two entries at the two heads'
+/// world positions; the consumer matches each `part_name` to that
+/// variant's per-emitter photometry. Empty Vec if there's no LEO or L3D.
+pub fn collect_all_leos(buf: &FileBufGldf) -> Vec<LeoPlacement> {
     let Some(l3d_bytes) = get_first_l3d_with_ldt(buf)
         .and_then(|m| m.l3d_content)
         .or_else(|| first_l3d_in_buffer(buf))
     else {
-        return LeoShape::Point;
+        return Vec::new();
     };
     let l3d = l3d_rs::from_buffer(&l3d_bytes);
     let Ok(luminaire) = Luminaire::from_xml(&l3d.file.structure) else {
-        return LeoShape::Point;
+        return Vec::new();
     };
-    find_leo(&luminaire.structure.geometry).unwrap_or(LeoShape::Point)
+    // LEO positions are in METRES (like LEO sizes), so accumulate the
+    // transform tree in metres → cm. The mesh-part OBJ scale (def.units)
+    // does NOT apply to LEO coordinates.
+    let mut out = Vec::new();
+    collect_leos(&luminaire.structure.geometry, &MAT4_IDENTITY, &mut out);
+    out
 }
 
-/// Recursively search a Geometry (and joint children) for the first LEO.
-fn find_leo(geo: &Geometry) -> Option<LeoShape> {
+/// Recursively walk a Geometry (and joint children), appending every LEO
+/// to `out` with its world position. `parent_world` is in metres; LEO
+/// local position is in metres; we scale to cm at the leaf.
+fn collect_leos(geo: &Geometry, parent_world: &Mat4, out: &mut Vec<LeoPlacement>) {
+    let local = build_transform(&geo.position, &geo.rotation);
+    let accumulated = mat4_mul(parent_world, &local);
+
     if let Some(leos) = &geo.light_emitting_objects {
-        if let Some(leo) = leos.light_emitting_object.first() {
-            if let Some(rect) = leo.rectangle.as_ref() {
-                return Some(LeoShape::Rectangle {
+        for leo in &leos.light_emitting_object {
+            // LEO local transform (position + its OWN rotation) composed onto
+            // the accumulated geometry·joint world transform. Honouring
+            // `leo.rotation` is what lets a tilted/aimed emitter point the
+            // right way instead of always "down".
+            let leo_local = build_transform(&leo.position, &leo.rotation);
+            let leo_world = mat4_mul(&accumulated, &leo_local);
+
+            let world_m = transform_point(&leo_world, [0.0, 0.0, 0.0]);
+            let position_cm = [
+                world_m[0] * METERS_TO_UE_CM,
+                world_m[1] * METERS_TO_UE_CM,
+                world_m[2] * METERS_TO_UE_CM,
+            ];
+
+            // World-space images of the LEO's local axes (directions, w=0),
+            // normalised. emission = −axis_z (L3D emits local −Z); rect width
+            // = axis_x, height = axis_y.
+            let axis_x = normalize3(transform_dir(&leo_world, [1.0, 0.0, 0.0]));
+            let axis_y = normalize3(transform_dir(&leo_world, [0.0, 1.0, 0.0]));
+            let axis_z = normalize3(transform_dir(&leo_world, [0.0, 0.0, 1.0]));
+
+            let shape = if let Some(rect) = leo.rectangle.as_ref() {
+                LeoShape::Rectangle {
                     width_m: rect.size_x as f32,
                     height_m: rect.size_y as f32,
-                });
-            }
-            if let Some(circle) = leo.circle.as_ref() {
-                return Some(LeoShape::Circle {
+                }
+            } else if let Some(circle) = leo.circle.as_ref() {
+                LeoShape::Circle {
                     diameter_m: circle.diameter as f32,
-                });
-            }
-            return Some(LeoShape::Point);
+                }
+            } else {
+                LeoShape::Point
+            };
+            out.push(LeoPlacement {
+                shape,
+                position_cm,
+                part_name: leo.part_name.clone(),
+                axis_x,
+                axis_y,
+                axis_z,
+            });
         }
     }
     if let Some(joints) = &geo.joints {
         for joint in &joints.joint {
+            let joint_local = build_transform(&joint.position, &joint.rotation);
+            let joint_world = mat4_mul(&accumulated, &joint_local);
             for child in &joint.geometries.geometry {
-                if let Some(s) = find_leo(child) {
-                    return Some(s);
-                }
+                collect_leos(child, &joint_world, out);
             }
         }
     }
-    None
 }
 
 /// Parsed OBJ mesh in L3D source frame (mm, right-handed Z-up).

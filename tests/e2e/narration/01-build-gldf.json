@@ -1,0 +1,44 @@
+{
+  "chapter": "Build the GLDF",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "_comment": "Cue durations come from the SRT. en-US Aria reads at about 2.5 words per second. Cue 1 ~46s, 2 ~7s, 3 ~60s, 4 ~12s, 5 ~3s, 6 ~14s, 7 ~13s, 8 ~5s, 9 ~5s (but the chapter video runs another 25s past cue 9 for the visible rename tour, so cue 9 is intentionally written long — the audio overruns into the tour footage). Edit lengths first, then voice — overruns bleed into the next cue's window.",
+  "cues": [
+    {
+      "cue": "Act 1 — Wizard",
+      "text": "Welcome to gldf.icu — a fully in-browser editor for GLDF, the lighting interchange format. We're building a complete luminaire from scratch using the eleven-step wizard. Each step turns a drop into a first-class entry: the photometry LDT becomes a Photometry definition, the optional emergency beam becomes a second photometry entry, the sensor data sheet lands as a typed sensor file with its own metadata, and the L3D mesh is wired into the variant's geometry. The driver step mints a control gear and a matching equipment binding. By the time we click Create, we have a schema-valid GLDF skeleton — no follow-up corrections needed."
+    },
+    {
+      "cue": "Act 2 — Files",
+      "text": "Two extra photometry files, a product photo, and a spectrum SPD round out the catalog."
+    },
+    {
+      "cue": "Act 3 — Light Sources",
+      "text": "Three light source modules, one per color temperature: four thousand kelvin neutral, three thousand kelvin warm, and five thousand kelvin cool. We bind the spectrum to the warm module so the eventual TM-33 export carries both photometry and spectral data. Then we give the photometry entries semantic names — middle, narrow, wide, and emergency — instead of the auto-generated identifiers. The library cascades these renames through every reference site, so emitters, light sources, and variants stay consistent."
+    },
+    {
+      "cue": "Act 4 — Control Gear",
+      "text": "The wizard already minted a baseline driver. Here we refine it through the editor."
+    },
+    {
+      "cue": "Act 5 — Equipment",
+      "text": "Equipment links driver and lamp."
+    },
+    {
+      "cue": "Act 6 — Emitters",
+      "text": "Seven emitters, four variants. Each carries its own photometry, light source, and flux. The fourth variant uses the sensor mount and the EmergencyOnly behaviour."
+    },
+    {
+      "cue": "Act 7 — Variants (duplicate + GTINs)",
+      "text": "Duplicate the seed variant three times, then stamp a GTIN — the global trade item number that catalogs and ERP systems key on."
+    },
+    {
+      "cue": "Act 8 — Rebind emitters per variant",
+      "text": "Each variant binds to its own emitter set."
+    },
+    {
+      "cue": "Act 8c — Rename auto-ids → semantic",
+      "text": "Last step — rename every auto-generated identifier to a semantic one. Files, photometry, light sources, emitters, variants. Catalog and BIM tools store these strings verbatim, so the difference between photometryFile_one and ldt_narrow is the difference between a forensic smell and a feature. The library cascades the renames through every reference site, so emitters keep pointing at the right photometry, variants keep pointing at the right emitters, and so on. We do a quick visual tour of each pane to confirm everything looks right — files, light sources, emitters, and variants. The variants now have proper display names too, derived from their housing colour and color temperature."
+    }
+  ]
+}

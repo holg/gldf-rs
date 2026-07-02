@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IESTM33-22>
+  <Version>1.1</Version>
+  <Header>
+    <Manufacturer>SLV</Manufacturer>
+    <CatalogNumber>114280</CatalogNumber>
+    <Description>NEW TRIA</Description>
+    <Laboratory>SLV</Laboratory>
+    <ReportNumber>201665G206</ReportNumber>
+    <ReportDate>DIALNETZ\pittner |17.07.2015 SXKat V</ReportDate>
+  </Header>
+  <Luminaire>
+    <Dimensions>
+      <Length>96</Length>
+      <Width>96</Width>
+      <Height>2</Height>
+    </Dimensions>
+  </Luminaire>
+  <Emitter>
+    <Quantity>1</Quantity>
+    <Description>-1x LED 2700K CRI 80</Description>
+    <RatedLumens>2200</RatedLumens>
+    <InputWattage>18.5</InputWattage>
+    <ColorTemperature>
+      <FixedCCT>3000</FixedCCT>
+    </ColorTemperature>
+    <ColorRendering>
+      <Ra>80</Ra>
+    </ColorRendering>
+    <LuminousData>
+      <LuminousIntensity>
+        <NumberHorz>1</NumberHorz>
+        <NumberVert>91</NumberVert>
+        <IntData h="0" v="0">3810.9</IntData>
+        <IntData h="0" v="1">3776.3</IntData>
+        <IntData h="0" v="2">3712.1</IntData>
+        <IntData h="0" v="3">3609</IntData>
+        <IntData h="0" v="4">3469.3</IntData>
+        <IntData h="0" v="5">3297.6</IntData>
+        <IntData h="0" v="6">3096.6</IntData>
+        <IntData h="0" v="7">2874.9</IntData>
+        <IntData h="0" v="8">2643.6</IntData>
+        <IntData h="0" v="9">2411.7</IntData>
+        <IntData h="0" v="10">2189.1</IntData>
+        <IntData h="0" v="11">1976.7</IntData>
+        <IntData h="0" v="12">1776.2</IntData>
+        <IntData h="0" v="13">1596.4</IntData>
+        <IntData h="0" v="14">1433.6</IntData>
+        <IntData h="0" v="15">1294.9</IntData>
+        <IntData h="0" v="16">1173.6</IntData>
+        <IntData h="0" v="17">1066.6</IntData>
+        <IntData h="0" v="18">967.86</IntData>
+        <IntData h="0" v="19">877.22</IntData>
+        <IntData h="0" v="20">795.19</IntData>
+        <IntData h="0" v="21">725.69</IntData>
+        <IntData h="0" v="22">666.82</IntData>
+        <IntData h="0" v="23">617.35</IntData>
+        <IntData h="0" v="24">575.69</IntData>
+        <IntData h="0" v="25">538.92</IntData>
+        <IntData h="0" v="26">502.05</IntData>
+        <IntData h="0" v="27">462.08</IntData>
+        <IntData h="0" v="28">420.78</IntData>
+        <IntData h="0" v="29">385.39</IntData>
+        <IntData h="0" v="30">359.34</IntData>
+        <IntData h="0" v="31">330.01</IntData>
+        <IntData h="0" v="32">289.34</IntData>
+        <IntData h="0" v="33">238.93</IntData>
+        <IntData h="0" v="34">184.96</IntData>
+        <IntData h="0" v="35">131.98</IntData>
+        <IntData h="0" v="36">84.63</IntData>
+        <IntData h="0" v="37">48.46</IntData>
+        <IntData h="0" v="38">28.63</IntData>
+        <IntData h="0" v="39">22.14</IntData>
+        <IntData h="0" v="40">19.92</IntData>
+        <IntData h="0" v="41">18.3</IntData>
+        <IntData h="0" v="42">16.72</IntData>
+        <IntData h="0" v="43">15.22</IntData>
+        <IntData h="0" v="44">13.73</IntData>
+        <IntData h="0" v="45">12.33</IntData>
+        <IntData h="0" v="46">11.1</IntData>
+        <IntData h="0" v="47">9.99</IntData>
+        <IntData h="0" v="48">8.92</IntData>
+        <IntData h="0" v="49">8.05</IntData>
+        <IntData h="0" v="50">7.29</IntData>
+        <IntData h="0" v="51">6.48</IntData>
+        <IntData h="0" v="52">5.8</IntData>
+        <IntData h="0" v="53">5.28</IntData>
+        <IntData h="0" v="54">4.77</IntData>
+        <IntData h="0" v="55">4.32</IntData>
+        <IntData h="0" v="56">4</IntData>
+        <IntData h="0" v="57">3.66</IntData>
+        <IntData h="0" v="58">3.36</IntData>
+        <IntData h="0" v="59">3.17</IntData>
+        <IntData h="0" v="60">2.99</IntData>
+        <IntData h="0" v="61">2.78</IntData>
+        <IntData h="0" v="62">2.62</IntData>
+        <IntData h="0" v="63">2.51</IntData>
+        <IntData h="0" v="64">2.39</IntData>
+        <IntData h="0" v="65">2.26</IntData>
+        <IntData h="0" v="66">2.14</IntData>
+        <IntData h="0" v="67">2.01</IntData>
+        <IntData h="0" v="68">1.9</IntData>
+        <IntData h="0" v="69">1.81</IntData>
+        <IntData h="0" v="70">1.7</IntData>
+        <IntData h="0" v="71">1.6</IntData>
+        <IntData h="0" v="72">1.51</IntData>
+        <IntData h="0" v="73">1.41</IntData>
+        <IntData h="0" v="74">1.31</IntData>
+        <IntData h="0" v="75">1.21</IntData>
+        <IntData h="0" v="76">1.08</IntData>
+        <IntData h="0" v="77">0.96</IntData>
+        <IntData h="0" v="78">0.84</IntData>
+        <IntData h="0" v="79">0.74</IntData>
+        <IntData h="0" v="80">0.66</IntData>
+        <IntData h="0" v="81">0.59</IntData>
+        <IntData h="0" v="82">0.53</IntData>
+        <IntData h="0" v="83">0.47</IntData>
+        <IntData h="0" v="84">0.42</IntData>
+        <IntData h="0" v="85">0.36</IntData>
+        <IntData h="0" v="86">0.3</IntData>
+        <IntData h="0" v="87">0.25</IntData>
+        <IntData h="0" v="88">0.2</IntData>
+        <IntData h="0" v="89">0.12</IntData>
+        <IntData h="0" v="90">0.04</IntData>
+      </LuminousIntensity>
+    </LuminousData>
+    <SpectralDistribution>
+      <Units>Relative</Units>
+      <StartWavelength>360</StartWavelength>
+      <WavelengthInterval>5</WavelengthInterval>
+      <Wavelengths>360 365 370 375 380 385 390 395 400 405 410 415 420 425 430 435 440 445 450 455 460 465 470 475 480 485 490 495 500 505 510 515 520 525 530 535 540 545 550 555 560 565 570 575 580 585 590 595 600 605 610 615 620 625 630 635 640 645 650 655 660 665 670 675 680 685 690 695 700 705 710 715 720 725 730 735 740 745 750 755 760 765 770 775 780 785 790 795 800 805 810 815 820 825 830</Wavelengths>
+      <Values>0.014891 0.017023 0.019372 0.021949 0.024766 0.027833 0.031161 0.034759 0.038635 0.0428 0.047259 0.05202 0.057088 0.062471 0.06817 0.074192 0.080537 0.087208 0.094206 0.101531 0.109183 0.117159 0.125458 0.134076 0.143009 0.152254 0.161803 0.171653 0.181794 0.192221 0.202926 0.213899 0.225133 0.236618 0.248343 0.260299 0.272476 0.284862 0.297447 0.310219 0.323167 0.336279 0.349543 0.362948 0.376482 0.390132 0.403887 0.417736 0.431666 0.445665 0.459722 0.473826 0.487965 0.502127 0.516303 0.530481 0.544651 0.558802 0.572924 0.587008 0.601043 0.615021 0.628933 0.642769 0.656521 0.670181 0.683742 0.697195 0.710533 0.72375 0.736838 0.749791 0.762603 0.775269 0.787782 0.800138 0.812332 0.824358 0.836213 0.847892 0.859392 0.870709 0.88184 0.892781 0.903531 0.914085 0.924442 0.934601 0.944558 0.954312 0.963863 0.973208 0.982346 0.991277 1</Values>
+    </SpectralDistribution>
+  </Emitter>
+</IESTM33-22>

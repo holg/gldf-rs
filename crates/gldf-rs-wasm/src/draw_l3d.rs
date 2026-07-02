@@ -408,59 +408,71 @@ pub fn start_render_loop(renderer: Rc<RefCell<DrawL3d>>) {
     std::mem::forget(g);
 }
 
-/// Load assets from L3D file into three_d RawAssets
-/// Also adds stub MTL files for any missing material references in OBJ files
+/// Load assets from L3D file into three_d RawAssets.
+///
+/// Trusts the L3D's bytes when *any* MTL is present in the archive.
+/// Only when the archive has zero MTLs (uncommon — most L3Ds either
+/// ship one or have already been passed through
+/// `l3d_rs::L3dFile::ensure_mtl`) does this function fall back to
+/// injecting a neutral-grey stub at the candidate paths an OBJ's
+/// `mtllib` could resolve to.
+///
+/// # Why the conditional
+///
+/// An earlier version of this function unconditionally injected a
+/// grey stub at every `<base>/<name>.mtl`, `<base>/./<name>.mtl`,
+/// and `<name>.mtl` candidate, regardless of what was already in the
+/// archive. That worked around archives shipped without an MTL — but
+/// it also squatted on **alternate path candidates** that three-d's
+/// `PathBuf::join` could land on, overriding any real coloured MTL
+/// we'd just synthesized (e.g. via the housing-colour → RAL → MTL
+/// bridge). The luminaire would render the stub's grey instead of
+/// the user's choice.
+///
+/// The right place for "if no MTL exists, write one" is
+/// `l3d_rs::L3dFile::ensure_mtl`, which writes one MTL per OBJ
+/// directory at the exact path the OBJ references. Here we keep
+/// a fallback only for L3Ds that bypass that helper.
 pub fn load_assets(l3d: &l3d_rs::L3d) -> three_d_asset::io::RawAssets {
     let mut raw_assets = three_d_asset::io::RawAssets::new();
+    let has_real_mtl = l3d
+        .file
+        .assets
+        .iter()
+        .any(|a| a.name.to_ascii_lowercase().ends_with(".mtl"));
 
-    // First pass: collect all assets and find MTL references in OBJ files
-    let mut mtl_refs: Vec<(String, String)> = Vec::new(); // (base_path, mtl_name)
-
+    let mut mtl_refs: Vec<(String, String)> = Vec::new();
     for asset in &l3d.file.assets {
         raw_assets.insert(&asset.name, asset.content.clone());
-
-        // If this is an OBJ file, parse it to find mtllib references
-        if asset.name.to_lowercase().ends_with(".obj") {
+        if !has_real_mtl && asset.name.to_ascii_lowercase().ends_with(".obj") {
             if let Ok(content) = std::str::from_utf8(&asset.content) {
-                // Extract base directory from asset path
                 let base_path = if let Some(pos) = asset.name.rfind('/') {
                     &asset.name[..=pos]
                 } else {
                     ""
                 };
-
-                // Find mtllib directives
                 for line in content.lines() {
-                    let line = line.trim();
-                    if let Some(mtl_name) = line.strip_prefix("mtllib ") {
-                        let mtl_name = mtl_name.trim();
-                        log!(format!(
-                            "[load_assets] OBJ '{}' references mtllib '{}'",
-                            asset.name, mtl_name
-                        ));
-                        mtl_refs.push((base_path.to_string(), mtl_name.to_string()));
+                    if let Some(mtl_name) = line.trim().strip_prefix("mtllib ") {
+                        mtl_refs.push((base_path.to_string(), mtl_name.trim().to_string()));
                     }
                 }
             }
         }
     }
 
-    // Second pass: add stub MTL files for missing references
-    for (base_path, mtl_name) in mtl_refs {
-        // Try various path combinations
-        let paths_to_try = vec![
-            format!("{}{}", base_path, mtl_name),
-            format!("{}./{}", base_path, mtl_name),
-            mtl_name.clone(),
-        ];
-
-        for mtl_path in &paths_to_try {
-            // Check if this MTL already exists
-            let exists = l3d.file.assets.iter().any(|a| a.name == *mtl_path);
-            if !exists {
-                // Add a minimal stub MTL file with default material
-                // MTL format requires specific order: Ns before Ka
-                let stub_mtl = b"# Stub material file\nnewmtl default\nNs 100.0\nKa 0.2 0.2 0.2\nKd 0.8 0.8 0.8\nKs 0.1 0.1 0.1\nd 1.0\nillum 2\n";
+    if !has_real_mtl {
+        // Archive bypassed `ensure_mtl` and ships with dangling
+        // `mtllib` references. Write a neutral-grey stub at each
+        // candidate path so three-d can deserialize the OBJ instead
+        // of bailing.
+        for (base_path, mtl_name) in mtl_refs {
+            let paths_to_try = [
+                format!("{}{}", base_path, mtl_name),
+                format!("{}./{}", base_path, mtl_name),
+                mtl_name.clone(),
+            ];
+            for mtl_path in &paths_to_try {
+                let stub_mtl = b"# Stub material file (no MTL in L3D archive)\nnewmtl default\nNs 100.0\nKa 0.2 0.2 0.2\nKd 0.8 0.8 0.8\nKs 0.1 0.1 0.1\nd 1.0\nillum 2\n";
                 log!(format!("[load_assets] Adding stub MTL for '{}'", mtl_path));
                 raw_assets.insert(mtl_path, stub_mtl.to_vec());
             }

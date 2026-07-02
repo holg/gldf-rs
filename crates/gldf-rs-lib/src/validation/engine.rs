@@ -282,17 +282,23 @@ fn validate_files(
         // Validate content type format
         let valid_content_types = [
             "ldc/eulumdat",
+            // Authoritative list per gldf-1.0.0-rc-3.xsd's `contentType`
+            // closed enum. NOTE: `image/jpg` (not `image/jpeg`) and
+            // `spectrum/text` (not `spectrum/txt`) — the XSD spellings
+            // diverge from IANA on purpose; downstream readers reject
+            // anything else.
             "ldc/ies",
+            "ldc/iesxml",
             "geo/l3d",
             "geo/m3d",
             "geo/r3d",
             "image/png",
             "image/jpg",
-            "image/jpeg",
             "image/svg",
             "document/pdf",
-            "spectrum/txt",
-            "sensor/sens-ldt",
+            "spectrum/text",
+            "sensor/sensxml",
+            "sensor/sensldt",
             "symbol/dxf",
             "symbol/svg",
             "other",

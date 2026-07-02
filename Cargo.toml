@@ -10,6 +10,7 @@ members = [
     "crates/gldf-rs-python",
     "crates/gldf-rs-cli",
     "crates/gldf-rs-editor",
+    "crates/gldf-rs-lisp",
     "crates/gldf-rs-tui",
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
@@ -33,6 +34,7 @@ homepage = "https://github.com/holg/gldf-rs"
 gldf-rs = { version = "0.4.0", path = "crates/gldf-rs-lib", default-features = false }
 # Editor API (frontend-agnostic) — all consumers (WASM, TUI, CLI, Python, FFI) drive this.
 gldf-rs-editor = { version = "0.4.0", path = "crates/gldf-rs-editor" }
+gldf-rs-lisp = { version = "0.4.0", path = "crates/gldf-rs-lisp" }
 # Translation store (gldf.* keys + RAL Classic names). Frontends depend on this crate;
 # the lib only references its Translator trait.
 gldf-rs-i18n = { version = "0.4.0", path = "crates/gldf-rs-i18n" }
@@ -185,3 +187,14 @@ version_check = "0.9"
 
 # [patch.crates-io] removed — eulumdat-bevy is now path-dep'd above, so
 # crates.io eulumdat never enters the graph and there's nothing to patch.
+
+# Distribution profile for cross_build_on_mac.sh (see scripts/
+# cross-build.toml). LTO belongs in a profile, not RUSTFLAGS — cargo
+# passes `-C embed-bitcode=no` to deps unless the profile declares lto,
+# so `-C lto=fat` via RUSTFLAGS aborts the build.
+[profile.release-dist]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

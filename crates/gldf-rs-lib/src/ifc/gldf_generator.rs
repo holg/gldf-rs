@@ -419,12 +419,24 @@ impl GldfGenerator {
             Self::escape_xml(&self.luminaire.name)
         ));
 
-        // Product-level DescriptiveAttributes (IP code, safety class, median useful life)
+        // Product-level DescriptiveAttributes. Sourced from both the
+        // canonical IFC Psets and the bSDD-keyed Pset_GLDF_* buckets
+        // (BIM-properties spec round-trip).
         let da = &self.luminaire.descriptive_attributes;
-        let has_electrical = da.electrical_safety_class.is_some() || da.ip_code.is_some();
+        let has_electrical = da.electrical_safety_class.is_some()
+            || da.ip_code.is_some()
+            || da.power_factor.is_some()
+            || da.constant_light_output.is_some();
+        let has_mechanical = da.weight.is_some()
+            || da.ik_rating.is_some()
+            || da.product_form.is_some()
+            || da.overall_width_mm.is_some()
+            || da.overall_height_mm.is_some()
+            || da.overall_length_mm.is_some();
         let has_ops = da.median_useful_life.is_some();
+        let has_emergency = da.dedicated_emergency_lighting_type.is_some();
 
-        if has_electrical || has_ops {
+        if has_electrical || has_mechanical || has_ops || has_emergency {
             xml.push_str("      <DescriptiveAttributes>\n");
 
             if has_electrical {
@@ -441,7 +453,60 @@ impl GldfGenerator {
                         Self::escape_xml(ip)
                     ));
                 }
+                if let Some(pf) = da.power_factor {
+                    xml.push_str(&format!(
+                        "          <PowerFactor>{}</PowerFactor>\n",
+                        pf
+                    ));
+                }
+                if let Some(clo) = da.constant_light_output {
+                    xml.push_str(&format!(
+                        "          <ConstantLightOutput>{}</ConstantLightOutput>\n",
+                        clo
+                    ));
+                }
                 xml.push_str("        </Electrical>\n");
+            }
+
+            if has_mechanical {
+                xml.push_str("        <Mechanical>\n");
+                // ProductSize children are required as a group; only
+                // emit when at least one dimension is present.
+                if da.overall_width_mm.is_some()
+                    || da.overall_height_mm.is_some()
+                    || da.overall_length_mm.is_some()
+                {
+                    xml.push_str("          <ProductSize>\n");
+                    xml.push_str(&format!(
+                        "            <Length>{}</Length>\n",
+                        da.overall_length_mm.unwrap_or(0)
+                    ));
+                    xml.push_str(&format!(
+                        "            <Width>{}</Width>\n",
+                        da.overall_width_mm.unwrap_or(0)
+                    ));
+                    xml.push_str(&format!(
+                        "            <Height>{}</Height>\n",
+                        da.overall_height_mm.unwrap_or(0)
+                    ));
+                    xml.push_str("          </ProductSize>\n");
+                }
+                if let Some(ref pf) = da.product_form {
+                    xml.push_str(&format!(
+                        "          <ProductForm>{}</ProductForm>\n",
+                        Self::escape_xml(pf)
+                    ));
+                }
+                if let Some(ref ik) = da.ik_rating {
+                    xml.push_str(&format!(
+                        "          <IKRating>{}</IKRating>\n",
+                        Self::escape_xml(ik)
+                    ));
+                }
+                if let Some(w) = da.weight {
+                    xml.push_str(&format!("          <Weight>{}</Weight>\n", w));
+                }
+                xml.push_str("        </Mechanical>\n");
             }
 
             if has_ops {
@@ -455,6 +520,17 @@ impl GldfGenerator {
                     xml.push_str("          </MedianUsefulLifeTimes>\n");
                 }
                 xml.push_str("        </OperationsAndMaintenance>\n");
+            }
+
+            if has_emergency {
+                xml.push_str("        <Emergency>\n");
+                if let Some(ref et) = da.dedicated_emergency_lighting_type {
+                    xml.push_str(&format!(
+                        "          <DedicatedEmergencyLightingType>{}</DedicatedEmergencyLightingType>\n",
+                        Self::escape_xml(et)
+                    ));
+                }
+                xml.push_str("        </Emergency>\n");
             }
 
             xml.push_str("      </DescriptiveAttributes>\n");

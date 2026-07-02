@@ -68,7 +68,7 @@ pub fn ScopePicker(
             view! {
                 <div class="scope-picker">
                     <label class="scope-picker-label">{ "Editing scope:" }</label>
-                    <select class="scope-picker-select" on:change=on_select prop:value=current_value>
+                    <select class="scope-picker-select" data-testid="scope-picker-select" on:change=on_select prop:value=current_value>
                         <option value="product" selected=product_selected>
                             { "Product default" }
                         </option>

@@ -41,7 +41,7 @@ pub struct MetaProperty {
     #[serde(rename = "@name")]
     pub name: String,
     /// The text value of the property.
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub property_text: String,
 }
 

@@ -345,6 +345,9 @@ fn svg_to_png(svg_str: &str, width: u32, height: u32) -> Result<Vec<u8>, String>
 
 /// Render L3D 3D model preview
 fn render_l3d_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
+    // `path` only feeds the viewer3d button's window title below.
+    #[cfg(not(feature = "viewer3d"))]
+    let _ = path;
     ui.label(egui::RichText::new("🧊 L3D 3D Model").color(egui::Color32::from_rgb(52, 168, 83)));
     ui.add_space(8.0);
 
@@ -384,17 +387,21 @@ fn render_l3d_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
 
     ui.add_space(16.0);
 
-    // Open interactive 3D viewer button
-    let content_for_viewer = content.to_vec();
-    let display_name = path.rsplit('/').next().unwrap_or(path).to_string();
-    if ui.button("Open Interactive 3D Viewer").clicked() {
-        crate::l3d_render::open_l3d_viewer(content_for_viewer, &display_name);
+    // Open interactive 3D viewer button (three-d based; compiled out of
+    // binaries built without the `viewer3d` feature, e.g. the batch app).
+    #[cfg(feature = "viewer3d")]
+    {
+        let content_for_viewer = content.to_vec();
+        let display_name = path.rsplit('/').next().unwrap_or(path).to_string();
+        if ui.button("Open Interactive 3D Viewer").clicked() {
+            crate::l3d_render::open_l3d_viewer(content_for_viewer, &display_name);
+        }
+        ui.label(
+            egui::RichText::new("Drag to rotate, scroll to zoom")
+                .small()
+                .weak(),
+        );
     }
-    ui.label(
-        egui::RichText::new("Drag to rotate, scroll to zoom")
-            .small()
-            .weak(),
-    );
 
     ui.add_space(8.0);
     ui.collapsing("Raw Hex Data", |ui| {

@@ -8,6 +8,7 @@
 
 pub mod ifc_loader;
 pub mod l3d_loader;
+pub mod orientation;
 pub mod scene;
 
 pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
@@ -71,9 +72,21 @@ impl MountingConfig {
                 if let Some(pendant_mm) = self.pendant_length_mm {
                     // Pendant: hang down from ceiling
                     (room_height - (pendant_mm as f32 / 1000.0), true)
-                } else if self.recessed_depth_mm.is_some() {
-                    // Recessed: flush with ceiling
-                    (room_height, true)
+                } else if let Some(depth_mm) = self.recessed_depth_mm {
+                    // Recessed: the luminaire body is BURIED inside
+                    // the ceiling cavity, depth `depth_mm` deep. We
+                    // place the LEO emission plane *above* the
+                    // ceiling line by `depth/1000` so the luminaire's
+                    // own body (which extends DOWNWARD from the LEOs
+                    // in the L3D) only protrudes by
+                    //   body_height − depth
+                    // For SLV Tria 2: body ~55 mm − 50 mm recessed =
+                    // ~5–20 mm protrusion. The cone we draw from each
+                    // LEO still starts at the LEO position and flares
+                    // downward, so the rendered effect reads as
+                    // "light coming out of a hole in the ceiling."
+                    let depth_m = (depth_mm as f32 / 1000.0).max(0.0);
+                    (room_height + depth_m, true)
                 } else {
                     // Surface mounted: slightly below ceiling
                     (room_height - 0.05, true)
@@ -369,6 +382,7 @@ pub fn poll_gldf_changes(
 pub fn ui_controls_system(
     mut settings: ResMut<SceneSettings>,
     mut scene_data: ResMut<GldfSceneData>,
+    mut show_cones: ResMut<l3d_loader::ShowLightCones>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
     // Toggle photometric solid with P key
@@ -384,6 +398,14 @@ pub fn ui_controls_system(
     // Toggle shadows with H key
     if keyboard.just_pressed(KeyCode::KeyH) {
         settings.show_shadows = !settings.show_shadows;
+    }
+
+    // Toggle debug light cones with K key — translucent emissive cones
+    // along each spotlight's emission axis. Off by default because they
+    // dominate dark scenes; turn on with K to verify the (LUMINAIRE-TILT
+    // …) Lisp primitive is moving the right joint.
+    if keyboard.just_pressed(KeyCode::KeyK) {
+        show_cones.0 = !show_cones.0;
     }
 
     // Cycle scene types with 1-4 keys
@@ -663,6 +685,981 @@ fn js_camera_bridge_apply(
     }
 }
 
+// ---------- JS → Bevy joint-tilt bridge ----------
+//
+// Companion to the camera bridge above. JS callers (or the WASM Lisp
+// REPL panel via the `gldf-rs-lisp` engine) request a tilt:
+//
+//     window.gldf_bevy_luminaire_tilt("LEO0", 20.0, 0.0, 0.0)
+//
+// The joint name is the L3D `partName` (e.g. "LEO0", "Sensor"). The
+// `gldf-rs-lisp` engine addresses these as `"l3d://leo0"`; the panel
+// strips the `l3d://` prefix before forwarding. Angles are Euler XYZ
+// in degrees.
+//
+// Mechanism mirrors the camera bridge: a `Mutex<HashMap<…>>` of
+// pending tilt requests keyed by joint name. A Bevy system drains the
+// map every frame, then walks every entity carrying
+// `LightEmitterJoint(name)` + `LightEmitterBaseRotation(base)` and
+// sets `transform.rotation = base * tilt`. Re-applying overwrites
+// the previous tilt cleanly — no compounding across script runs.
+
+#[cfg(target_arch = "wasm32")]
+static JOINT_TILTS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>>,
+> = std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn joint_tilts_cell()
+-> &'static std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>> {
+    JOINT_TILTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// JS entry: request a tilt on one L3D joint, in degrees (Euler XYZ).
+///
+///     window.gldf_bevy_luminaire_tilt("LEO0", 20.0, 0.0, 0.0)
+///
+/// Subsequent calls to the same joint replace the previous tilt — the
+/// apply system multiplies `base * tilt` against the captured base
+/// rotation, so this is set-not-add semantics.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_luminaire_tilt)]
+pub fn luminaire_tilt_from_js(joint: &str, deg_x: f32, deg_y: f32, deg_z: f32) {
+    if let Ok(mut map) = joint_tilts_cell().lock() {
+        map.insert(joint.to_string(), [deg_x, deg_y, deg_z]);
+    }
+}
+
+/// JS entry: clear ALL pending tilts AND active animations on every
+/// joint. Use this before starting a fresh choreography so a previous
+/// session's leftover tilt can't compound on top of the new starting
+/// pose. Also called automatically whenever a new L3D loads — the apex
+/// pivot needs a known-zero starting state to look right.
+///
+///     window.gldf_bevy_reset_tilts()
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_reset_tilts)]
+pub fn reset_tilts_from_js() {
+    if let Ok(mut m) = joint_tilts_cell().lock() {
+        m.clear();
+    }
+    if let Ok(mut m) = joint_anims_cell().lock() {
+        m.clear();
+    }
+}
+
+// ---------- Room-tweak request cells + JS bridges ----------
+//
+// Lisp scripts adjust the surrounding room via four primitives:
+// `(SET-AMBIENT b)`, `(SET-ROOM-SIZE w l h)`,
+// `(SET-{WALLS|FLOOR|CEILING}-COLOR r g b)`, and
+// `(SET-{WALLS|FLOOR|CEILING}-REFLECTANCE v)`. Each gets its own
+// `Mutex<Option<…>>` request cell. JS bridges drop a request in;
+// Bevy systems below drain the cells every frame and mutate the
+// appropriate resource / entity material.
+//
+// Surface targets ride as a string ("walls" / "floor" / "ceiling")
+// because we don't want gldf-bevy to depend on gldf-rs-lisp's enum.
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug)]
+struct RoomSizeRequest {
+    width: f32,
+    length: f32,
+    height: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Debug)]
+struct SurfaceColorRequest {
+    surface: String,
+    r: f32,
+    g: f32,
+    b: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Debug)]
+struct SurfaceEmissiveRequest {
+    surface: String,
+    r: f32,
+    g: f32,
+    b: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Debug)]
+struct SurfaceReflectanceRequest {
+    surface: String,
+    value: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+static AMBIENT_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<f32>>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static ROOM_SIZE_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<RoomSizeRequest>>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static SURFACE_COLOR_REQUEST: std::sync::OnceLock<
+    std::sync::Mutex<Vec<SurfaceColorRequest>>,
+> = std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static SURFACE_REFLECTANCE_REQUEST: std::sync::OnceLock<
+    std::sync::Mutex<Vec<SurfaceReflectanceRequest>>,
+> = std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static SURFACE_EMISSIVE_REQUEST: std::sync::OnceLock<
+    std::sync::Mutex<Vec<SurfaceEmissiveRequest>>,
+> = std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn ambient_request_cell() -> &'static std::sync::Mutex<Option<f32>> {
+    AMBIENT_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
+}
+#[cfg(target_arch = "wasm32")]
+fn room_size_request_cell() -> &'static std::sync::Mutex<Option<RoomSizeRequest>> {
+    ROOM_SIZE_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
+}
+#[cfg(target_arch = "wasm32")]
+fn surface_color_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceColorRequest>> {
+    SURFACE_COLOR_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+#[cfg(target_arch = "wasm32")]
+fn surface_reflectance_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceReflectanceRequest>> {
+    SURFACE_REFLECTANCE_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+#[cfg(target_arch = "wasm32")]
+fn surface_emissive_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceEmissiveRequest>> {
+    SURFACE_EMISSIVE_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// JS entry: set the global ambient brightness. Picked up by
+/// `apply_ambient_request` on the next frame.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_ambient)]
+pub fn set_ambient_from_js(brightness: f32) {
+    if let Ok(mut slot) = ambient_request_cell().lock() {
+        *slot = Some(brightness.max(0.0));
+    }
+}
+
+/// JS entry: resize the surrounding room. Each plane's transform is
+/// rebuilt by `apply_room_size_request` on the next frame.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_room_size)]
+pub fn set_room_size_from_js(width: f32, length: f32, height: f32) {
+    if width <= 0.0 || length <= 0.0 || height <= 0.0 {
+        return;
+    }
+    if let Ok(mut slot) = room_size_request_cell().lock() {
+        *slot = Some(RoomSizeRequest {
+            width,
+            length,
+            height,
+        });
+    }
+}
+
+/// JS entry: set a room surface's base colour. `surface` is one of
+/// `"walls"`, `"floor"`, `"ceiling"`. Unknown surfaces are ignored.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_surface_color)]
+pub fn set_surface_color_from_js(surface: String, r: f32, g: f32, b: f32) {
+    if let Ok(mut v) = surface_color_request_cell().lock() {
+        v.push(SurfaceColorRequest { surface, r, g, b });
+    }
+}
+
+/// JS entry: set a room surface's reflectance (0 = matte, 1 = mirror).
+/// `surface` is one of `"walls"`, `"floor"`, `"ceiling"`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_surface_reflectance)]
+pub fn set_surface_reflectance_from_js(surface: String, value: f32) {
+    if let Ok(mut v) = surface_reflectance_request_cell().lock() {
+        v.push(SurfaceReflectanceRequest {
+            surface,
+            value: value.clamp(0.0, 1.0),
+        });
+    }
+}
+
+/// JS entry: set a room surface's emissive colour (light emitted by the
+/// surface itself, independent of incident light). 0–1 per channel.
+/// `surface` is one of `"walls"`, `"floor"`, `"ceiling"`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_set_surface_emissive)]
+pub fn set_surface_emissive_from_js(surface: String, r: f32, g: f32, b: f32) {
+    if let Ok(mut v) = surface_emissive_request_cell().lock() {
+        v.push(SurfaceEmissiveRequest {
+            surface,
+            r: r.max(0.0),
+            g: g.max(0.0),
+            b: b.max(0.0),
+        });
+    }
+}
+
+/// Bevy system: drain `ambient_request_cell` and write into
+/// `GlobalAmbientLight`. Runs every frame; no-op when the cell is None.
+#[cfg(target_arch = "wasm32")]
+fn apply_ambient_request(mut ambient: ResMut<bevy::light::GlobalAmbientLight>) {
+    let Some(brightness) = ambient_request_cell()
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.take())
+    else {
+        return;
+    };
+    ambient.brightness = brightness;
+}
+
+/// Bevy system: drain `room_size_request_cell` and rebuild the
+/// floor / ceiling / wall transforms in place. The plane MESH sizes
+/// are baked at spawn time and not easy to swap mid-run, so we
+/// repurpose `Transform.scale` to make the planes fit the new
+/// dimensions. Each plane was spawned at unit size 1×1; we scale
+/// so its post-transform extent matches `w × l` (floor/ceiling) or
+/// `w × h` / `l × h` (walls).
+///
+/// Note: the existing builder spawns planes with `mesh().size(w, l)`,
+/// not unit size — so we'd really need a mesh swap to be exact. For
+/// the demo we set Transform.scale so the visible extent scales
+/// proportionally to the requested vs the original dimensions. The
+/// original room defaults are read from `SceneSettings`.
+#[cfg(target_arch = "wasm32")]
+fn apply_room_size_request(
+    settings: Res<SceneSettings>,
+    mut floor_q: Query<
+        &mut Transform,
+        (
+            With<eulumdat_bevy::viewer::FloorSurface>,
+            Without<eulumdat_bevy::viewer::CeilingSurface>,
+            Without<eulumdat_bevy::viewer::WallSurface>,
+        ),
+    >,
+    mut ceiling_q: Query<
+        &mut Transform,
+        (
+            With<eulumdat_bevy::viewer::CeilingSurface>,
+            Without<eulumdat_bevy::viewer::FloorSurface>,
+            Without<eulumdat_bevy::viewer::WallSurface>,
+        ),
+    >,
+    mut wall_q: Query<
+        &mut Transform,
+        (
+            With<eulumdat_bevy::viewer::WallSurface>,
+            Without<eulumdat_bevy::viewer::FloorSurface>,
+            Without<eulumdat_bevy::viewer::CeilingSurface>,
+        ),
+    >,
+) {
+    let Some(req) = room_size_request_cell()
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.take())
+    else {
+        return;
+    };
+    let orig_w = settings.room_width;
+    let orig_l = settings.room_length;
+    let orig_h = settings.room_height;
+    if orig_w <= 0.0 || orig_l <= 0.0 || orig_h <= 0.0 {
+        return;
+    }
+    let sx = req.width / orig_w;
+    let sy = req.height / orig_h;
+    let sz = req.length / orig_l;
+
+    // Floor: spawned at (w/2, 0, l/2). Scale X by sx (width), Z by sz
+    // (length); translate proportionally so it stays centred at the
+    // luminaire's origin-side corner.
+    for mut t in floor_q.iter_mut() {
+        t.translation.x = req.width / 2.0;
+        t.translation.z = req.length / 2.0;
+        t.scale.x = sx;
+        t.scale.z = sz;
+    }
+    // Ceiling: same XZ scaling; Y translates to the new height.
+    for mut t in ceiling_q.iter_mut() {
+        t.translation.x = req.width / 2.0;
+        t.translation.y = req.height;
+        t.translation.z = req.length / 2.0;
+        t.scale.x = sx;
+        t.scale.z = sz;
+    }
+    // Walls: each wall is rotated to face inward. We can't easily
+    // know which wall is which without another marker, but uniform
+    // scale along the rotated axes gets us close: scale X by sx, Y
+    // by sy, Z by sz. The translations on each wall (originally
+    // (w/2, h/2, 0) / (w/2, h/2, l) / (0, h/2, l/2) / (w, h/2, l/2))
+    // need their respective axes multiplied so the walls move with
+    // the new room. We do that by checking which translation axis
+    // was originally at the room boundary vs. centre.
+    for mut t in wall_q.iter_mut() {
+        // X axis: was at 0, w, or w/2.
+        if (t.translation.x - orig_w / 2.0).abs() < 0.001 {
+            t.translation.x = req.width / 2.0;
+        } else if (t.translation.x - orig_w).abs() < 0.001 {
+            t.translation.x = req.width;
+        } // x == 0 stays at 0
+        if (t.translation.y - orig_h / 2.0).abs() < 0.001 {
+            t.translation.y = req.height / 2.0;
+        }
+        if (t.translation.z - orig_l / 2.0).abs() < 0.001 {
+            t.translation.z = req.length / 2.0;
+        } else if (t.translation.z - orig_l).abs() < 0.001 {
+            t.translation.z = req.length;
+        }
+        t.scale.x = sx;
+        t.scale.y = sy;
+        t.scale.z = sz;
+    }
+}
+
+/// Bevy system: drain pending surface-color requests and mutate the
+/// `StandardMaterial` of every entity bearing the matching surface
+/// marker. Mutates the shared material handle so all four walls
+/// recolour in unison.
+#[cfg(target_arch = "wasm32")]
+fn apply_surface_color_requests(
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
+    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
+) {
+    let requests: Vec<SurfaceColorRequest> = match surface_color_request_cell().lock() {
+        Ok(mut v) => std::mem::take(&mut *v),
+        Err(_) => return,
+    };
+    for req in requests {
+        let color = Color::srgb(req.r, req.g, req.b);
+        match req.surface.as_str() {
+            "floor" => {
+                for mat_handle in floor_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = color;
+                    }
+                }
+            }
+            "ceiling" => {
+                for mat_handle in ceiling_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = color;
+                    }
+                }
+            }
+            "walls" => {
+                for mat_handle in wall_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = color;
+                    }
+                }
+            }
+            _ => {} // unknown surface label — ignore
+        }
+    }
+}
+
+/// Bevy system: drain pending surface-reflectance requests and set
+/// `base_color` to `(value, value, value)` on the matching surface.
+///
+/// **Semantic note**: in lighting design "reflectance" means *how much
+/// of the incident light a surface throws back overall* — for diffuse
+/// surfaces that's the albedo (the base colour's luminance), NOT how
+/// scattered the highlight is (which is what `perceptual_roughness`
+/// controls in PBR). 0.7 plaster bounces ~70% of the light because it
+/// reads as a light-grey, regardless of whether the highlight is sharp
+/// or matte. So `(SET-WALLS-REFLECTANCE 0.7)` sets the wall to a
+/// neutral grey of luminance 0.7.
+///
+/// `perceptual_roughness` is left untouched. If you also want a glossy
+/// floor, that's a separate concern — would need a `SET-*-GLOSS`
+/// primitive (not implemented yet).
+#[cfg(target_arch = "wasm32")]
+fn apply_surface_reflectance_requests(
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
+    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
+) {
+    let requests: Vec<SurfaceReflectanceRequest> =
+        match surface_reflectance_request_cell().lock() {
+            Ok(mut v) => std::mem::take(&mut *v),
+            Err(_) => return,
+        };
+    for req in requests {
+        let v = req.value.clamp(0.0, 1.0);
+        let neutral = Color::srgb(v, v, v);
+        match req.surface.as_str() {
+            "floor" => {
+                for mat_handle in floor_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = neutral;
+                    }
+                }
+            }
+            "ceiling" => {
+                for mat_handle in ceiling_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = neutral;
+                    }
+                }
+            }
+            "walls" => {
+                for mat_handle in wall_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.base_color = neutral;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Bevy system: drain pending surface-emissive requests and set the
+/// `emissive` field of the matching surface's material. Emissive light
+/// bypasses the lighting equation — the surface renders at full colour
+/// regardless of incident light, useful for backlit signage panels or
+/// "the wall IS the colour" hero shots. `(0, 0, 0)` disables emission.
+///
+/// Bevy expects emissive as a `LinearRgba`; we treat the script's r/g/b
+/// values as linear sRGB to match the SET-*-COLOR conventions.
+#[cfg(target_arch = "wasm32")]
+fn apply_surface_emissive_requests(
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
+    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
+) {
+    let requests: Vec<SurfaceEmissiveRequest> = match surface_emissive_request_cell().lock() {
+        Ok(mut v) => std::mem::take(&mut *v),
+        Err(_) => return,
+    };
+    for req in requests {
+        let emissive = bevy::color::LinearRgba::new(req.r, req.g, req.b, 1.0);
+        match req.surface.as_str() {
+            "floor" => {
+                for mat_handle in floor_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.emissive = emissive;
+                    }
+                }
+            }
+            "ceiling" => {
+                for mat_handle in ceiling_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.emissive = emissive;
+                    }
+                }
+            }
+            "walls" => {
+                for mat_handle in wall_q.iter() {
+                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                        mat.emissive = emissive;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// ---------- Room-state snapshots (the read side) ----------
+//
+// Every frame the systems below copy the live room state into static
+// snapshot cells. The `gldf_bevy_get_*` JS bridges read those cells
+// and return JSON; the Lisp `(GET-AMBIENT)` / `(GET-ROOM-SIZE)` /
+// `(GET-{WALLS,FLOOR,CEILING}-{COLOR,REFLECTANCE})` primitives call
+// those bridges via `window.gldf_bevy_get_*` and convert into Expr.
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug, Default)]
+struct RoomSizeSnapshot {
+    width: f32,
+    length: f32,
+    height: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug, Default)]
+struct SurfaceMaterialSnapshot {
+    r: f32,
+    g: f32,
+    b: f32,
+    reflectance: f32, // ≈ luminance of base_color (R+G+B)/3
+    emissive_r: f32,
+    emissive_g: f32,
+    emissive_b: f32,
+}
+
+#[cfg(target_arch = "wasm32")]
+static AMBIENT_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<f32>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static ROOM_SIZE_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<RoomSizeSnapshot>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static WALLS_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static FLOOR_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
+    std::sync::OnceLock::new();
+#[cfg(target_arch = "wasm32")]
+static CEILING_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn ambient_snapshot_cell() -> &'static std::sync::Mutex<f32> {
+    AMBIENT_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(0.0))
+}
+#[cfg(target_arch = "wasm32")]
+fn room_size_snapshot_cell() -> &'static std::sync::Mutex<RoomSizeSnapshot> {
+    ROOM_SIZE_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(RoomSizeSnapshot::default()))
+}
+#[cfg(target_arch = "wasm32")]
+fn walls_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
+    WALLS_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
+}
+#[cfg(target_arch = "wasm32")]
+fn floor_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
+    FLOOR_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
+}
+#[cfg(target_arch = "wasm32")]
+fn ceiling_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
+    CEILING_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
+}
+
+/// Bevy system: every frame, snapshot the room state into the static
+/// cells that the JS getters read. Cheap — three queries + four lock
+/// writes per frame, all backed by RwLocks we already poke for the
+/// setters.
+#[cfg(target_arch = "wasm32")]
+fn snapshot_room_state(
+    ambient: Res<bevy::light::GlobalAmbientLight>,
+    floor_q: Query<
+        (&MeshMaterial3d<StandardMaterial>, &Transform),
+        With<eulumdat_bevy::viewer::FloorSurface>,
+    >,
+    ceiling_q: Query<
+        (&MeshMaterial3d<StandardMaterial>, &Transform),
+        With<eulumdat_bevy::viewer::CeilingSurface>,
+    >,
+    wall_q: Query<
+        &MeshMaterial3d<StandardMaterial>,
+        With<eulumdat_bevy::viewer::WallSurface>,
+    >,
+    materials: Res<Assets<StandardMaterial>>,
+    settings: Res<SceneSettings>,
+) {
+    // Ambient.
+    if let Ok(mut slot) = ambient_snapshot_cell().lock() {
+        *slot = ambient.brightness;
+    }
+
+    // Room size: floor X-extent ≈ width, Z-extent ≈ length;
+    // ceiling Y position ≈ height. The floor was spawned at the
+    // builder's settings size; current size = settings * Transform.scale.
+    let orig_w = settings.room_width;
+    let orig_l = settings.room_length;
+    let orig_h = settings.room_height;
+    let (width, length, height) = if let Some((_, t)) = floor_q.iter().next() {
+        let scale = t.scale;
+        let h = ceiling_q
+            .iter()
+            .next()
+            .map(|(_, ct)| ct.translation.y)
+            .unwrap_or(orig_h);
+        (orig_w * scale.x, orig_l * scale.z, h)
+    } else {
+        (orig_w, orig_l, orig_h)
+    };
+    if let Ok(mut slot) = room_size_snapshot_cell().lock() {
+        *slot = RoomSizeSnapshot {
+            width,
+            length,
+            height,
+        };
+    }
+
+    // Per-surface colour + reflectance. Read the first matching
+    // entity's material — all entities of one surface share a
+    // material handle.
+    fn read_material(
+        materials: &Assets<StandardMaterial>,
+        mat_handle: &MeshMaterial3d<StandardMaterial>,
+    ) -> SurfaceMaterialSnapshot {
+        if let Some(mat) = materials.get(&mat_handle.0) {
+            let srgba = mat.base_color.to_srgba();
+            // Reflectance ≈ luminance of the base colour. Quick mean
+            // is good enough for the "what was my SET-…-REFLECTANCE
+            // last value?" save/restore case; for accuracy you'd use
+            // the Rec. 709 weighting (0.2126·R + 0.7152·G + 0.0722·B),
+            // but the room surfaces are typically near-neutral so the
+            // simple mean is within a percent.
+            let reflectance = ((srgba.red + srgba.green + srgba.blue) / 3.0).clamp(0.0, 1.0);
+            // `mat.emissive` is already a `LinearRgba` in current Bevy.
+            SurfaceMaterialSnapshot {
+                r: srgba.red,
+                g: srgba.green,
+                b: srgba.blue,
+                reflectance,
+                emissive_r: mat.emissive.red,
+                emissive_g: mat.emissive.green,
+                emissive_b: mat.emissive.blue,
+            }
+        } else {
+            SurfaceMaterialSnapshot::default()
+        }
+    }
+    if let Some((mat_handle, _)) = floor_q.iter().next() {
+        if let Ok(mut slot) = floor_snapshot_cell().lock() {
+            *slot = read_material(&materials, mat_handle);
+        }
+    }
+    if let Some((mat_handle, _)) = ceiling_q.iter().next() {
+        if let Ok(mut slot) = ceiling_snapshot_cell().lock() {
+            *slot = read_material(&materials, mat_handle);
+        }
+    }
+    if let Some(mat_handle) = wall_q.iter().next() {
+        if let Ok(mut slot) = walls_snapshot_cell().lock() {
+            *slot = read_material(&materials, mat_handle);
+        }
+    }
+}
+
+/// JS entry: returns the current ambient brightness as a JS Number.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_get_ambient)]
+pub fn get_ambient_from_js() -> f32 {
+    ambient_snapshot_cell()
+        .lock()
+        .ok()
+        .map(|s| *s)
+        .unwrap_or(0.0)
+}
+
+/// JS entry: returns `{width, length, height}` as a JS object.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_get_room_size)]
+pub fn get_room_size_from_js() -> wasm_bindgen::JsValue {
+    let snap = room_size_snapshot_cell()
+        .lock()
+        .ok()
+        .map(|s| *s)
+        .unwrap_or_default();
+    let json = format!(
+        "{{\"width\":{:.6},\"length\":{:.6},\"height\":{:.6}}}",
+        snap.width, snap.length, snap.height
+    );
+    js_sys::JSON::parse(&json).unwrap_or(wasm_bindgen::JsValue::NULL)
+}
+
+/// JS entry: returns `{r, g, b, reflectance}` for a named surface.
+/// `surface` is one of `"walls"`, `"floor"`, `"ceiling"`. Unknown
+/// surfaces return all zeros.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_get_surface)]
+pub fn get_surface_from_js(surface: String) -> wasm_bindgen::JsValue {
+    let cell = match surface.as_str() {
+        "walls" => walls_snapshot_cell(),
+        "floor" => floor_snapshot_cell(),
+        "ceiling" => ceiling_snapshot_cell(),
+        _ => return wasm_bindgen::JsValue::NULL,
+    };
+    let snap = cell.lock().ok().map(|s| *s).unwrap_or_default();
+    let json = format!(
+        "{{\"r\":{:.6},\"g\":{:.6},\"b\":{:.6},\"reflectance\":{:.6},\
+         \"er\":{:.6},\"eg\":{:.6},\"eb\":{:.6}}}",
+        snap.r, snap.g, snap.b, snap.reflectance,
+        snap.emissive_r, snap.emissive_g, snap.emissive_b,
+    );
+    js_sys::JSON::parse(&json).unwrap_or(wasm_bindgen::JsValue::NULL)
+}
+
+/// Bevy system: walk the tilt map and apply it to every tagged entity.
+///
+/// Reads the entire map (cloning since we don't want to hold the lock
+/// across a Query iteration). For each entity carrying
+/// [`l3d_loader::LightEmitterJoint`] + [`l3d_loader::LightEmitterBaseRotation`]
+/// whose joint name matches an entry, set
+/// `transform.rotation = base * Quat::from_euler(XYZ, …)`.
+///
+/// Tilts persist across frames — no clearing.
+#[cfg(target_arch = "wasm32")]
+fn js_joint_bridge_apply(
+    mut q: Query<(
+        &mut Transform,
+        &l3d_loader::LightEmitterJoint,
+        &l3d_loader::LightEmitterBaseRotation,
+        Option<&l3d_loader::LightEmitterPivot>,
+    )>,
+) {
+    let snapshot: std::collections::HashMap<String, [f32; 3]> = joint_tilts_cell()
+        .lock()
+        .ok()
+        .map(|m| m.clone())
+        .unwrap_or_default();
+    if snapshot.is_empty() {
+        return;
+    }
+    for (mut transform, joint, base, pivot_opt) in q.iter_mut() {
+        // `joint.0` is a list of L3D partNames (one entity can be shared
+        // by multiple LEOs that live in the same head OBJ). Pick the
+        // FIRST tilt request that targets any of them — "first-LEO-wins"
+        // on concurrent conflicting tilts. In practice two LEOs sharing
+        // one head move together, so this is the right semantic.
+        if let Some(deg) = joint.0.iter().find_map(|n| snapshot.get(n)) {
+            // Tilt is in WORLD-space Euler XYZ degrees.
+            let tilt = Quat::from_euler(
+                EulerRot::XYZ,
+                deg[0].to_radians(),
+                deg[1].to_radians(),
+                deg[2].to_radians(),
+            );
+            transform.rotation = tilt * base.0;
+            // Orbit the entity around the pivot (the LEO position).
+            // Without this, an entity whose base_translation differs
+            // from the pivot rotates around its OWN centre and barely
+            // moves — the cone, in particular, is offset half its
+            // length below the LEO so rotating it in place is nearly
+            // invisible.
+            if let Some(p) = pivot_opt {
+                let offset = p.base_translation - p.pivot;
+                transform.translation = p.pivot + tilt * offset;
+            }
+        }
+    }
+}
+
+// ---------- JS → Bevy animation bridges ----------
+//
+// Two more pairs of `(static cell + JS entry + Bevy system)` mirroring
+// the snapshot bridges above. The snapshot ones (`set_camera`, the
+// joint-tilt map) move state in one frame; these interpolate over a
+// duration, so a single script call yields visible motion.
+//
+//     window.gldf_bevy_camera_animate(ex, ey, ez, tx, ty, tz, ms)
+//     window.gldf_bevy_luminaire_animate(joint, dx, dy, dz, ms)
+//
+// Mechanism: each call snapshots the *current* state as the
+// animation's "from" and writes a `*Anim` record. Each Bevy frame the
+// apply system reads `js_sys::Date::now()`, computes t = elapsed/ms,
+// lerps (or slerps) between `from` and `to`, and writes the result.
+// When `t >= 1.0` the entry is dropped.
+//
+// Using JS Date.now() (instead of `Res<Time>`) keeps the apply system
+// signature-symmetric with the snapshot one — no extra resource to
+// plumb, and the timing is in lock-step with `gldf_bevy_*_animate`'s
+// own JS-side clock.
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug)]
+struct CamAnim {
+    from_pos: Vec3,
+    from_yaw: f32,
+    from_pitch: f32,
+    to_pos: Vec3,
+    to_yaw: f32,
+    to_pitch: f32,
+    /// `js_sys::Date::now()` at start.
+    started_at_ms: f64,
+    duration_ms: f64,
+}
+
+#[cfg(target_arch = "wasm32")]
+static CAM_ANIM: std::sync::OnceLock<std::sync::Mutex<Option<CamAnim>>> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn cam_anim_cell() -> &'static std::sync::Mutex<Option<CamAnim>> {
+    CAM_ANIM.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// JS entry: animate the camera to a target pose over `ms` milliseconds.
+///
+///     window.gldf_bevy_camera_animate(ex, ey, ez, tx, ty, tz, ms)
+///
+/// `(ex, ey, ez)` is the destination eye position. `(tx, ty, tz)` is
+/// the look-at target. Both metres. The "from" pose is read from the
+/// current snapshot at the moment of the call, so calling this twice
+/// in a row produces a continuous sweep through all three poses.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_camera_animate)]
+pub fn camera_animate_from_js(
+    ex: f32,
+    ey: f32,
+    ez: f32,
+    tx: f32,
+    ty: f32,
+    tz: f32,
+    ms: f32,
+) {
+    let to_pos = Vec3::new(ex, ey, ez);
+    let dir = Vec3::new(tx - ex, ty - ey, tz - ez);
+    // Bevy's Camera3d looks down its local -Z, so for forward to point
+    // from `eye` toward `target` we need:
+    //   pitch = asin(n.y)
+    //   yaw   = atan2(-n.x, -n.z)
+    // Matches the CAMERA-SET derivation in lisp_panel.rs. The previous
+    // formula `(n.x.atan2(n.z), (-n.y).asin())` assumed a +Z-forward
+    // camera, flipping yaw by 180° so ANIMATE-CAMERA landed at the
+    // right eye but looking the wrong way — script-callers saw
+    // CAMERA-SET and ANIMATE-CAMERA disagree on the same six numbers.
+    let (to_yaw, to_pitch) = if dir.length_squared() > 1e-6 {
+        let n = dir.normalize();
+        ((-n.x).atan2(-n.z), n.y.asin())
+    } else {
+        (0.0, 0.0)
+    };
+    let snap = cam_snapshot_cell()
+        .lock()
+        .ok()
+        .map(|s| *s)
+        .unwrap_or_default();
+    if let Ok(mut slot) = cam_anim_cell().lock() {
+        *slot = Some(CamAnim {
+            from_pos: snap.pos,
+            from_yaw: snap.yaw,
+            from_pitch: snap.pitch,
+            to_pos,
+            to_yaw,
+            to_pitch,
+            started_at_ms: js_sys::Date::now(),
+            duration_ms: ms.max(1.0) as f64,
+        });
+    }
+}
+
+/// Bevy system: drive the camera animation. Runs every frame; reads
+/// the optional `CamAnim`, lerps pos / yaw / pitch by t, and writes the
+/// result via `cam_request_cell` so the existing
+/// `js_camera_bridge_apply` system picks it up. Drops the record when
+/// `t >= 1.0`.
+#[cfg(target_arch = "wasm32")]
+fn js_camera_anim_apply() {
+    let now = js_sys::Date::now();
+    let anim = match cam_anim_cell().lock() {
+        Ok(g) => *g,
+        Err(_) => return,
+    };
+    let Some(a) = anim else {
+        return;
+    };
+    let t = ((now - a.started_at_ms) / a.duration_ms).clamp(0.0, 1.0) as f32;
+    // Smoothstep for nicer ease-in/out.
+    let s = t * t * (3.0 - 2.0 * t);
+    let pos = a.from_pos.lerp(a.to_pos, s);
+    let yaw = a.from_yaw + (a.to_yaw - a.from_yaw) * s;
+    let pitch = a.from_pitch + (a.to_pitch - a.from_pitch) * s;
+    if let Ok(mut slot) = cam_request_cell().lock() {
+        *slot = Some(CamRequest { pos, yaw, pitch });
+    }
+    if t >= 1.0 {
+        if let Ok(mut slot) = cam_anim_cell().lock() {
+            *slot = None;
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy, Debug)]
+struct JointAnim {
+    from_deg: [f32; 3],
+    to_deg: [f32; 3],
+    started_at_ms: f64,
+    duration_ms: f64,
+}
+
+#[cfg(target_arch = "wasm32")]
+static JOINT_ANIMS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, JointAnim>>,
+> = std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+fn joint_anims_cell()
+-> &'static std::sync::Mutex<std::collections::HashMap<String, JointAnim>> {
+    JOINT_ANIMS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// JS entry: animate one joint to a target Euler-degrees rotation.
+///
+///     window.gldf_bevy_luminaire_animate("LEO0", 0.0, 30.0, 0.0, 800.0)
+///
+/// "From" is whatever the joint's current tilt is in `JOINT_TILTS`
+/// (defaults to zero if untouched). At animation completion the entry
+/// is moved into the snapshot store so subsequent animations chain
+/// smoothly.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_luminaire_animate)]
+pub fn luminaire_animate_from_js(
+    joint: &str,
+    deg_x: f32,
+    deg_y: f32,
+    deg_z: f32,
+    ms: f32,
+) {
+    let from = joint_tilts_cell()
+        .lock()
+        .ok()
+        .and_then(|g| g.get(joint).copied())
+        .unwrap_or([0.0, 0.0, 0.0]);
+    if let Ok(mut map) = joint_anims_cell().lock() {
+        map.insert(
+            joint.to_string(),
+            JointAnim {
+                from_deg: from,
+                to_deg: [deg_x, deg_y, deg_z],
+                started_at_ms: js_sys::Date::now(),
+                duration_ms: ms.max(1.0) as f64,
+            },
+        );
+    }
+}
+
+/// Bevy system: tick every active joint animation. Writes interpolated
+/// degrees into the existing `JOINT_TILTS` map so the existing
+/// `js_joint_bridge_apply` system rotates the entities. Drops finished
+/// records.
+#[cfg(target_arch = "wasm32")]
+fn js_joint_anim_apply() {
+    let now = js_sys::Date::now();
+    let snapshot: std::collections::HashMap<String, JointAnim> = joint_anims_cell()
+        .lock()
+        .ok()
+        .map(|m| m.clone())
+        .unwrap_or_default();
+    if snapshot.is_empty() {
+        return;
+    }
+    let mut finished: Vec<String> = Vec::new();
+    if let Ok(mut tilts) = joint_tilts_cell().lock() {
+        for (name, a) in &snapshot {
+            let t = ((now - a.started_at_ms) / a.duration_ms).clamp(0.0, 1.0) as f32;
+            let s = t * t * (3.0 - 2.0 * t);
+            let cur = [
+                a.from_deg[0] + (a.to_deg[0] - a.from_deg[0]) * s,
+                a.from_deg[1] + (a.to_deg[1] - a.from_deg[1]) * s,
+                a.from_deg[2] + (a.to_deg[2] - a.from_deg[2]) * s,
+            ];
+            tilts.insert(name.clone(), cur);
+            if t >= 1.0 {
+                finished.push(name.clone());
+            }
+        }
+    }
+    if !finished.is_empty() {
+        if let Ok(mut map) = joint_anims_cell().lock() {
+            for n in finished {
+                map.remove(&n);
+            }
+        }
+    }
+}
+
 /// Press `P` to dump the current camera position + yaw + pitch to the
 /// browser console as a `[CAMERA-PROBE-LIVE]` line. Pair with
 /// `tests/e2e/camera_probe.py`: orbit the scene with mouse / arrow keys
@@ -684,6 +1681,130 @@ fn print_camera_on_key(
             fwd.x, fwd.y, fwd.z,
         ));
     }
+}
+
+/// Press `C` to append a `(CAMERA-SET ex ey ez tx ty tz)` line to the
+/// Lisp REPL panel's textarea, using the current camera pose.
+///
+/// **Target = closest point on the look ray to the luminaire centroid.**
+/// Why this matters: the line is meant to round-trip through
+/// `(ANIMATE-CAMERA …)`, which interpolates the *target point itself*
+/// (not just rotation). If we recorded a target that's just `eye + fwd
+/// * 2` (a point in empty space along the look line), every script
+/// that flies *to* this pose would interpolate the target through air,
+/// staring at nothing mid-flight — the "void" bug.
+///
+/// By locking the recorded target onto the luminaire (specifically:
+/// the foot of the perpendicular from the LEO centroid to the look
+/// ray), every captured pose is animation-safe: ANIMATE-CAMERA lerps
+/// the target toward a stable point ON the luminaire, so the
+/// in-flight view always looks at the lamp.
+///
+/// The recorded yaw/pitch are unchanged — the target still lies on the
+/// look ray, so the derived view direction matches what the user saw
+/// when they pressed C.
+///
+/// Reads camera pose from `CAM_SNAPSHOT` (refreshed every frame by
+/// `js_camera_bridge_apply`).
+///
+/// Workflow: orbit the scene with right-click-drag until you like the
+/// framing → press C → switch to the Lisp panel → the CAMERA-SET line is
+/// already there, ready to use in any `(ANIMATE-CAMERA …)`.
+#[cfg(target_arch = "wasm32")]
+fn append_camera_set_on_key(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    _camera_q: Query<(&Transform, &FirstPersonCamera)>,
+    l3d_lights: Query<&Transform, (With<l3d_loader::L3dLight>, Without<FirstPersonCamera>)>,
+    l3d_models: Query<&Transform, (With<l3d_loader::L3dModel>, Without<FirstPersonCamera>)>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyC) {
+        return;
+    }
+    // Read from the snapshot maintained by js_camera_bridge_apply.
+    let snap = match cam_snapshot_cell().lock() {
+        Ok(g) => *g,
+        Err(_) => return,
+    };
+    let eye = snap.pos;
+    let fwd = snap.forward.normalize_or_zero();
+    if fwd.length_squared() < 0.001 {
+        return; // Degenerate look direction; refuse to emit a bogus line.
+    }
+
+    // Find the luminaire centroid — prefer LEO lights (the actual lamp
+    // positions), fall back to the model parts' centroid if no lights
+    // are spawned (e.g. mid-reload). Matches `frame_camera_on_l3d`.
+    let centroid = if !l3d_lights.is_empty() {
+        let mut sum = Vec3::ZERO;
+        let mut n = 0u32;
+        for t in l3d_lights.iter() {
+            sum += t.translation;
+            n += 1;
+        }
+        Some(sum / n as f32)
+    } else if !l3d_models.is_empty() {
+        let mut sum = Vec3::ZERO;
+        let mut n = 0u32;
+        for t in l3d_models.iter() {
+            sum += t.translation;
+            n += 1;
+        }
+        Some(sum / n as f32)
+    } else {
+        None
+    };
+
+    // Foot of the perpendicular from the centroid to the look ray.
+    // Ray = eye + t * fwd. We solve t = dot(centroid - eye, fwd).
+    // Clamp t so we don't pick a target *behind* the camera (which
+    // would happen if the user is looking away from the luminaire).
+    let target = match centroid {
+        Some(c) => {
+            let t_proj = (c - eye).dot(fwd);
+            // If the luminaire is behind the camera, t_proj <= 0. In
+            // that case we still want a sensible target — pick a point
+            // 2 m in front so the recorded line at least round-trips
+            // the user's chosen view direction.
+            if t_proj > 0.05 {
+                eye + fwd * t_proj
+            } else {
+                eye + fwd * 2.0
+            }
+        }
+        None => eye + fwd * 2.0,
+    };
+
+    let line = format!(
+        "(CAMERA-SET {:.3} {:.3} {:.3}  {:.3} {:.3} {:.3})",
+        eye.x, eye.y, eye.z, target.x, target.y, target.z,
+    );
+    log(&format!("[CAMERA-PROBE-LIVE] {} (appending to Lisp panel)", line));
+
+    use wasm_bindgen::JsCast as _;
+    if let Some(win) = web_sys::window() {
+        if let Ok(prop) = js_sys::Reflect::get(
+            &win,
+            &wasm_bindgen::JsValue::from_str("gldf_lisp_append_camera_set"),
+        ) {
+            if let Ok(func) = prop.dyn_into::<js_sys::Function>() {
+                let arr = js_sys::Array::new();
+                arr.push(&wasm_bindgen::JsValue::from_str(&line));
+                let _ = func.apply(&wasm_bindgen::JsValue::NULL, &arr);
+            }
+        }
+    }
+}
+
+/// Stub for native builds — the C-key Lisp-append needs the WASM
+/// `window` bridge, so it's a no-op outside the browser.
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
+fn append_camera_set_on_key(
+    _keyboard: Res<ButtonInput<KeyCode>>,
+    _camera_q: Query<(&Transform, &FirstPersonCamera)>,
+    _l3d_lights: Query<&Transform, (With<l3d_loader::L3dLight>, Without<FirstPersonCamera>)>,
+    _l3d_models: Query<&Transform, (With<l3d_loader::L3dModel>, Without<FirstPersonCamera>)>,
+) {
 }
 
 /// Fallback lighting system - adds a bright light if no photometric light exists.
@@ -794,7 +1915,23 @@ pub fn run_on_canvas(canvas_selector: &str) {
     app.add_systems(Update, ensure_visible_scene);
     app.add_systems(Update, frame_camera_on_l3d);
     app.add_systems(Update, print_camera_on_key);
+    app.add_systems(Update, append_camera_set_on_key);
+    #[cfg(target_arch = "wasm32")]
+    {
+        app.add_systems(Update, apply_ambient_request);
+        app.add_systems(Update, apply_room_size_request);
+        app.add_systems(Update, apply_surface_color_requests);
+        app.add_systems(Update, apply_surface_reflectance_requests);
+        app.add_systems(Update, apply_surface_emissive_requests);
+        app.add_systems(Update, snapshot_room_state);
+    }
+    // Animation drivers MUST run BEFORE the snapshot appliers — they
+    // write into the snapshot cells (`cam_request_cell` /
+    // `joint_tilts_cell`) that the appliers then read this same frame.
+    app.add_systems(Update, js_camera_anim_apply);
+    app.add_systems(Update, js_joint_anim_apply);
     app.add_systems(Update, js_camera_bridge_apply);
+    app.add_systems(Update, js_joint_bridge_apply);
 
     app.run();
 }
@@ -835,6 +1972,7 @@ pub fn run_native() {
         .add_systems(Update, ensure_visible_scene)
         .add_systems(Update, frame_camera_on_l3d)
         .add_systems(Update, print_camera_on_key)
+        .add_systems(Update, append_camera_set_on_key)
         .run();
 }
 

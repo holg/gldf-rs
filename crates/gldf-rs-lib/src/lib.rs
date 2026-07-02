@@ -65,6 +65,17 @@ pub use fix::fix_legacy_content_types;
 pub mod validation;
 pub use validation::{ValidationError, ValidationLevel, ValidationResult};
 
+/// DIALux-import compatibility helpers (`dialux_compat_*`).
+///
+/// Deliberately kept OUT of [`validation`]: items here are NOT
+/// GLDF-spec validity. They model the extra, undocumented constraints
+/// DIALux's GLDF importer enforces on top of the rc-3 XSD (e.g. a
+/// `spectrum/text` file containing `#` comment lines makes DIALux
+/// silently refuse the whole import — yet the file is spec-valid).
+/// The exporter pulls from here only when the user opts in via
+/// `ExportOptions::dialux_compat`.
+pub mod dialux_compat;
+
 /// CRUD operations for GldfProduct
 pub mod operations;
 
@@ -79,16 +90,20 @@ pub use mapping::{
 #[cfg(feature = "eulumdat")]
 pub mod convert;
 #[cfg(feature = "eulumdat")]
-pub use convert::{ldt_metadata_to_gldf, ldt_to_gldf, LdtMetadata};
+pub use convert::{ldt_metadata, ldt_metadata_to_gldf, ldt_to_gldf, tm33_to_gldf, LdtMetadata};
 
 /// Photometric file export and variant-aware LDT patching
 #[cfg(feature = "eulumdat")]
 pub mod photometry;
 #[cfg(feature = "eulumdat")]
 pub use photometry::{
-    export_photometry, patch_ldt_for_variant, resolve_variant_photometries,
-    PhotometryExportFormat, VariantPhotometryResolution,
+    export_photometry, patch_ldt_for_variant, patch_photometry_for_variant,
+    resolve_variant_photometries, PhotometryExportFormat,
+    VariantPhotometryResolution,
 };
+
+/// Format-specific export helpers (per-LightSource LDT/IES/TM-33/IFC).
+pub mod export;
 
 /// IFC (Industry Foundation Classes) integration for BIM interoperability
 pub mod ifc;
@@ -111,6 +126,25 @@ pub use ifc::{
 /// Plugin system for embedded WASM viewer plugins
 pub mod plugin;
 pub use plugin::{Plugin, PluginManager, PluginManifest};
+
+/// RAL Classic color table — the only color system the GLDF XSD knows.
+pub mod ral;
+
+/// i18n contract: the `Translator` trait frontends implement to render
+/// the `gldf.*` keys this crate emits. Data lives in `gldf-rs-i18n`.
+pub mod i18n;
+
+/// L3D MTL sync — drive an embedded L3D's housing material from a
+/// variant's `HousingColor`. Only available with the `l3d` feature.
+#[cfg(feature = "l3d")]
+pub mod l3d_mtl_sync;
+
+/// Flatten an L3D's Light Emitting Objects into plan-view footprints for
+/// the graphical LEO→photometry assignment editor. `l3d` feature only.
+#[cfg(feature = "l3d")]
+pub mod l3d_leo;
+#[cfg(feature = "l3d")]
+pub use l3d_leo::{extract_leos, LeoFootprint, LeoShape};
 
 #[cfg(test)]
 mod tests;
@@ -518,6 +552,12 @@ impl GldfProduct {
     /// is a pure string-replace pass on the serialized XML — no
     /// duplicate types or feature flags involved.
     pub fn to_xml_with_schema(&self, version: GldfSchemaVersion) -> anyhow::Result<String> {
+        // We intentionally do NOT auto-stamp UniqueGldfId or
+        // GldfCreationTimeCode here. Doing so on every serialize would
+        // break round-trip stability (the same product would serialise
+        // differently on each call). Those fields belong on the editor
+        // side at *creation* time — see `gldf_rs_editor::ensure_xsd_required`,
+        // which the wizard calls once when bootstrapping a new GLDF.
         let xml_str = quick_xml::se::to_string(&self)?;
         let xml_str = match version {
             GldfSchemaVersion::Rc4 => xml_str,

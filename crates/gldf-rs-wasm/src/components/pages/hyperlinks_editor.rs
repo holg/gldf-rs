@@ -1,41 +1,64 @@
 //! Hyperlinks editor — one row per Hyperlink, full UpdateHyperlink dispatches.
+//! Scope-aware: edits either the product-wide `Marketing.Hyperlinks` or a
+//! specific variant's override via the shared `ScopePicker`.
 
 use crate::components::edit_util::{event_value, optional_string};
-use crate::state::{use_gldf, GldfAction};
+use crate::components::ScopePicker;
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use gldf_rs::gldf::Hyperlink;
 use leptos::prelude::*;
 
 #[component]
 pub fn HyperlinksEditorPage() -> impl IntoView {
     let state = use_gldf();
+    let scope = use_active_scope();
 
-    let on_add = move |_| state.update(|s| s.apply(GldfAction::AddHyperlink));
+    let on_add = move |_| {
+        let scp = scope.get();
+        state.update(|s| s.apply(GldfAction::AddHyperlink(scp)));
+    };
 
     view! {
         <div class="editor-section hyperlinks-editor">
             <h2>{ "Hyperlinks" }</h2>
             <p class="section-description">
-                { "Per-locale URLs (datasheets, product pages, IES files…). The href is required; language/region/country are optional." }
+                { "Per-locale URLs (datasheets, product pages, IES files…). The href is required; language/region/country are optional. Variants can override the product-wide list." }
             </p>
 
+            <ScopePicker scope=scope />
+
             {move || state.with(|s| {
-                let entries: Vec<Hyperlink> = s
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_ref()
-                    .and_then(|m| m.descriptive_attributes.as_ref())
-                    .and_then(|a| a.marketing.as_ref())
-                    .and_then(|m| m.hyperlinks.as_ref())
-                    .map(|h| h.hyperlink.clone())
-                    .unwrap_or_default();
+                let cur_scope = scope.get();
+                let entries: Vec<Hyperlink> = match cur_scope {
+                    Scope::Product => s
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_ref()
+                        .and_then(|m| m.descriptive_attributes.as_ref())
+                        .and_then(|a| a.marketing.as_ref())
+                        .and_then(|m| m.hyperlinks.as_ref())
+                        .map(|h| h.hyperlink.clone())
+                        .unwrap_or_default(),
+                    Scope::Variant(idx) => s
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_ref()
+                        .and_then(|vs| vs.variant.get(idx))
+                        .and_then(|v| v.descriptive_attributes.as_ref())
+                        .and_then(|a| a.marketing.as_ref())
+                        .and_then(|m| m.hyperlinks.as_ref())
+                        .map(|h| h.hyperlink.clone())
+                        .unwrap_or_default(),
+                };
                 if entries.is_empty() {
                     return view! { <p class="empty-message">{ "No hyperlinks." }</p> }.into_any();
                 }
                 view! {
                     <div class="hyperlinks-list" style="display: flex; flex-direction: column; gap: 12px;">
                         {entries.into_iter().enumerate().map(|(idx, link)| view! {
-                            <HyperlinkRow idx=idx link=link />
+                            <HyperlinkRow idx=idx link=link scope=scope />
                         }).collect::<Vec<_>>()}
                     </div>
                 }.into_any()
@@ -49,7 +72,7 @@ pub fn HyperlinksEditorPage() -> impl IntoView {
 }
 
 #[component]
-fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
+fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
 
     let snap = link.clone();
@@ -57,7 +80,9 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
         let snap = snap.clone();
         move |e: web_sys::Event| {
             let Some(v) = event_value(&e) else { return };
+            let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
+                scope: scp,
                 index: idx,
                 href: v,
                 language: snap.language.clone(),
@@ -71,7 +96,9 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
         let snap = snap.clone();
         move |e: web_sys::Event| {
             let v = event_value(&e).unwrap_or_default();
+            let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
+                scope: scp,
                 index: idx,
                 href: snap.href.clone(),
                 language: optional_string(v),
@@ -85,7 +112,9 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
         let snap = snap.clone();
         move |e: web_sys::Event| {
             let v = event_value(&e).unwrap_or_default();
+            let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
+                scope: scp,
                 index: idx,
                 href: snap.href.clone(),
                 language: snap.language.clone(),
@@ -99,7 +128,9 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
         let snap = snap.clone();
         move |e: web_sys::Event| {
             let v = event_value(&e).unwrap_or_default();
+            let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
+                scope: scp,
                 index: idx,
                 href: snap.href.clone(),
                 language: snap.language.clone(),
@@ -113,7 +144,9 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
         let snap = snap.clone();
         move |e: web_sys::Event| {
             let Some(v) = event_value(&e) else { return };
+            let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
+                scope: scp,
                 index: idx,
                 href: snap.href.clone(),
                 language: snap.language.clone(),
@@ -123,7 +156,10 @@ fn HyperlinkRow(idx: usize, link: Hyperlink) -> impl IntoView {
             }));
         }
     };
-    let on_remove = move |_| state.update(|s| s.apply(GldfAction::RemoveHyperlink(idx)));
+    let on_remove = move |_| {
+        let scp = scope.get();
+        state.update(|s| s.apply(GldfAction::RemoveHyperlink { scope: scp, index: idx }));
+    };
 
     let href = link.href.clone();
     let value = link.value.clone();

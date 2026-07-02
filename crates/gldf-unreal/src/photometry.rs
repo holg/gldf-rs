@@ -35,6 +35,11 @@ pub struct EmitterIes {
     pub watts: Option<f64>,
     pub emergency_behaviour: Option<String>,
     pub control_gear_id: Option<String>,
+    /// The L3D LEO `partName` this emitter is attached to (from
+    /// `EmitterReference.EmitterObjectExternalName`). Lets the consumer
+    /// match this photometry to a specific light-emitting object when a
+    /// luminaire has several. Empty if the reference didn't name one.
+    pub emitter_external_name: String,
     /// IES LM-63 bytes (UTF-8 text). Filename suggestion is
     /// `emitter_<photometry_id>.ies`.
     pub ies_bytes: Vec<u8>,
@@ -104,6 +109,7 @@ fn emitter_ies_from(res: VariantPhotometryResolution, ies_bytes: Vec<u8>) -> Emi
         watts: res.watts,
         emergency_behaviour: res.emergency_behaviour,
         control_gear_id: res.control_gear_id,
+        emitter_external_name: res.emitter_external_name,
         ies_bytes,
     }
 }

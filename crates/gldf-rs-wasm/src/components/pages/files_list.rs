@@ -5,9 +5,12 @@
 //! still apply when you want the `<File>` wrapped by a matching
 //! `<Photometry>` / `<Spectrum>` block.
 
+use crate::components::edit_util::event_value;
 use crate::components::IdRenameChip;
 use crate::exports::download_embedded_file;
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
+use gldf_rs::validation::xsd_enums::{is_canonical, CONTENT_TYPES};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::sync::Arc;
@@ -17,6 +20,7 @@ use web_sys::HtmlInputElement;
 #[component]
 pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
 
     let on_add_file = move |e: web_sys::Event| {
         let Some(target) = e.target() else { return };
@@ -25,7 +29,17 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
             Err(_) => return,
         };
         let Some(files) = input.files() else { return };
-        // Process every file the user picked; one AddFileWithBytes per drop.
+        // Process every file the user picked. Each known photometric /
+        // geometry / spectral extension takes its specialised import
+        // path so we auto-register the matching wrapper element
+        // alongside the <File> entry:
+        //   - .l3d       → ImportL3dFile (also creates ModelGeometry)
+        //   - .ldt/.ies  → AddPhotometryFile (also creates Photometry)
+        //   - .spd       → ImportSpectrumFile (also creates Spectrum;
+        //                  binding to a LightSource happens later via
+        //                  the LightSource Spectrum picker)
+        // Everything else (images, custom blobs) falls through to the
+        // generic AddFileWithBytes flow that just registers a <File>.
         for i in 0..files.length() {
             let Some(file) = files.get(i) else { continue };
             let filename = file.name();
@@ -33,8 +47,21 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
             spawn_local(async move {
                 match gloo::file::futures::read_as_bytes(&gloo_file).await {
                     Ok(bytes) => {
+                        let lower = filename.to_lowercase();
+                        let is_l3d = lower.ends_with(".l3d");
+                        let is_photometric =
+                            lower.ends_with(".ldt") || lower.ends_with(".ies");
+                        let is_spectrum = lower.ends_with(".spd");
                         state.update(|s| {
-                            s.apply(GldfAction::AddFileWithBytes { bytes, filename });
+                            if is_l3d {
+                                s.apply(GldfAction::ImportL3dFile { bytes, filename });
+                            } else if is_photometric {
+                                s.apply(GldfAction::AddPhotometryFile { bytes, filename });
+                            } else if is_spectrum {
+                                s.apply(GldfAction::ImportSpectrumFile { bytes, filename });
+                            } else {
+                                s.apply(GldfAction::AddFileWithBytes { bytes, filename });
+                            }
                         });
                     }
                     Err(err) => log::error!("read file: {}", err),
@@ -59,11 +86,12 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                                         type="file"
                                         multiple=true
                                         on:change=on_add_file.clone()
+                                        data-testid="files-add-input"
                                         style="font-size: 12px;"
                                     />
                                 </label>
                                 <p style="margin: 6px 0 0; font-size: 11px; color: var(--text-tertiary);">
-                                    { "Content type is inferred from extension (.ldt → ldc/eulumdat, .spd → spectrum/text, .l3d → geo/l3d, …). Edit it inline below if the sniff is wrong. For a photometry/spectrum that should also create a <Photometry> / <Spectrum> wrapper, use the Builder page." }
+                                    { tr("gldf.files.content_type_help") }
                                 </p>
                             </div>
                         }.into_any()
@@ -85,11 +113,11 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                                 <table class="data-table files-table-clickable">
                                     <thead>
                                         <tr>
-                                            <th>{ "ID" }</th>
-                                            <th>{ "File Name" }</th>
-                                            <th>{ "Content Type" }</th>
-                                            <th>{ "Type" }</th>
-                                            <th>{ "Actions" }</th>
+                                            <th>{ tr("gldf.files.col_id") }</th>
+                                            <th>{ tr("gldf.files.col_file_name") }</th>
+                                            <th>{ tr("gldf.files.col_content_type") }</th>
+                                            <th>{ tr("gldf.files.col_type_attr") }</th>
+                                            <th>{ tr("gldf.files.col_actions") }</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -120,6 +148,7 @@ fn FileRow(
     embedded: bool,
 ) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let is_editing = RwSignal::new(false);
     let id = file.id.clone();
     let id_for_dl = file.id.clone();
@@ -170,7 +199,30 @@ fn FileRow(
             </td>
             <td>
                 {move || if editable && is_editing.get() {
-                    view! { <TextField value=s_ct /> }.into_any()
+                    let on_change = move |e: web_sys::Event| {
+                        if let Some(v) = event_value(&e) {
+                            s_ct.set(v);
+                        }
+                    };
+                    let current = s_ct.get();
+                    let legacy_pill = if !current.is_empty() && !is_canonical(CONTENT_TYPES, &current) {
+                        let suffix = tr("gldf.files.content_type_legacy_suffix");
+                        Some(view! {
+                            <option value=current.clone() selected=true>
+                                { format!("⚠ {} ({})", current, suffix) }
+                            </option>
+                        })
+                    } else { None };
+                    view! {
+                        <select on:change=on_change>
+                            <option value="" selected=current.is_empty()>{ tr("gldf.files.content_type_select") }</option>
+                            {CONTENT_TYPES.iter().map(|v| {
+                                let selected = current == *v;
+                                view! { <option value=(*v).to_string() selected=selected>{ *v }</option> }
+                            }).collect::<Vec<_>>()}
+                            { legacy_pill }
+                        </select>
+                    }.into_any()
                 } else {
                     view! {
                         <span class=format!("content-type-badge {}", ct_class)>{ content_type_for_ct_cell.clone() }</span>
@@ -191,7 +243,7 @@ fn FileRow(
                             <button
                                 class="btn-download-file"
                                 on:click=on_download
-                                title=format!("Download {}", file_name_for_title)
+                                title=tr("gldf.files.download_title").replace("{file_name}", &file_name_for_title)
                                 style="background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--accent-blue);"
                             >{ "⬇" }</button>
                         }.into_any()
@@ -218,7 +270,11 @@ fn FileRow(
                         };
                         let on_remove = move |_| {
                             let id = id_for_remove.clone();
-                            let msg = format!("Remove file '{}'? Embedded bytes (if any) will be discarded.", id);
+                            let template = ui_t(
+                                "gldf.files.remove_confirm",
+                                &state.with(|s| s.ui_language.clone()),
+                            );
+                            let msg = template.replace("{id}", &id);
                             if web_sys::window()
                                 .and_then(|w| w.confirm_with_message(&msg).ok())
                                 .unwrap_or(false)
@@ -309,7 +365,7 @@ fn TextField(value: RwSignal<String>) -> impl IntoView {
     }
 }
 
-fn content_type_class(ct: &str) -> &'static str {
+pub fn content_type_class(ct: &str) -> &'static str {
     if ct.starts_with("ldc/") {
         "content-type-ldc"
     } else if ct.starts_with("geo/") {
@@ -321,7 +377,7 @@ fn content_type_class(ct: &str) -> &'static str {
     } else if ct.starts_with("document/") {
         "content-type-doc"
     } else if ct.starts_with("spectrum/") {
-        "content-type-other"
+        "content-type-spectrum"
     } else {
         "content-type-other"
     }

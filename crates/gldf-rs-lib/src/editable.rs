@@ -7,6 +7,8 @@
 //! - Save/export capabilities
 
 use crate::gldf::general_definitions::files::File;
+#[cfg(feature = "eulumdat")]
+use crate::gldf::general_definitions::photometries::DescriptivePhotometry;
 use crate::gldf::general_definitions::photometries::{
     Photometry, PhotometryFileReference, Spectrum, SpectrumFileReference,
 };
@@ -50,6 +52,52 @@ struct GldfSnapshot {
 /// // Save changes
 /// editable.save_to_file("product_modified.gldf").unwrap();
 /// ```
+/// Options for [`EditableGldf::save_to_buf_with_options`].
+///
+/// Default = canonical GLDF, no consumer-specific quirks. Each flag
+/// opts into one independent transform that's applied to a clone of
+/// the in-memory state; `self` is never mutated.
+///
+/// The transforms compose in the order listed in this struct: TM-33
+/// merge runs first, then inline-spectrum, then DIALux sanitisation.
+/// Conflicts are resolved by the rules in the field docs (e.g.
+/// `merge_into_tm33 = true` implicitly drops the SPD before
+/// `inline_spectrum` even gets a chance to inline it).
+///
+/// Naming convention: anything DIALux-specific lives behind
+/// [`crate::dialux_compat`] so a future "make the output compatible
+/// with consumer X" toggle can sit alongside it without contaminating
+/// real GLDF validation.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct ExportOptions {
+    /// Apply DIALux-import compatibility tweaks. Currently strips
+    /// `#` comment lines from every `spectrum/text` payload (DIALux
+    /// silently rejects the whole archive otherwise — see
+    /// [`crate::dialux_compat`]). Real-GLDF readers tolerate the
+    /// comments, so this is off by default.
+    pub dialux_compat: bool,
+
+    /// Inline every external `spectrum/text` SPD into
+    /// `<Spectrum><Intensity wavelength=…>…</Intensity></Spectrum>`
+    /// inside `product.xml`, dropping the external `.spd` file
+    /// entries. When all spectra are already inline this is a no-op
+    /// (the caller is expected to clear the flag and surface a note
+    /// to the user). Implemented in
+    /// [`crate::export::inline_spectrum::apply_inline_spectrum`].
+    pub inline_spectrum: bool,
+
+    /// Merge each photometry that has a linked spectrum into a
+    /// single TM-33 (`ldc/iesxml`) file, replacing the `.ldt`/`.ies`
+    /// photometry and `.spd` spectrum entries with one XML payload.
+    /// Photometries without a linked spectrum are left alone. Only
+    /// available when the lib is compiled with `feature = "eulumdat"`
+    /// (the TM-33 writer lives behind that flag); off by default and
+    /// silently skipped in eulumdat-less builds.
+    /// Implemented in
+    /// [`crate::export::tm33_merge::apply_tm33_merge`].
+    pub merge_into_tm33: bool,
+}
+
 #[derive(Clone)]
 pub struct EditableGldf {
     /// The GLDF product data
@@ -283,6 +331,116 @@ impl EditableGldf {
         Ok(photometry_id)
     }
 
+    /// Parse photometric bytes (.ldt or .ies) and populate the named
+    /// Photometry entry's `<DescriptivePhotometry>` block with the
+    /// fields derivable from the file. Only writes fields that were
+    /// previously `None`; existing user overrides are preserved.
+    ///
+    /// Returns `Ok(true)` if any fields were populated, `Ok(false)` if
+    /// the file parsed but yielded no usable summary (very rare —
+    /// truly empty LDT), and `Err` only when parsing itself failed.
+    /// Callers that want robust file-embed-even-on-summary-failure
+    /// flows should match on the error and continue.
+    #[cfg(feature = "eulumdat")]
+    pub fn fill_descriptive_photometry(
+        &mut self,
+        photometry_id: &str,
+        bytes: &[u8],
+        filename: &str,
+    ) -> Result<bool> {
+        use eulumdat::{Eulumdat, IesParser, PhotometricSummary};
+
+        // Decode bytes — both parsers accept the raw text. We prefer
+        // UTF-8 then fall back to Latin-1 since EULUMDAT/IES historically
+        // shipped in ISO-8859-1.
+        let text = match std::str::from_utf8(bytes) {
+            Ok(s) => s.to_string(),
+            Err(_) => bytes.iter().map(|&b| b as char).collect::<String>(),
+        };
+
+        let is_ies = filename.to_lowercase().ends_with(".ies");
+        let ldt = if is_ies {
+            IesParser::parse(&text).context("parse IES")?
+        } else {
+            Eulumdat::parse(&text).context("parse EULUMDAT")?
+        };
+        let summary = PhotometricSummary::from_eulumdat(&ldt);
+
+        // Find the photometry entry to mutate. If it's missing the
+        // caller dispatched a stale id; treat as a no-op rather than an
+        // error so the file-embed path stays robust.
+        let photometries = match self.product.general_definitions.photometries.as_mut() {
+            Some(p) => p,
+            None => return Ok(false),
+        };
+        let entry = match photometries
+            .photometry
+            .iter_mut()
+            .find(|p| p.id == photometry_id)
+        {
+            Some(e) => e,
+            None => return Ok(false),
+        };
+
+        let dp = entry
+            .descriptive_photometry
+            .get_or_insert_with(DescriptivePhotometry::default);
+
+        let mut wrote = false;
+
+        // Helper: round to N decimals using banker's rounding; keeps
+        // serialised numbers tidy without producing 0.299999…-style
+        // float drift.
+        let round_to = |v: f64, decimals: u32| -> f64 {
+            let factor = 10f64.powi(decimals as i32);
+            (v * factor).round_ties_even() / factor
+        };
+
+        // Ratio fields are 0..1 per rc-3 XSD (xs:double with
+        // maxInclusive=1). EULUMDAT supplies them as percentages, so
+        // divide on the way in.
+        let pct_to_ratio = |v: f64| (v / 100.0).clamp(0.0, 1.0);
+
+        // light_output_ratio (LOR) — luminaire flux / lamp flux.
+        if dp.light_output_ratio.is_none() {
+            dp.light_output_ratio = Some(round_to(pct_to_ratio(summary.lor), 4));
+            wrote = true;
+        }
+        // downward_light_output_ratio (DLOR).
+        if dp.downward_light_output_ratio.is_none() {
+            dp.downward_light_output_ratio = Some(round_to(pct_to_ratio(summary.dlor), 4));
+            wrote = true;
+        }
+        // upward_light_output_ratio (ULOR).
+        if dp.upward_light_output_ratio.is_none() {
+            dp.upward_light_output_ratio = Some(round_to(pct_to_ratio(summary.ulor), 4));
+            wrote = true;
+        }
+        // luminous_efficacy (lm/W) — NOT a ratio, no rescale.
+        if dp.luminous_efficacy.is_none() && summary.luminaire_efficacy.is_finite() {
+            dp.luminous_efficacy = Some(round_to(summary.luminaire_efficacy, 2));
+            wrote = true;
+        }
+        // downward_flux_fraction — sourced directly from the parsed LDT
+        // (line 22 in EULUMDAT). LDT stores it as a percentage, GLDF
+        // expects 0..1.
+        if dp.downward_flux_fraction.is_none() && ldt.downward_flux_fraction > 0.0 {
+            dp.downward_flux_fraction =
+                Some(round_to(pct_to_ratio(ldt.downward_flux_fraction), 4));
+            wrote = true;
+        }
+        // cie_flux_code — Display impl rounds to bankers' integers.
+        if dp.cie_flux_code.is_none() {
+            dp.cie_flux_code = Some(summary.cie_flux_codes.to_string());
+            wrote = true;
+        }
+
+        if wrote {
+            self.is_modified = true;
+        }
+        Ok(wrote)
+    }
+
     /// Replace the file backing an existing `<Photometry>` entry with new
     /// bytes — same photometry id, so every `<PhotometryReference>` on an
     /// emitter stays valid. Removes the old `<File>` entry and its embedded
@@ -418,6 +576,50 @@ impl EditableGldf {
 
         self.add_embedded_file(&file_id, bytes);
         Ok(spectrum_id)
+    }
+
+    /// Embed a sensor data sheet (.sensxml or .sensldt) and link it via
+    /// a fresh `<Sensor>` entry under `GeneralDefinitions/Sensors`.
+    ///
+    /// Mirrors the photometry / spectrum file-drop helpers: registers a
+    /// `<File>` with the right content type (`sensor/sensxml` for `.xml`
+    /// or `.sensxml`; `sensor/sensldt` for everything else including
+    /// `.ldt` and `.sensldt`), mints a `<Sensor id="…">` with a
+    /// `SensorFileReference` pointing at it, and embeds the bytes.
+    ///
+    /// Returns the sensor id so callers (wizard, Files-page drop
+    /// handler) can rename it semantically. Detector characteristic /
+    /// detection method / detector type enum fields default to empty —
+    /// the editor's Sensors page lets the user tick them later.
+    pub fn add_sensor_file(&mut self, bytes: Vec<u8>, filename: &str) -> Result<String> {
+        use crate::gldf::general_definitions::sensors::{Sensor, SensorFileReference};
+        let lower = filename.to_lowercase();
+        let is_xml = lower.ends_with(".xml") || lower.ends_with(".sensxml");
+        let content_type = if is_xml {
+            "sensor/sensxml"
+        } else {
+            "sensor/sensldt"
+        };
+
+        let file_id = self.product.generate_unique_id("sensorFile");
+        self.product.add_file(File {
+            id: file_id.clone(),
+            content_type: content_type.to_string(),
+            type_attr: "localFileName".to_string(),
+            language: String::new(),
+            file_name: filename.to_string(),
+        })?;
+
+        let sensor_id = self.product.generate_unique_id("sensor");
+        let mut sensor = Sensor::default();
+        sensor.id = sensor_id.clone();
+        sensor.sensor_file_reference = Some(SensorFileReference {
+            file_id: file_id.clone(),
+        });
+        self.product.add_sensor(sensor)?;
+
+        self.add_embedded_file(&file_id, bytes);
+        Ok(sensor_id)
     }
 
     /// Add a fully-specified `Variant`. If its `id` is empty, a unique one is
@@ -571,8 +773,83 @@ impl EditableGldf {
 
     /// Saves the GLDF to a buffer (useful for WASM downloads).
     ///
-    /// Returns the ZIP archive as a byte vector.
+    /// Returns the ZIP archive as a byte vector. Uses default
+    /// [`ExportOptions`] — i.e. canonical GLDF, no DIALux quirks.
+    /// Call [`Self::save_to_buf_with_options`] to opt into the
+    /// DIALux-compat / inline-spectrum / TM-33 transforms.
     pub fn save_to_buf(&self) -> Result<Vec<u8>> {
+        self.save_to_buf_with_options(&ExportOptions::default())
+    }
+
+    /// Saves the GLDF to a buffer with explicit [`ExportOptions`].
+    ///
+    /// Flags compose in the order: TM-33 merge → inline-spectrum →
+    /// DIALux-compat sanitisation. Each transform clones what it
+    /// needs; `self` is never mutated. The default (all flags off)
+    /// behaves identically to [`Self::save_to_buf`].
+    pub fn save_to_buf_with_options(&self, opts: &ExportOptions) -> Result<Vec<u8>> {
+        // Inline-spectrum + TM-33 transforms mutate the product
+        // model itself, so they need owned working copies. DIALux
+        // compat only mutates byte payloads, so it can stay on a
+        // cow. We always emit from `product_ref` + `embedded`.
+        let mut product_owned: Option<GldfProduct> = None;
+        let mut embedded: std::borrow::Cow<'_, HashMap<String, Vec<u8>>> =
+            std::borrow::Cow::Borrowed(&self.embedded_files);
+
+        // TM-33 merge runs FIRST: it consumes the spectrum's SPD file
+        // entirely. If both `merge_into_tm33` and `inline_spectrum`
+        // are set, merge wins (the spectrum no longer exists as a
+        // standalone entry by the time inline-spectrum walks).
+        #[cfg(feature = "eulumdat")]
+        if opts.merge_into_tm33 {
+            let mut prod = product_owned.take().unwrap_or_else(|| self.product.clone());
+            let mut owned_em = embedded.into_owned();
+            let _outcome = crate::export::tm33_merge::apply_tm33_merge(
+                &mut prod,
+                &mut owned_em,
+            )
+            .context("apply TM-33 merge")?;
+            product_owned = Some(prod);
+            embedded = std::borrow::Cow::Owned(owned_em);
+        }
+
+        if opts.inline_spectrum {
+            // Rewrite SpectrumFileReference → inline Intensity rows.
+            // Drops the corresponding File entries + bytes.
+            let mut prod = product_owned.take().unwrap_or_else(|| self.product.clone());
+            let mut owned_em = embedded.into_owned();
+            let _outcome = crate::export::inline_spectrum::apply_inline_spectrum(
+                &mut prod,
+                &mut owned_em,
+            );
+            product_owned = Some(prod);
+            embedded = std::borrow::Cow::Owned(owned_em);
+        }
+
+        // `product_ref` and `embedded` are the bytes/model the rest
+        // of this fn writes from. Avoid moving `product_owned` into
+        // closures so subsequent transforms can keep reading.
+        let product_ref: &GldfProduct = product_owned
+            .as_ref()
+            .unwrap_or(&self.product);
+
+        if opts.dialux_compat {
+            // Strip `#` comment lines from every spectrum/text payload.
+            // DIALux silently aborts otherwise; see `dialux_compat`.
+            let mut owned = embedded.into_owned();
+            for file_def in &product_ref.general_definitions.files.file {
+                if file_def.content_type != "spectrum/text" {
+                    continue;
+                }
+                if let Some(bytes) = owned.get(&file_def.id) {
+                    let text = String::from_utf8_lossy(bytes);
+                    let sanitised = crate::dialux_compat::sanitize_spd(&text);
+                    owned.insert(file_def.id.clone(), sanitised.into_bytes());
+                }
+            }
+            embedded = std::borrow::Cow::Owned(owned);
+        }
+
         let cursor = Cursor::new(Vec::new());
         let mut zip = ZipWriter::new(cursor);
 
@@ -581,8 +858,7 @@ impl EditableGldf {
             .unix_permissions(0o644);
 
         // Write product.xml
-        let xml = self
-            .product
+        let xml = product_ref
             .to_xml()
             .context("Failed to serialize product to XML")?;
         zip.start_file("product.xml", options)
@@ -591,14 +867,14 @@ impl EditableGldf {
             .context("Failed to write product.xml")?;
 
         // Write embedded files
-        for file_def in &self.product.general_definitions.files.file {
+        for file_def in &product_ref.general_definitions.files.file {
             // Skip URL files - they're not embedded
             if file_def.type_attr == "url" {
                 continue;
             }
 
             // Get the embedded content
-            if let Some(content) = self.embedded_files.get(&file_def.id) {
+            if let Some(content) = embedded.get(&file_def.id) {
                 let zip_path =
                     Self::get_zip_path_for_file(&file_def.content_type, &file_def.file_name);
                 zip.start_file(&zip_path, options)
@@ -693,6 +969,108 @@ mod tests {
         assert!(editable.embedded_files.is_empty());
         assert!(!editable.can_undo());
         assert!(!editable.can_redo());
+    }
+
+    /// End-to-end: `inline_spectrum=true` rewrites the product.xml
+    /// to embed `<Intensity>` rows and drops the `.spd` file from
+    /// the zip. Locks in the slice-2 transform contract.
+    #[test]
+    fn inline_spectrum_export_drops_spd_and_inlines_intensities() {
+        use crate::gldf::general_definitions::files::File as GldfFile;
+        use crate::gldf::general_definitions::photometries::{
+            Spectrum, SpectrumFileReference, Spectrums,
+        };
+        use std::io::Read;
+
+        let mut e = EditableGldf::new();
+        e.product.general_definitions.files.file.push(GldfFile {
+            id: "spd1".into(),
+            content_type: "spectrum/text".into(),
+            type_attr: "localFileName".into(),
+            language: String::new(),
+            file_name: "spec.spd".into(),
+        });
+        e.product.general_definitions.spectrums = Some(Spectrums {
+            spectrum: vec![Spectrum {
+                id: "s1".into(),
+                spectrum_file_reference: Some(SpectrumFileReference {
+                    file_id: "spd1".into(),
+                }),
+                intensity: vec![],
+            }],
+        });
+        e.embedded_files
+            .insert("spd1".into(), b"380\t0.5\n385\t0.6\n".to_vec());
+
+        let out = e
+            .save_to_buf_with_options(&ExportOptions {
+                inline_spectrum: true,
+                ..ExportOptions::default()
+            })
+            .expect("inline export");
+
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(out)).expect("zip");
+        // SPD file gone
+        assert!(zip.by_name("spectrum/spec.spd").is_err());
+        // product.xml carries the inlined Intensity rows + no File entry
+        let mut xml = String::new();
+        zip.by_name("product.xml")
+            .expect("product.xml")
+            .read_to_string(&mut xml)
+            .unwrap();
+        assert!(
+            xml.contains(r#"<Intensity wavelength="380">0.5</Intensity>"#),
+            "expected inlined Intensity row, got: {xml}"
+        );
+        assert!(
+            !xml.contains(r#"contentType="spectrum/text""#),
+            "File entry should be gone: {xml}"
+        );
+    }
+
+    /// `save_to_buf` (default options) leaves SPD bytes untouched —
+    /// real GLDF is comment-tolerant. `save_to_buf_with_options` with
+    /// `dialux_compat = true` strips `#` lines from every
+    /// `spectrum/text` payload as it lands in the zip. Anchors both
+    /// the "we don't mutate by default" promise and the DIALux fix.
+    #[test]
+    fn dialux_compat_export_strips_spd_comments_only_when_flagged() {
+        use crate::gldf::general_definitions::files::File as GldfFile;
+        use std::io::Read;
+
+        let mut e = EditableGldf::new();
+        e.product.general_definitions.files.file.push(GldfFile {
+            id: "spd1".to_string(),
+            content_type: "spectrum/text".to_string(),
+            type_attr: "localFileName".to_string(),
+            language: String::new(),
+            file_name: "spec.spd".to_string(),
+        });
+        let dirty = b"# header\n380\t0.5\n385\t0.6\n";
+        e.embedded_files
+            .insert("spd1".to_string(), dirty.to_vec());
+
+        let read_back = |buf: &[u8]| -> Vec<u8> {
+            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(buf.to_vec()))
+                .expect("open zip");
+            let mut f = zip.by_name("spectrum/spec.spd").expect("entry");
+            let mut out = Vec::new();
+            f.read_to_end(&mut out).unwrap();
+            out
+        };
+
+        // Default = no transform, comments survive
+        let default_out = e.save_to_buf().expect("default export");
+        assert_eq!(read_back(&default_out), dirty);
+
+        // dialux_compat = on → comments stripped
+        let dialux_out = e
+            .save_to_buf_with_options(&ExportOptions {
+                dialux_compat: true,
+                ..ExportOptions::default()
+            })
+            .expect("dialux export");
+        assert_eq!(read_back(&dialux_out), b"380\t0.5\n385\t0.6\n");
     }
 
     #[test]

@@ -37,6 +37,20 @@ pub fn export_gldf(state: GldfContext) -> Result<()> {
     Ok(())
 }
 
+/// Same as [`export_gldf`] but routes through
+/// `save_to_buf_with_options`. Wired to the export-options dialog so
+/// the user can opt into DIALux-compat / inline-spectrum / TM-33 merge
+/// transforms. Filename is unchanged — the consumer is identical, only
+/// the bytes shift.
+pub fn export_gldf_with_options(
+    state: GldfContext,
+    opts: gldf_rs::editable::ExportOptions,
+) -> Result<()> {
+    let bytes = state.with(|s| s.save_to_buf_with_options(&opts))?;
+    download_bytes(&bytes, "exported.gldf", "application/zip");
+    Ok(())
+}
+
 /// Export an IFC representation of the current product.
 ///
 /// Pulls the L3D mesh from `embedded_files` if present; otherwise emits IFC
@@ -86,17 +100,46 @@ pub fn export_variant_photometry(state: GldfContext, photometry_id: &str) -> Res
 }
 
 /// Download the photometry file PATCHED with this variant's flux / power
-/// overrides via `gldf_rs::patch_ldt_for_variant`. When neither override is
-/// set, the patcher returns `None` and we fall back to the raw bytes.
+/// overrides, emitting in the chosen [`PhotometryExportFormat`]. The
+/// filename is rewritten so its extension matches the format — important
+/// when the source photometry is TM-33 XML but the user picked LDT (or
+/// vice versa); the old "always LDT, original name" path produced
+/// e.g. `wide.xml` containing EULUMDAT bytes.
+///
+/// When neither override is set, the lib's patcher returns `None` and
+/// we fall back to converting the raw bytes via `export_photometry` so
+/// the format choice still works.
 pub fn export_patched_variant_photometry(
     state: GldfContext,
     photometry_id: &str,
     lumens: Option<i32>,
     watts: Option<f64>,
+    format: gldf_rs::PhotometryExportFormat,
 ) -> Result<()> {
     let (file_name, raw_bytes) = lookup_photometry_bytes(state, photometry_id)?;
-    let bytes = gldf_rs::patch_ldt_for_variant(&raw_bytes, lumens, watts).unwrap_or(raw_bytes);
-    download_bytes(&bytes, &file_name, mime_for(&file_name));
+    // Prefer the patched bytes when an override exists; fall back to a
+    // pure conversion of the raw bytes when there's nothing to patch.
+    // Both paths route through eulumdat-rs so format choice is honoured.
+    let bytes = if let Some(patched) =
+        gldf_rs::patch_photometry_for_variant(&raw_bytes, lumens, watts, format)
+    {
+        patched
+    } else {
+        // Need to parse the raw bytes to convert: easiest is to call the
+        // lib's patcher with a no-op override that still routes through
+        // export_photometry. We pass `Some(_)` for one field with the
+        // original value so the patcher's "no-op" guard doesn't bail
+        // — using a `0` placeholder isn't safe (would zero out flux),
+        // so parse manually here.
+        gldf_rs::photometry::convert_raw_photometry(&raw_bytes, format)
+            .ok_or_else(|| anyhow!("can't convert photometry to {:?}", format))?
+    };
+    let stem = file_name
+        .rsplit_once('.')
+        .map(|(s, _)| s)
+        .unwrap_or(&file_name);
+    let new_name = format!("{}.{}", stem, format.extension());
+    download_bytes(&bytes, &new_name, format.mime());
     Ok(())
 }
 

@@ -23,6 +23,9 @@ pub mod canonical;
 pub mod engine;
 pub mod xsd_enums;
 
+#[cfg(feature = "xsd")]
+pub mod xsd_schema;
+
 // Engine surface — original schema-rule validator. Re-exported flat so
 // existing `gldf_rs::validation::ValidationError` paths keep working
 // after the file → folder split.
@@ -30,3 +33,11 @@ pub use engine::{validate_gldf, ValidationError, ValidationLevel, ValidationResu
 
 // Canonical-enum walker surface.
 pub use canonical::{validate, Violation};
+
+// XSD-validator surface — Rc-3 schema check via uppsala.
+#[cfg(feature = "xsd")]
+pub use xsd_schema::{
+    validate_gldf_archive as xsd_validate_gldf_archive,
+    validate_product_xml as xsd_validate_product_xml,
+    XsdError, XsdFinding, XsdResult,
+};

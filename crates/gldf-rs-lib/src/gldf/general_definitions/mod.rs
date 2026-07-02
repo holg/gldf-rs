@@ -80,7 +80,13 @@ pub struct GeneralDefinitions {
     /// A collection of equipment definitions.
     ///
     /// This field is optional and may not be present in all GLDF files.
-    #[serde(rename = "Equipments", skip_serializing_if = "Option::is_none")]
+    /// The skip predicate also drops a `Some(Equipments)` whose entries
+    /// have no `LightSourceReference` — emitting such an Equipment would
+    /// violate the rc-3 XSD (`LightSourceReference` is `minOccurs=1`).
+    #[serde(
+        rename = "Equipments",
+        skip_serializing_if = "electrical::is_equipments_empty"
+    )]
     pub equipments: Option<Equipments>,
 
     /// A collection of emitter definitions.
@@ -168,8 +174,11 @@ pub struct Hyperlink {
     #[serde(rename = "@countryCode", skip_serializing_if = "Option::is_none")]
     pub country_code: Option<String>,
 
-    /// The value of the hyperlink.
-    #[serde(rename = "$text")]
+    /// The value of the hyperlink (label text). Made `default` so a
+    /// self-closing `<Hyperlink href=".../>"` round-trips through
+    /// quick-xml — without it, reload fails with "missing field
+    /// `$text`". Round-trip regression covered by the Trahe ACME e2e.
+    #[serde(rename = "$text", default)]
     pub value: String,
 }
 

@@ -18,16 +18,24 @@
 //!   logic shared between Leptos forms and ratatui modals.
 
 pub mod action;
+pub mod batch;
 pub mod emitter_draft;
+pub mod script;
 pub mod state;
 pub mod ui_language;
 pub mod wizard;
 
-pub use action::{GldfAction, LightEmitterKind, Scope};
+pub use action::{GldfAction, LightEmitterKind, ModelEmitterBinding, Scope};
+pub use batch::{process_one, BatchOptions, BatchOutput, BatchTemplate, TemplateDraft};
+#[cfg(not(target_arch = "wasm32"))]
+pub use batch::{collect_inputs, run_batch, BatchEvent, BatchJob, FileReport};
 pub use emitter_draft::EmitterDraft;
+pub use script::{apply_script, expand_file_refs, FileResolver, MemoryResolver};
+#[cfg(not(target_arch = "wasm32"))]
+pub use script::FsResolver;
 pub use state::{collect_languages, GldfState};
 pub use ui_language::{
     initial_ui_language, normalise_ui_language, ui_language_native_name, LangStore, NullLangStore,
     UiLanguageStore, SUPPORTED_UI_LANGUAGES,
 };
-pub use wizard::{apply_wizard, WizardDraft, WizardLightSourceKind, WizardStep};
+pub use wizard::{apply_wizard, text as wizard_text, WizardDraft, WizardLightSourceKind, WizardStep};

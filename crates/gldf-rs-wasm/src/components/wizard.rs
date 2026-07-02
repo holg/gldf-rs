@@ -69,6 +69,32 @@ pub struct WizardState {
     pub driver_name: RwSignal<String>,
     pub driver_dimmable: RwSignal<bool>,
     pub driver_standby_power: RwSignal<String>,
+
+    // Mounting step (optional). `mounting_type` is empty until the user
+    // picks a primitive on the Mounting step. Lib's apply_wizard reads
+    // these via `build_mountings_from_draft`.
+    pub mounting_type: RwSignal<String>,
+    pub mounting_recessed_depth_mm: RwSignal<String>,
+    pub mounting_pendant_length_mm: RwSignal<String>,
+    pub mounting_height_mm: RwSignal<String>,
+    pub mounting_pole_height_mm: RwSignal<String>,
+
+    // Sensor step (optional). When `sensor_bytes` is Some, apply_wizard
+    // dispatches AddSensorFile so the resulting <File> already lands with
+    // contentType=sensor/sensldt AND a <Sensor> entry is minted — no
+    // follow-up retype dispatch needed from the demo / wizard caller.
+    pub sensor_bytes: RwSignal<Option<Vec<u8>>>,
+    pub sensor_filename: RwSignal<String>,
+
+    // Emergency step (optional). When `emergency_bytes` is Some,
+    // apply_wizard dispatches AddPhotometryFile for the emergency LDT
+    // so the resulting GLDF declares BOTH the normal-mode photometry
+    // (from the Photometry step) AND the dimmer emergency-mode
+    // photometry as separate <Photometry> entries. The wizard does not
+    // bind it to any emitter; the user / demo creates an EmergencyOnly
+    // emitter referencing the resulting photometry id later.
+    pub emergency_bytes: RwSignal<Option<Vec<u8>>>,
+    pub emergency_filename: RwSignal<String>,
 }
 
 impl WizardState {
@@ -92,6 +118,15 @@ impl WizardState {
             driver_name: RwSignal::new(String::new()),
             driver_dimmable: RwSignal::new(false),
             driver_standby_power: RwSignal::new(String::new()),
+            mounting_type: RwSignal::new(String::new()),
+            mounting_recessed_depth_mm: RwSignal::new(String::new()),
+            mounting_pendant_length_mm: RwSignal::new(String::new()),
+            mounting_height_mm: RwSignal::new(String::new()),
+            mounting_pole_height_mm: RwSignal::new(String::new()),
+            sensor_bytes: RwSignal::new(None),
+            sensor_filename: RwSignal::new(String::new()),
+            emergency_bytes: RwSignal::new(None),
+            emergency_filename: RwSignal::new(String::new()),
         }
     }
 }
@@ -166,11 +201,14 @@ pub fn NewGldfWizard(
                             match step {
                                 0 => view! { <HeaderStep w=w /> }.into_any(),
                                 1 => view! { <PhotometryStep w=w /> }.into_any(),
-                                2 => view! { <LightSourceStep w=w /> }.into_any(),
-                                3 => view! { <EmitterStep w=w /> }.into_any(),
-                                4 => view! { <GeometryStep w=w /> }.into_any(),
-                                5 => view! { <DriverStep w=w /> }.into_any(),
-                                6 => view! { <VariantStep w=w /> }.into_any(),
+                                2 => view! { <SensorStep w=w /> }.into_any(),
+                                3 => view! { <EmergencyStep w=w /> }.into_any(),
+                                4 => view! { <LightSourceStep w=w /> }.into_any(),
+                                5 => view! { <EmitterStep w=w /> }.into_any(),
+                                6 => view! { <GeometryStep w=w /> }.into_any(),
+                                7 => view! { <MountingStep w=w /> }.into_any(),
+                                8 => view! { <DriverStep w=w /> }.into_any(),
+                                9 => view! { <VariantStep w=w /> }.into_any(),
                                 _ => view! { <ReviewStep w=w /> }.into_any(),
                             }
                         }
@@ -395,6 +433,163 @@ fn PhotometryStep(w: WizardState) -> impl IntoView {
     }
 }
 
+// Sensor step — optional, parallel to PhotometryStep. Drops a sensor
+// data sheet (.sensxml / .sensldt). apply_wizard's AddSensorFile
+// dispatch lands the bytes as a sensor/* File AND mints the matching
+// <Sensor> entry; no follow-up retype-after-drop dispatch needed.
+#[component]
+fn SensorStep(w: WizardState) -> impl IntoView {
+    let stash = move |file: web_sys::File| {
+        let filename = file.name();
+        let gloo_file = gloo::file::File::from(file);
+        spawn_local(async move {
+            match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                Ok(bytes) => {
+                    w.sensor_filename.set(filename);
+                    w.sensor_bytes.set(Some(bytes));
+                }
+                Err(err) => log::error!("read sensor: {}", err),
+            }
+        });
+    };
+    let on_change = move |e: web_sys::Event| {
+        let Some(t) = e.target() else { return };
+        let input: HtmlInputElement = match t.dyn_into() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        let Some(files) = input.files() else { return };
+        let Some(file) = files.get(0) else { return };
+        stash(file);
+        input.set_value("");
+    };
+    let on_drop = move |e: web_sys::DragEvent| {
+        e.prevent_default();
+        e.stop_propagation();
+        let Some(dt) = e.data_transfer() else { return };
+        let Some(files) = dt.files() else { return };
+        let Some(file) = files.get(0) else { return };
+        stash(file);
+    };
+    let on_dragover = move |e: web_sys::DragEvent| {
+        e.prevent_default();
+        e.stop_propagation();
+    };
+
+    view! {
+        <div>
+            <h3 style="margin: 0 0 4px; font-size: 14px;">{ WizardStep::Sensor.headline() }</h3>
+            <p style="margin: 0 0 12px; font-size: 12px; color: var(--text-secondary);">
+                { WizardStep::Sensor.blurb() }
+            </p>
+            <label
+                on:drop=on_drop
+                on:dragover=on_dragover
+                on:dragenter=on_dragover
+                style="display: inline-flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px dashed var(--accent-purple); border-radius: 6px; background: var(--bg-secondary); cursor: pointer;"
+            >
+                <span style="color: var(--accent-purple); font-weight: 500; font-size: 13px;">{ "Drop or pick a sensor file" }</span>
+                <input type="file" accept=".sensxml,.sensldt,.ldt,.xml" on:change=on_change data-testid="wizard-sensor-input" style="font-size: 12px;" />
+            </label>
+            {move || {
+                if let Some(bytes) = w.sensor_bytes.get() {
+                    view! {
+                        <p style="margin: 8px 0 0; font-size: 12px; color: var(--accent-green);">
+                            { format!("✓ {} ({} bytes) staged", w.sensor_filename.get(), bytes.len()) }
+                        </p>
+                    }.into_any()
+                } else {
+                    view! {
+                        <p style="margin: 8px 0 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
+                            { "Optional — Skip with Next if the luminaire has no sensor." }
+                        </p>
+                    }.into_any()
+                }
+            }}
+        </div>
+    }
+}
+
+// Emergency step — optional. Drops a second photometry file (the
+// EMERGENCY-mode beam) so the resulting GLDF carries two `<Photometry>`
+// entries: the normal-mode beam from the Photometry step AND the
+// dimmer emergency beam. apply_wizard dispatches the same
+// AddPhotometryFile action used by the main Photometry step — the
+// auto id (photometryFile_2) is what downstream rename passes hook
+// onto when retagging to `ph_emergency`.
+#[component]
+fn EmergencyStep(w: WizardState) -> impl IntoView {
+    let stash = move |file: web_sys::File| {
+        let filename = file.name();
+        let gloo_file = gloo::file::File::from(file);
+        spawn_local(async move {
+            match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                Ok(bytes) => {
+                    w.emergency_filename.set(filename);
+                    w.emergency_bytes.set(Some(bytes));
+                }
+                Err(err) => log::error!("read emergency: {}", err),
+            }
+        });
+    };
+    let on_change = move |e: web_sys::Event| {
+        let Some(t) = e.target() else { return };
+        let input: HtmlInputElement = match t.dyn_into() {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        let Some(files) = input.files() else { return };
+        let Some(file) = files.get(0) else { return };
+        stash(file);
+        input.set_value("");
+    };
+    let on_drop = move |e: web_sys::DragEvent| {
+        e.prevent_default();
+        e.stop_propagation();
+        let Some(dt) = e.data_transfer() else { return };
+        let Some(files) = dt.files() else { return };
+        let Some(file) = files.get(0) else { return };
+        stash(file);
+    };
+    let on_dragover = move |e: web_sys::DragEvent| {
+        e.prevent_default();
+        e.stop_propagation();
+    };
+
+    view! {
+        <div>
+            <h3 style="margin: 0 0 4px; font-size: 14px;">{ WizardStep::Emergency.headline() }</h3>
+            <p style="margin: 0 0 12px; font-size: 12px; color: var(--text-secondary);">
+                { WizardStep::Emergency.blurb() }
+            </p>
+            <label
+                on:drop=on_drop
+                on:dragover=on_dragover
+                on:dragenter=on_dragover
+                style="display: inline-flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px dashed var(--accent-orange); border-radius: 6px; background: var(--bg-secondary); cursor: pointer;"
+            >
+                <span style="color: var(--accent-orange); font-weight: 500; font-size: 13px;">{ "Drop or pick an emergency photometry file" }</span>
+                <input type="file" accept=".ldt,.ies" on:change=on_change data-testid="wizard-emergency-input" style="font-size: 12px;" />
+            </label>
+            {move || {
+                if let Some(bytes) = w.emergency_bytes.get() {
+                    view! {
+                        <p style="margin: 8px 0 0; font-size: 12px; color: var(--accent-green);">
+                            { format!("✓ {} ({} bytes) staged", w.emergency_filename.get(), bytes.len()) }
+                        </p>
+                    }.into_any()
+                } else {
+                    view! {
+                        <p style="margin: 8px 0 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
+                            { "Optional — Skip with Next if the luminaire is normal-only." }
+                        </p>
+                    }.into_any()
+                }
+            }}
+        </div>
+    }
+}
+
 #[component]
 fn LightSourceStep(w: WizardState) -> impl IntoView {
     let on_kind = move |e: web_sys::Event| {
@@ -606,6 +801,156 @@ fn GeometryStep(w: WizardState) -> impl IntoView {
     }
 }
 
+// Mounting step — picks the variant's `<Mountings>` branch. The XSD
+// has four top-level branches (Ceiling / Wall / Ground / WorkingPlane);
+// Ceiling and Ground have sub-choices (Recessed / Surface / Pendant
+// and PoleTop / FreeStanding respectively). We flatten that to a
+// single dropdown of 7 choices to keep the wizard's input surface
+// small. The lib's `build_mountings_from_draft` decodes the
+// slash-strings back into the typed structs on Finish.
+//
+// Skip = leave `mounting_type` empty. The variant editor's
+// `VariantMountingsEditor` lets the user add or change Mountings
+// post-Finish; this step exists mostly so a fresh wizard can produce
+// a GLDF that the Bevy 3D viewer renders with a recessed downlight
+// visibly sunk into the ceiling cavity (which is the visible payoff
+// of the Mountings end-to-end flow).
+#[component]
+fn MountingStep(w: WizardState) -> impl IntoView {
+    let on_type = move |e: web_sys::Event| {
+        if let Some(t) = e.target() {
+            if let Ok(s) = t.dyn_into::<web_sys::HtmlSelectElement>() {
+                w.mounting_type.set(s.value());
+            }
+        }
+    };
+    let on_depth = move |e: web_sys::Event| {
+        if let Some(t) = e.target() {
+            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
+                w.mounting_recessed_depth_mm.set(i.value());
+            }
+        }
+    };
+    let on_pendant = move |e: web_sys::Event| {
+        if let Some(t) = e.target() {
+            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
+                w.mounting_pendant_length_mm.set(i.value());
+            }
+        }
+    };
+    let on_wall_h = move |e: web_sys::Event| {
+        if let Some(t) = e.target() {
+            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
+                w.mounting_height_mm.set(i.value());
+            }
+        }
+    };
+    let on_pole_h = move |e: web_sys::Event| {
+        if let Some(t) = e.target() {
+            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
+                w.mounting_pole_height_mm.set(i.value());
+            }
+        }
+    };
+
+    view! {
+        <div>
+            <h3 style="margin: 0 0 4px; font-size: 14px;">{ WizardStep::Mounting.headline() }</h3>
+            <p style="margin: 0 0 12px; font-size: 12px; color: var(--text-secondary);">
+                { WizardStep::Mounting.blurb() }
+            </p>
+            <label style="display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 12px;">
+                <span style="color: var(--text-secondary);">{ "Mounting situation" }</span>
+                <select
+                    on:change=on_type
+                    prop:value=move || w.mounting_type.get()
+                    data-testid="wizard-mounting-type"
+                    style="padding: 4px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                >
+                    <option value="">{ "-- skip --" }</option>
+                    <option value="ceiling/recessed">{ "Ceiling · Recessed" }</option>
+                    <option value="ceiling/surface">{ "Ceiling · Surface mounted" }</option>
+                    <option value="ceiling/pendant">{ "Ceiling · Pendant" }</option>
+                    <option value="wall">{ "Wall" }</option>
+                    <option value="ground/pole_top">{ "Ground · Pole top" }</option>
+                    <option value="ground/free_standing">{ "Ground · Free standing" }</option>
+                    <option value="working_plane">{ "Working plane (free standing)" }</option>
+                </select>
+            </label>
+            // Per-branch fields. Each fires only when the matching
+            // mounting_type prefix is picked. The lib's
+            // build_mountings_from_draft ignores fields that aren't
+            // relevant for the chosen branch, so it's safe to write to
+            // them even when they're hidden.
+            {move || {
+                let mt = w.mounting_type.get();
+                if mt == "ceiling/recessed" || mt == "wall" {
+                    view! {
+                        <label style="display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">{ "Recessed depth (mm)" }</span>
+                            <input
+                                type="number"
+                                min="0"
+                                prop:value=move || w.mounting_recessed_depth_mm.get()
+                                on:input=on_depth
+                                placeholder="50"
+                                data-testid="wizard-mounting-depth"
+                                style="padding: 4px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                            />
+                        </label>
+                    }.into_any()
+                } else { ().into_any() }
+            }}
+            {move || (w.mounting_type.get() == "ceiling/pendant").then(|| view! {
+                <label style="display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px;">
+                    <span style="color: var(--text-secondary);">{ "Pendant length (mm)" }</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        prop:value=move || w.mounting_pendant_length_mm.get()
+                        on:input=on_pendant
+                        placeholder="600"
+                        data-testid="wizard-mounting-pendant"
+                        style="padding: 4px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                    />
+                </label>
+            })}
+            {move || (w.mounting_type.get() == "wall").then(|| view! {
+                <label style="display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px;">
+                    <span style="color: var(--text-secondary);">{ "Mounting height (mm)" }</span>
+                    <input
+                        type="number"
+                        min="0"
+                        prop:value=move || w.mounting_height_mm.get()
+                        on:input=on_wall_h
+                        placeholder="2000"
+                        data-testid="wizard-mounting-wall-height"
+                        style="padding: 4px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                    />
+                </label>
+            })}
+            {move || (w.mounting_type.get() == "ground/pole_top").then(|| view! {
+                <label style="display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px;">
+                    <span style="color: var(--text-secondary);">{ "Pole height (mm)" }</span>
+                    <input
+                        type="number"
+                        min="0"
+                        prop:value=move || w.mounting_pole_height_mm.get()
+                        on:input=on_pole_h
+                        placeholder="4000"
+                        data-testid="wizard-mounting-pole-height"
+                        style="padding: 4px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                    />
+                </label>
+            })}
+            <p style="margin: 12px 0 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
+                { "Optional. Skip with '-- skip --' and add Mountings later from the Variants page." }
+            </p>
+        </div>
+    }
+}
+
 #[component]
 fn DriverStep(w: WizardState) -> impl IntoView {
     // Three text/checkbox inputs gated on the top-level "include" toggle.
@@ -754,6 +1099,22 @@ fn ReviewStep(w: WizardState) -> impl IntoView {
                     } }
                 </li>
                 <li>
+                    <strong>{ WizardStep::Sensor.label() }</strong>
+                    { move || if let Some(bytes) = w.sensor_bytes.get() {
+                        format!(" — {} ({} bytes) → <Sensor> + sensor/sensldt <File>", w.sensor_filename.get(), bytes.len())
+                    } else {
+                        " — skipped".to_string()
+                    } }
+                </li>
+                <li>
+                    <strong>{ WizardStep::Emergency.label() }</strong>
+                    { move || if let Some(bytes) = w.emergency_bytes.get() {
+                        format!(" — {} ({} bytes) → second <Photometry> entry", w.emergency_filename.get(), bytes.len())
+                    } else {
+                        " — skipped".to_string()
+                    } }
+                </li>
+                <li>
                     <strong>{ WizardStep::LightSource.label() }</strong>
                     { format!(" — kind: {} · name: \"{}\" · manufacturer: \"{}\" · power: {}W",
                         w.ls_kind.get().short_label(),
@@ -776,6 +1137,17 @@ fn ReviewStep(w: WizardState) -> impl IntoView {
                         format!(" — {} ({} bytes) → ModelGeometryReference", w.geometry_filename.get(), bytes.len())
                     } else {
                         " — bare EmitterReference (no 3D model)".to_string()
+                    } }
+                </li>
+                <li>
+                    <strong>{ WizardStep::Mounting.label() }</strong>
+                    { move || {
+                        let mt = w.mounting_type.get();
+                        if mt.is_empty() {
+                            " — skipped".to_string()
+                        } else {
+                            format!(" — {}", mt)
+                        }
                     } }
                 </li>
                 <li>
@@ -834,6 +1206,15 @@ fn apply_all(state: crate::state::GldfContext, w: &WizardState) {
         driver_name: w.driver_name.get(),
         driver_dimmable: w.driver_dimmable.get(),
         driver_standby_power: w.driver_standby_power.get(),
+        mounting_type: w.mounting_type.get(),
+        mounting_recessed_depth_mm: w.mounting_recessed_depth_mm.get(),
+        mounting_pendant_length_mm: w.mounting_pendant_length_mm.get(),
+        mounting_height_mm: w.mounting_height_mm.get(),
+        mounting_pole_height_mm: w.mounting_pole_height_mm.get(),
+        sensor_bytes: w.sensor_bytes.get(),
+        sensor_filename: w.sensor_filename.get(),
+        emergency_bytes: w.emergency_bytes.get(),
+        emergency_filename: w.emergency_filename.get(),
     };
     state.update(|s| apply_wizard(s, &draft));
 }

@@ -5,6 +5,8 @@
 //! - `.ldt` / `.ies` → `LdtPanel` (goniometric diagram)
 //! - `.spd`           → `SpdPanel` (spectrum + colorimetry)
 //! - `.l3d`           → `L3dPanel` (three-d WebGL viewer)
+//! - `.tm33.xml` / IESTM33-22 / LuminaireOpticalData XML
+//!                    → `Tm33Panel` (photometry + SPD in one)
 //! - `.jpg` / `.png`  → `<img>` (base64 data-url)
 //! - everything else  → truncated UTF-8 text preview
 //!
@@ -12,8 +14,9 @@
 //! `<Photometry>` block references — so the file count and the
 //! Photometry-page count can be reconciled in one place.
 
-use crate::components::{L3dPanel, LdtPanel, SpdPanel};
+use crate::components::{L3dPanel, LdtPanel, SpdPanel, Tm33Panel};
 use crate::exports::download_embedded_file;
+use crate::i18n::ui::t as ui_t;
 use crate::state::use_gldf;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -22,6 +25,7 @@ use leptos::prelude::*;
 #[component]
 pub fn FileViewerPage() -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let selected = RwSignal::new(None::<String>);
 
     view! {
@@ -95,9 +99,9 @@ pub fn FileViewerPage() -> impl IntoView {
                         <table class="data-table files-table-clickable">
                             <thead>
                                 <tr>
-                                    <th>{ "ID" }</th>
-                                    <th>{ "File Name" }</th>
-                                    <th>{ "Content Type" }</th>
+                                    <th>{ tr("gldf.files.col_id") }</th>
+                                    <th>{ tr("gldf.files.col_file_name") }</th>
+                                    <th>{ tr("gldf.file_viewer.col_content_type") }</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -106,6 +110,7 @@ pub fn FileViewerPage() -> impl IntoView {
                                     let id_for_click = f.id.clone();
                                     let file_name = f.file_name.clone();
                                     let content_type = f.content_type.clone();
+                                    let ct_class = crate::components::pages::files_list::content_type_class(&content_type);
                                     let has_content = embedded.contains(&id);
                                     let is_selected = selected.with(|s| s.as_deref() == Some(&id));
                                     let row_class = match (has_content, is_selected) {
@@ -123,7 +128,9 @@ pub fn FileViewerPage() -> impl IntoView {
                                         <tr class=row_class on:click=on_click style=cursor>
                                             <td class="file-id">{ id }</td>
                                             <td class="file-name">{ file_name }</td>
-                                            <td>{ content_type }</td>
+                                            <td>
+                                                <span class=format!("content-type-badge {}", ct_class)>{ content_type }</span>
+                                            </td>
                                         </tr>
                                     }
                                 }).collect::<Vec<_>>()}
@@ -148,17 +155,16 @@ fn FilePreview(selected: RwSignal<Option<String>>) -> impl IntoView {
             };
             let lookup = state.with(|st| {
                 let bytes = st.embedded_files.get(&id).cloned()?;
-                let file_name = st
+                let f = st
                     .product
                     .general_definitions
                     .files
                     .file
                     .iter()
-                    .find(|f| f.id == id)
-                    .map(|f| f.file_name.clone())?;
-                Some((file_name, bytes))
+                    .find(|f| f.id == id)?;
+                Some((f.file_name.clone(), f.content_type.clone(), bytes))
             });
-            let Some((file_name, bytes)) = lookup else { return ().into_any() };
+            let Some((file_name, content_type, bytes)) = lookup else { return ().into_any() };
             let len = bytes.len();
             let close = move |_| selected.set(None);
             let download_id = id.clone();
@@ -190,7 +196,7 @@ fn FilePreview(selected: RwSignal<Option<String>>) -> impl IntoView {
                         </div>
                     </div>
                     <div style="padding: 16px;">
-                        { render_file_content(&file_name, &bytes) }
+                        { render_file_content(&file_name, &content_type, &bytes) }
                     </div>
                 </div>
             }.into_any()
@@ -198,14 +204,21 @@ fn FilePreview(selected: RwSignal<Option<String>>) -> impl IntoView {
     }
 }
 
-/// Pick the renderer by extension and feed it the embedded bytes. Each
-/// dedicated panel (LDT/IES, SPD, L3D) takes `Vec<u8>` so we clone the
-/// slice once at the boundary. Images go through a base64 data-url, the
-/// rest fall back to a truncated UTF-8 text preview.
-fn render_file_content(file_name: &str, content: &[u8]) -> impl IntoView {
+/// Pick the renderer by extension + GLDF content_type and feed it the
+/// embedded bytes. Each dedicated panel (LDT/IES, SPD, L3D, TM-33) takes
+/// `Vec<u8>` so we clone the slice once at the boundary. Images go
+/// through a base64 data-url, the rest fall back to a truncated UTF-8
+/// text preview.
+///
+/// TM-33 is checked before the generic `.xml` fallback because TM-33 is
+/// itself XML — without the explicit sniff it would render as plain
+/// text.
+fn render_file_content(file_name: &str, content_type: &str, content: &[u8]) -> impl IntoView {
     let lower = file_name.to_lowercase();
     if lower.ends_with(".l3d") {
         view! { <L3dPanel bytes=content.to_vec() /> }.into_any()
+    } else if crate::components::is_tm33(file_name, content_type, content) {
+        view! { <Tm33Panel bytes=content.to_vec() /> }.into_any()
     } else if lower.ends_with(".ldt") || lower.ends_with(".ies") {
         view! { <LdtPanel bytes=content.to_vec() /> }.into_any()
     } else if lower.ends_with(".spd") {
@@ -249,6 +262,8 @@ fn OrphanBanner(
         return ().into_any();
     }
     let total = orphan_photometries.len() + orphan_spectrums.len();
+    let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     view! {
         <details
             class="orphan-files-banner"
@@ -269,10 +284,13 @@ fn OrphanBanner(
             } else {
                 view! {
                     <div style="margin-top: 6px;">
-                        <div style="font-size: 12px; font-weight: 500;">{ "Photometry-typed files:" }</div>
+                        <div style="font-size: 12px; font-weight: 500;">{ tr("gldf.file_viewer.orphan_photometry_header") }</div>
                         <ul style="margin: 4px 0 0 0; padding-left: 18px; font-size: 12px;">
-                            {orphan_photometries.into_iter().map(|(id, content_type, file_name)| view! {
-                                <li><code>{ id }</code>{ " — " }<span style="color: var(--text-secondary);">{ content_type }</span>{ " — " }<span>{ file_name }</span></li>
+                            {orphan_photometries.into_iter().map(|(id, content_type, file_name)| {
+                                let ct_class = crate::components::pages::files_list::content_type_class(&content_type);
+                                view! {
+                                    <li><code>{ id }</code>{ " — " }<span class=format!("content-type-badge {}", ct_class)>{ content_type }</span>{ " — " }<span>{ file_name }</span></li>
+                                }
                             }).collect::<Vec<_>>()}
                         </ul>
                     </div>
@@ -283,10 +301,13 @@ fn OrphanBanner(
             } else {
                 view! {
                     <div style="margin-top: 6px;">
-                        <div style="font-size: 12px; font-weight: 500;">{ "Spectrum-typed files:" }</div>
+                        <div style="font-size: 12px; font-weight: 500;">{ tr("gldf.file_viewer.orphan_spectrum_header") }</div>
                         <ul style="margin: 4px 0 0 0; padding-left: 18px; font-size: 12px;">
-                            {orphan_spectrums.into_iter().map(|(id, content_type, file_name)| view! {
-                                <li><code>{ id }</code>{ " — " }<span style="color: var(--text-secondary);">{ content_type }</span>{ " — " }<span>{ file_name }</span></li>
+                            {orphan_spectrums.into_iter().map(|(id, content_type, file_name)| {
+                                let ct_class = crate::components::pages::files_list::content_type_class(&content_type);
+                                view! {
+                                    <li><code>{ id }</code>{ " — " }<span class=format!("content-type-badge {}", ct_class)>{ content_type }</span>{ " — " }<span>{ file_name }</span></li>
+                                }
                             }).collect::<Vec<_>>()}
                         </ul>
                     </div>

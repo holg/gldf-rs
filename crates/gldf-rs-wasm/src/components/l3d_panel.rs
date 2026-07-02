@@ -57,17 +57,25 @@ pub fn L3dPanel(
     let is_dragging = Rc::new(RefCell::new(false));
     let last_pos: Rc<RefCell<(f32, f32)>> = Rc::new(RefCell::new((0.0, 0.0)));
 
-    // Stagger renderer creation per-instance so multiple panels don't fight
-    // for GPU resources on first mount.
+    // First mount: stagger renderer creation per-instance so multiple
+    // panels don't fight for GPU resources on first mount.
+    //
+    // Subsequent updates to `bytes` (e.g. user edits a `HousingColor`
+    // → the L3D's synthesized MTL is rewritten with a new RAL colour →
+    // `embedded_files[file_id]` changes → this component re-renders
+    // with new bytes) reuse the existing `DrawL3d` and just call
+    // `set_model` again. That keeps the WebGL context, camera/orbit
+    // state, and render loop alive across edits — no flicker, no
+    // context-loss risk.
     {
         let canvas_ref = canvas_ref.clone();
-        let bytes = bytes.clone();
+        let bytes_first = bytes.clone();
         let renderer = renderer.clone();
         Effect::new(move |prev: Option<bool>| {
             if prev.is_some() {
                 return true;
             }
-            let bytes = bytes.clone();
+            let bytes = bytes_first.clone();
             let canvas_ref = canvas_ref.clone();
             let renderer = renderer.clone();
             spawn_local(async move {
@@ -98,6 +106,38 @@ pub fn L3dPanel(
                 }
             });
             true
+        });
+    }
+
+    // Hot-reload: every time `bytes` changes (new component prop value),
+    // re-parse the L3D and push the new model into the existing
+    // renderer. Skips the first run — the mount effect above handles
+    // that. If the renderer hasn't booted yet (slow mount), this no-ops
+    // and the mount effect will pick up the latest `bytes` when it runs.
+    {
+        let renderer = renderer.clone();
+        Effect::new(move |prev: Option<()>| {
+            // Read bytes so Leptos tracks the prop's identity for
+            // subsequent re-renders. Leptos passes props by value;
+            // when the parent updates `bytes`, this closure re-runs.
+            let new_bytes = bytes.clone();
+            if prev.is_none() {
+                return;
+            }
+            let Some(rc) = renderer.borrow().clone() else {
+                log::debug!(
+                    "[L3D-{}] hot-reload skipped: renderer not yet initialised",
+                    viewer_id
+                );
+                return;
+            };
+            let l3d = l3d_rs::from_buffer(&new_bytes);
+            if l3d.model.parts.is_empty() {
+                log::warn!("[L3D-{}] hot-reload: no model parts", viewer_id);
+                return;
+            }
+            rc.borrow_mut().set_model(&l3d);
+            log::info!("[L3D-{}] hot-reloaded after bytes change", viewer_id);
         });
     }
 

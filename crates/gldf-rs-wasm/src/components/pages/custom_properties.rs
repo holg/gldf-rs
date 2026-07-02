@@ -4,6 +4,7 @@
 //! ProductMetaData and per-Variant scope. Edit semantics aren't well-defined
 //! for vendor-opaque blobs; the Yew side stayed read-only and so do we.
 
+use crate::i18n::ui::t as ui_t;
 use crate::state::use_gldf;
 use gldf_rs::gldf::product_definitions::Property;
 use leptos::prelude::*;
@@ -12,10 +13,14 @@ use leptos::prelude::*;
 pub fn CustomPropertiesPage() -> impl IntoView {
     let state = use_gldf();
 
+    let title_signal = move || ui_t("gldf.custom_properties.title", &state.with(|s| s.ui_language.clone()));
+
     view! {
         <div class="editor-section custom-properties-editor">
-            <h2>{ "Custom Properties" }</h2>
+            <h2>{ title_signal }</h2>
             {move || state.with(|s| {
+                let lang = s.ui_language.clone();
+                let tr = |key: &str| ui_t(key, &lang);
                 let meta_props: Vec<Property> = s
                     .product
                     .product_definitions
@@ -37,30 +42,38 @@ pub fn CustomPropertiesPage() -> impl IntoView {
                     .unwrap_or_default();
                 let total = meta_props.len() + variant_groups.iter().map(|(_, p)| p.len()).sum::<usize>();
 
+                let product_level_label = tr("gldf.custom_properties.product_level_fmt");
+                let variant_label = tr("gldf.custom_properties.variant_fmt");
                 view! {
                     <p class="section-description">
-                        { format!("Vendor-specific Property entries (read-only, {} total). Per the GLDF spec these carry data the schema cannot represent natively.", total) }
+                        { tr("gldf.custom_properties.description").replace("{n}", &total.to_string()) }
                     </p>
 
                     {if !meta_props.is_empty() {
+                        let header = product_level_label.replace("{n}", &meta_props.len().to_string());
                         view! {
-                            <h3>{ format!("Product-level ({})", meta_props.len()) }</h3>
+                            <h3>{ header }</h3>
                             { render_property_list(meta_props) }
                         }.into_any()
                     } else { ().into_any() }}
 
                     {variant_groups.into_iter().map(|(vid, props)| {
                         let count = props.len();
+                        let header = variant_label
+                            .clone()
+                            .replace("{vid}", &vid)
+                            .replace("{n}", &count.to_string());
                         view! {
                             <>
-                                <h3>{ format!("Variant: {} ({})", vid, count) }</h3>
+                                <h3>{ header }</h3>
                                 { render_property_list(props) }
                             </>
                         }
                     }).collect::<Vec<_>>()}
 
                     {if total == 0 {
-                        view! { <p class="empty-message">{ "No custom properties in this file." }</p> }.into_any()
+                        let msg = tr("gldf.custom_properties.empty");
+                        view! { <p class="empty-message">{ msg }</p> }.into_any()
                     } else { ().into_any() }}
                 }
             })}

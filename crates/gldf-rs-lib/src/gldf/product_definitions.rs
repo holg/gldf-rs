@@ -116,11 +116,15 @@ pub struct LuminaireMaintenance {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProductMetaData {
     /// The unique product identifier (required in rc.3, must come before ProductNumber).
-    #[serde(
-        rename = "UniqueProductId",
-        default,
-        skip_serializing_if = "String::is_empty"
-    )]
+    ///
+    /// Always serialised, even when empty. The rc.3 XSD declares this element
+    /// without `minOccurs="0"`, so a missing `<UniqueProductId>` element makes
+    /// the document XSD-invalid — DIALux rejects it as "invalid XML file" with
+    /// no luminaire imported. The XSD's type is bare `xs:string` (no minLength
+    /// facet), so an empty element is technically valid and preserves the
+    /// editor's prior round-trip behaviour for documents that genuinely omit
+    /// the ID. The banner layer surfaces empty-string as a warning.
+    #[serde(rename = "UniqueProductId", default)]
     pub unique_product_id: String,
 
     /// The product number, if available.
@@ -160,6 +164,98 @@ pub struct ProductMetaData {
         skip_serializing_if = "Option::is_none"
     )]
     pub descriptive_attributes: Option<DescriptiveAttributes>,
+}
+
+impl ProductMetaData {
+    /// Populate the XSD-required fields that the editor / wizard leaves
+    /// empty by default:
+    ///   * `UniqueProductId` (`minOccurs=1`, must be the first child)
+    ///   * `ProductNumber` (`minOccurs=1`, no `minOccurs=0` in rc-3)
+    ///
+    /// Mirrors `Header::ensure_xsd_required`. Called once at wizard
+    /// time, not on every serialize, so the lib's round-trip stability
+    /// is preserved.
+    pub fn ensure_xsd_required(&mut self) {
+        if self.unique_product_id.trim().is_empty() {
+            self.unique_product_id = crate::gldf::header::make_uuid_v4_public();
+        }
+        if self.product_number.is_none() {
+            // Empty placeholder — the wizard fills the *real* ProductNumber
+            // later via the Marketing / Variants pages. We just need *some*
+            // Locale entry so the XSD's `minOccurs=1` is satisfied.
+            self.product_number = Some(crate::gldf::LocaleFoo {
+                locale: vec![crate::gldf::header::Locale {
+                    language: "en".to_string(),
+                    value: String::new(),
+                }],
+            });
+        }
+        if self.name.is_none() {
+            // Same as ProductNumber — rc-3 says `minOccurs=1`.
+            self.name = Some(crate::gldf::LocaleFoo {
+                locale: vec![crate::gldf::header::Locale {
+                    language: "en".to_string(),
+                    value: String::new(),
+                }],
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod pendant_serialisation {
+    use super::Pendant;
+
+    /// `pendantLength` is an XSD attribute (`@pendantLength`), NOT a
+    /// child element. The previous serde rename without `@` emitted
+    /// `<Pendant><pendantLength>500</pendantLength></Pendant>`, which
+    /// fails XSD validation — DIALux silently rejects the import.
+    #[test]
+    fn pendant_length_serialises_as_attribute() {
+        let p = Pendant { pendant_length: 500 };
+        let xml = quick_xml::se::to_string_with_root("Pendant", &p)
+            .expect("serialise");
+        assert!(
+            xml.contains(r#"pendantLength="500""#),
+            "expected attribute form, got: {xml}"
+        );
+        assert!(
+            !xml.contains("<pendantLength>"),
+            "must NOT emit child element, got: {xml}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod unique_product_id_serialisation {
+    use super::ProductMetaData;
+
+    /// DIALux's strict importer rejects documents whose
+    /// `<ProductMetaData>` lacks `<UniqueProductId>`. The XSD declares
+    /// the element without `minOccurs="0"`, so it MUST appear — even
+    /// when empty — or the whole GLDF is "invalid XML file".
+    ///
+    /// This guards against re-introducing `skip_serializing_if =
+    /// "String::is_empty"` on the field.
+    #[test]
+    fn empty_unique_product_id_still_serialises() {
+        let meta = ProductMetaData::default();
+        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta)
+            .expect("serialise");
+        assert!(
+            xml.contains("<UniqueProductId"),
+            "<UniqueProductId> must appear even when empty; got: {xml}"
+        );
+    }
+
+    #[test]
+    fn non_empty_unique_product_id_serialises() {
+        let mut meta = ProductMetaData::default();
+        meta.unique_product_id = "6a8e39a7-6ed6-4d49-affe-1cf7764a75df".to_string();
+        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta)
+            .expect("serialise");
+        assert!(xml.contains("6a8e39a7-6ed6-4d49-affe-1cf7764a75df"));
+    }
 }
 
 /// Represents a rectangular cutout.
@@ -232,11 +328,16 @@ pub struct Recessed {
 pub struct SurfaceMounted {}
 
 /// The `Pendant` struct describes pendant-related properties.
+///
+/// XSD shape: `<Pendant pendantLength="500"/>`. `pendantLength` is an
+/// **attribute** (`xs:int`, ≥ 0, `use="required"`), not a child element.
+/// The earlier serde mapping emitted `<Pendant><pendantLength>500</pendantLength></Pendant>`
+/// which is XSD-invalid — DIALux silently refuses the whole import.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pendant {
-    /// The length of the pendant.
-    #[serde(rename = "pendantLength", default)]
-    pub pendant_length: f64,
+    /// The length of the pendant in millimetres. Mirrors `Recessed.recessed_depth`.
+    #[serde(rename = "@pendantLength", default)]
+    pub pendant_length: i32,
 }
 
 /// Represents a luminaire with ceiling mount.
@@ -648,7 +749,7 @@ pub struct Flux {
     #[serde(rename = "@hours")]
     pub hours: i32,
     /// The value of the flux
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub value: i32,
 }
 
@@ -684,7 +785,7 @@ pub struct ListPrice {
     #[serde(rename = "@currency", skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
     /// The value of the list price
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub value: f64,
 }
 
@@ -697,14 +798,68 @@ pub struct ListPrices {
 }
 
 /// HousingColor
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// The rc-3 XSD extends the **complex** `Locale` type, which holds
+/// `<Locale language="…">text</Locale>` CHILDREN. We serialize that
+/// shape, but ALSO accept the legacy in-the-wild shape with
+/// `language=…` attribute + text content directly on `<HousingColor>`
+/// (which is what every gldf-rs version before this XSD-conformance
+/// pass produced).
+#[derive(Default, Debug, Clone, PartialEq, Serialize)]
 pub struct HousingColor {
     /// The ral of the housing color
     #[serde(rename = "@ral", skip_serializing_if = "Option::is_none")]
     pub ral: Option<i32>,
-    /// The locale of the housing color
+    /// The locales of the housing color name (one per language).
     #[serde(flatten)]
-    pub locale: Locale,
+    pub locale: LocaleFoo,
+}
+
+impl<'de> serde::Deserialize<'de> for HousingColor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        // Tries to fit either shape:
+        //   (A) <HousingColor ral="..."><Locale language="en">X</Locale>...</HousingColor>
+        //   (B) <HousingColor ral="..." language="en">X</HousingColor>
+        //
+        // (B) was written by every pre-XSD-fix gldf-rs. Without this
+        // fall-back, `full_demo.gldf` and any user-saved snapshot from
+        // before this commit fails to parse.
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(rename = "@ral", default)]
+            ral: Option<i32>,
+            // Shape (A): child <Locale> entries.
+            #[serde(rename = "Locale", default)]
+            locale: Vec<crate::gldf::header::Locale>,
+            // Shape (B): flattened attribute + text.
+            #[serde(rename = "@language", default)]
+            language: Option<String>,
+            #[serde(rename = "$text", default)]
+            value: Option<String>,
+        }
+
+        let raw = Raw::deserialize(deserializer).map_err(D::Error::custom)?;
+        let mut locales = raw.locale;
+        if locales.is_empty() {
+            // Fall back to shape (B). Only emit a Locale entry when
+            // there's actually something useful (language or text).
+            if raw.language.is_some() || raw.value.is_some() {
+                locales.push(crate::gldf::header::Locale {
+                    language: raw.language.unwrap_or_default(),
+                    value: raw.value.unwrap_or_default(),
+                });
+            }
+        }
+        Ok(HousingColor {
+            ral: raw.ral,
+            locale: LocaleFoo { locale: locales },
+        })
+    }
 }
 
 /// HousingColors
@@ -716,11 +871,16 @@ pub struct HousingColors {
 }
 
 /// Markets
+///
+/// rc-3 XSD: each `<Region>` has `type="Locale"` (the complex type with
+/// `<Locale>` children), not the simple-Locale shape. Modelling each
+/// region as a `LocaleFoo` matches the XSD; the editor still exposes
+/// one row per region.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Markets {
-    /// The list of market regions
+    /// The list of market regions; each region is a multi-locale name.
     #[serde(rename = "Region", default)]
-    pub region: Vec<Locale>,
+    pub region: Vec<LocaleFoo>,
 }
 
 /// ApprovalMarks
@@ -987,7 +1147,7 @@ pub struct AbsorptionRate {
     #[serde(rename = "@hertz")]
     pub hertz: i32,
     /// The corresponding value of the absorption rate.
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub value: f64,
 }
 

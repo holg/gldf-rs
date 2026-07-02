@@ -14,8 +14,10 @@ pub struct L3dLoaderPlugin;
 
 impl Plugin for L3dLoaderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_l3d_model)
-            .add_systems(Update, update_l3d_model);
+        app.init_resource::<ShowLightCones>()
+            .add_systems(Startup, setup_l3d_model)
+            .add_systems(Update, update_l3d_model)
+            .add_systems(Update, apply_light_cone_visibility);
     }
 }
 
@@ -27,6 +29,85 @@ pub struct L3dModel;
 #[derive(Component)]
 pub struct L3dLight;
 
+/// Component to mark the translucent "light cone" debug visualisation
+/// spawned alongside each spotlight. Toggleable at runtime via the
+/// `K` keybind (see `ui_controls_system`) and the `ShowLightCones`
+/// resource — the cones are debug aids for the `(LUMINAIRE-TILT …)`
+/// Lisp primitive, NOT a realistic render of the light beam, so they
+/// default to OFF. With them on a fully-emissive 60 cm cone hangs
+/// below each LEO and dominates an otherwise-dark scene.
+#[derive(Component)]
+pub struct L3dLightCone;
+
+/// Runtime flag that drives `apply_light_cone_visibility`. Default
+/// `false` so a clean load shows physically realistic spotlight
+/// illumination (lit floor, dark cup interior) instead of the debug
+/// cones. Toggled by pressing `K`.
+#[derive(Resource, Default, Debug)]
+pub struct ShowLightCones(pub bool);
+
+/// Bevy system: drive each `L3dLightCone` entity's `Visibility` from
+/// the `ShowLightCones` resource. Wired in `L3dLoaderPlugin::build`.
+/// Runs every frame — cheap (just iterates the cone tag) and means
+/// the K-key toggle is reflected on the next render without explicit
+/// change tracking.
+pub fn apply_light_cone_visibility(
+    show: Res<ShowLightCones>,
+    mut q: Query<&mut Visibility, With<L3dLightCone>>,
+) {
+    let target = if show.0 {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut v in q.iter_mut() {
+        if *v != target {
+            *v = target;
+        }
+    }
+}
+
+/// Joint-name tag attached to every entity spawned for one
+/// `LightEmitter` (the SpotLight, PointLight, and emissive disc all
+/// share the same joint name). Lets the `(LUMINAIRE-TILT …)` Lisp
+/// primitive locate "all the bits of LEO0" by partName.
+///
+/// The strings are L3D partNames, e.g. `"LEO0"`, `"LEO1"`, `"Sensor"`.
+/// The Lisp engine prefixes those with `"l3d://"` when addressing them
+/// from a script — we store just the bare names here so this crate
+/// doesn't grow a URI-parsing dep.
+///
+/// Stored as `Vec<String>` (not `String`) because one head OBJ can hold
+/// multiple LEOs — e.g. an articulated luminaire whose single `<geometry
+/// partName="head-0">` contains both `LEO0` and `LEO1`. A tilt request
+/// for either name needs to swing the same head mesh. The apply system
+/// at `js_joint_bridge_apply` (`lib.rs:761`) iterates this list and
+/// applies the first matching tilt — "first-LEO-wins" on conflicting
+/// concurrent tilts (acceptable: two coincident LEOs sharing a head
+/// almost always move together in practice).
+#[derive(Component, Clone, Debug)]
+pub struct LightEmitterJoint(pub Vec<String>);
+
+/// Per-emitter tilt baked into the entity's `Transform` by the
+/// `js_joint_bridge_apply` system. We keep the **base** (post-LEO-walk,
+/// pre-script) rotation here so re-applying a different tilt doesn't
+/// compound: the apply system re-derives `transform.rotation = base *
+/// requested-tilt` each frame.
+#[derive(Component, Clone, Debug)]
+pub struct LightEmitterBaseRotation(pub Quat);
+
+/// Pivot point (= LEO world position) AND the entity's *base* translation
+/// — both stored so the apply system can orbit the entity around the
+/// LEO instead of rotating in place. Without this, the cone rotates
+/// around its own centre and barely moves; with it, the cone (offset
+/// half-length away from the LEO at spawn) swings about the LEO like a
+/// real gimbal.
+#[derive(Component, Clone, Debug)]
+pub struct LightEmitterPivot {
+    pub pivot: Vec3,
+    pub base_translation: Vec3,
+}
+
 /// Extracted light emitting object info with accumulated world transform
 struct LightEmitter {
     /// World position (accumulated from parent joints)
@@ -37,6 +118,12 @@ struct LightEmitter {
     size: (f32, f32),
     /// Name for debugging
     name: String,
+    /// L3D `partName` of the `<Geometry>` node that directly contains this
+    /// LEO/Sensor in the structure tree. Used to match the LEO against
+    /// the head OBJ that physically houses it: any spawned mesh whose
+    /// owning `<Geometry>` shares this `part_name` gets the LEO's
+    /// `LightEmitterJoint` tag so it tilts together with the LEO.
+    parent_geometry_partname: String,
 }
 
 /// Simple OBJ parser result
@@ -324,9 +411,9 @@ fn spawn_l3d_model(
     // Rotation matrix: L3D uses Z-up, Bevy uses Y-up
     let z_to_y_rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
 
-    // For ceiling-mounted fixtures, flip 180° around X-axis so they point downward
-    // This is applied after coordinate conversion
-    let ceiling_flip = Quat::from_rotation_x(std::f32::consts::PI);
+    // (No `ceiling_flip` — the single `z_to_y_rotation = Rot_X(-90°)`
+    // already lands L3D's mount-plate at Bevy's +Y. l3d-egui (canonical
+    // Rust L3D viewer) does the same with no extra rotation.)
 
     // Position luminaire based on scene type and mounting configuration
     let is_room = matches!(settings.scene_type, eulumdat_bevy::SceneType::Room);
@@ -396,13 +483,27 @@ fn spawn_l3d_model(
 
     // Parse the structure XML to get light emitting objects
     let mut light_emitters: Vec<LightEmitter> = Vec::new();
+    // Same length and ordering as `l3d.model.parts`. Each entry is the
+    // L3D `<Geometry partName>` whose `<GeometryReference>` produced the
+    // matching `l3d.model.parts[i].path`. Lets the part-load loop look
+    // up which structure-tree node owns each spawned mesh, so it can
+    // tag the head OBJ with the LEOs that live inside it. Empty if the
+    // structure XML failed to parse (we fall back to leaving meshes
+    // untagged, just like before).
+    let mut part_geom_partnames: Vec<String> = Vec::new();
     if let Ok(luminaire) = l3d_rs::Luminaire::from_xml(&l3d.file.structure) {
         // Start with identity matrix
         let identity = Mat4::IDENTITY;
         extract_light_emitters(&luminaire.structure.geometry, &mut light_emitters, identity);
+        collect_part_geom_partnames(&luminaire.structure.geometry, &mut part_geom_partnames);
         log(&format!(
             "[L3D] Found {} light emitting objects",
             light_emitters.len()
+        ));
+        log(&format!(
+            "[L3D] Collected {} geometry partNames in part order (vs {} parts in model)",
+            part_geom_partnames.len(),
+            l3d.model.parts.len()
         ));
     } else {
         log("[L3D] Failed to parse structure XML for light emitting objects");
@@ -410,7 +511,7 @@ fn spawn_l3d_model(
 
     // Load each part
     let mut loaded_count = 0;
-    for part in &l3d.model.parts {
+    for (part_idx, part) in l3d.model.parts.iter().enumerate() {
         // Find the OBJ asset
         let Some(asset) = l3d.file.assets.iter().find(|a| a.name == part.path) else {
             log(&format!("[L3D] Part asset not found: {}", part.path));
@@ -453,34 +554,104 @@ fn spawn_l3d_model(
         // Extract translation, rotation, scale
         let (scale, rotation, translation) = part_mat.to_scale_rotation_translation();
 
-        // Apply Z-to-Y rotation (coordinate system conversion)
-        // For ceiling mounts, also flip 180° so luminaire points downward
-        let base_rotation = z_to_y_rotation * rotation;
-        let final_rotation = if is_ceiling {
-            ceiling_flip * base_rotation
-        } else {
-            base_rotation
-        };
+        // Apply ONLY the Z-up → Y-up coordinate conversion. This
+        // mirrors `l3d-egui` (the canonical Rust L3D viewer), whose
+        // load path is literally `mat = Rot_X(-90°) * part_mat`
+        // (`crates/l3d-egui/src/viewer.rs:882-910`). No `ceiling_flip`,
+        // no `is_ceiling` branch, no axis negation.
+        //
+        // Why: L3D archives store geometry **Z-up** with the
+        // mount-plate at +Z. A single `Rot_X(-90°)` maps +Z onto Bevy's
+        // +Y, so the mount-plate naturally lands at the top and the
+        // housing renders the right way up for a ceiling fixture.
+        // The historical extra `ceiling_flip = Rot_X(180°)` we used to
+        // multiply on top double-rotated the housing — gimbal cups
+        // pointing UP — which is why the user saw upside-down luminaires.
+        // See `feedback_use_typed_apis` / `reference_light_other_rs_helpers`
+        // memory for the cross-reference work that confirmed this.
+        let final_rotation = z_to_y_rotation * rotation;
+        let final_translation = z_to_y_rotation * translation;
 
-        // Transform translation to Bevy coords, then flip for ceiling if needed
-        let base_translation = z_to_y_rotation * translation;
-        let final_translation = if is_ceiling {
-            // When flipping, negate Y to keep parts together
-            Vec3::new(base_translation.x, -base_translation.y, -base_translation.z)
+        // Tag this part with a `LightEmitterJoint` carrying every LEO
+        // that lives in the same L3D `<Geometry>` node. This is what
+        // makes the gimbal head OBJ rotate when the Lisp
+        // `LUMINAIRE-TILT` primitive fires — without this tag, the
+        // SpotLight + cone swing but the physical head stays welded to
+        // the housing, breaking the illusion.
+        //
+        // Matching is **structural**, not by file path. We look up the
+        // L3D `<Geometry partName>` that owns this OBJ instance via
+        // `part_geom_partnames` (populated in walker order to match
+        // `l3d.model.parts`), then collect every LEO whose
+        // `parent_geometry_partname` equals it.
+        //
+        // Why not substring-match `part.path`? Because real L3D files
+        // name their OBJs generically (e.g. `geom_3/head.obj`) — the
+        // LEO partName lives in the structure XML, not the asset path.
+        // The old substring rule silently failed on every Tria-2-style
+        // file: `head.obj` contains no `"LEO0"` substring, so the head
+        // mesh stayed untagged and only the lit cone tilted.
+        //
+        // Skip "Sensor" matches: a SensorObject mounts the emergency
+        // LED, not a gimbal; tilting the housing geometry for "Sensor"
+        // would yank the wrong piece. SensorObjects also don't have
+        // their own visible meshes typically — the sensor is part of
+        // the housing.
+        let owning_geom = part_geom_partnames.get(part_idx);
+        let matched_leos: Vec<&LightEmitter> = owning_geom
+            .map(|g| {
+                light_emitters
+                    .iter()
+                    .filter(|e| {
+                        !e.name.eq_ignore_ascii_case("Sensor")
+                            && e.parent_geometry_partname.eq_ignore_ascii_case(g)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let world_translation = final_translation + mounting_offset;
+        if let Some(first_leo) = matched_leos.first() {
+            // Pivot = the first LEO's world position. Multiple LEOs
+            // sharing one head all swing about the same pivot — the
+            // head's centre — so picking any LEO's position works in
+            // practice (they cluster). Matches what
+            // `spawn_lights_from_emitters` uses for the SpotLight, so
+            // mesh + light swing about the same point.
+            //
+            // L3D positions are in meters (per spec + l3d_rs convention);
+            // no `/ 1000.0` scale — see comment in spawn_lights_from_emitters.
+            let leo_local_pos = z_to_y_rotation * first_leo.world_position;
+            let leo_world_pos = leo_local_pos + mounting_offset;
+            let leo_names: Vec<String> =
+                matched_leos.iter().map(|e| e.name.clone()).collect();
+            commands.spawn((
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(luminaire_material.clone()),
+                Transform {
+                    translation: world_translation,
+                    rotation: final_rotation,
+                    scale,
+                },
+                L3dModel,
+                LightEmitterJoint(leo_names),
+                LightEmitterBaseRotation(final_rotation),
+                LightEmitterPivot {
+                    pivot: leo_world_pos,
+                    base_translation: world_translation,
+                },
+            ));
         } else {
-            base_translation
-        };
-
-        commands.spawn((
-            Mesh3d(mesh_handle),
-            MeshMaterial3d(luminaire_material.clone()),
-            Transform {
-                translation: final_translation + mounting_offset,
-                rotation: final_rotation,
-                scale,
-            },
-            L3dModel,
-        ));
+            commands.spawn((
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(luminaire_material.clone()),
+                Transform {
+                    translation: world_translation,
+                    rotation: final_rotation,
+                    scale,
+                },
+                L3dModel,
+            ));
+        }
         loaded_count += 1;
     }
 
@@ -503,6 +674,27 @@ fn spawn_l3d_model(
 /// Convert l3d_rs Mat4 ([f32; 16] column-major) to Bevy Mat4
 fn l3d_mat_to_bevy(m: &l3d_rs::Mat4) -> Mat4 {
     Mat4::from_cols_array(m)
+}
+
+/// Walk the L3D structure tree and push each `<Geometry partName>` into
+/// `out` in **the same order** that `l3d_rs::parse_geometry` populates
+/// `L3dModel.parts`. Mirrors the upstream walker at
+/// `../l3d-rs/crates/l3d_rs/src/lib.rs:484-514`: recurse into joints'
+/// child geometries first (post-order), then push this node's partName.
+///
+/// Result: `out[i]` is the L3D `<Geometry partName>` whose
+/// `<GeometryReference>` produced `l3d.model.parts[i].path`. The
+/// part-load loop reads `out[i]` to learn which structure node owns
+/// the i-th spawned mesh.
+fn collect_part_geom_partnames(geometry: &l3d_rs::Geometry, out: &mut Vec<String>) {
+    if let Some(j) = &geometry.joints {
+        for joint in &j.joint {
+            for child_geom in &joint.geometries.geometry {
+                collect_part_geom_partnames(child_geom, out);
+            }
+        }
+    }
+    out.push(geometry.part_name.clone());
 }
 
 /// Recursively extract light emitting objects from L3D geometry using matrix transforms
@@ -590,6 +782,7 @@ fn extract_light_emitters(
                 world_rotation: world_rot,
                 size,
                 name: obj.part_name().to_string(),
+                parent_geometry_partname: geometry.part_name.clone(),
             });
         }
     }
@@ -652,6 +845,7 @@ fn extract_light_emitters(
                 world_rotation: world_rot,
                 size,
                 name: obj.part_name().to_string(),
+                parent_geometry_partname: geometry.part_name.clone(),
             });
         }
     }
@@ -694,7 +888,12 @@ fn spawn_lights_from_emitters(
     emitters: &[LightEmitter],
     mounting_offset: &Vec3,
     z_to_y_rotation: &Quat,
-    is_ceiling: bool,
+    // `is_ceiling` used to gate a `bevy_dir = -|y|` force-down; now the
+    // orientation module returns the spec-correct direction directly,
+    // so the flag is unused inside this fn. Kept in the signature so
+    // future per-scene-type tweaks (e.g. floor uplights) have a hook
+    // without an API churn.
+    _is_ceiling: bool,
     settings: &SceneSettings,
     emitter_configs: &[EmitterConfig],
 ) {
@@ -757,6 +956,22 @@ fn spawn_lights_from_emitters(
             config.is_some()
         ));
 
+        // Skip Sensor emitters when the active variant doesn't bind them.
+        // A SensorObject is a partName-anchor for an OPTIONAL emergency
+        // LED — only the dedicated emergency variant binds it. Without
+        // this skip, every non-emergency variant gets a free 1/N share
+        // of the default flux at the Sensor position, showing up as a
+        // dim dot in the middle of the luminaire. That's physically
+        // wrong: the sensor mount is dark unless the variant routes a
+        // light through it.
+        if config.is_none() && emitter.name.eq_ignore_ascii_case("Sensor") {
+            log(&format!(
+                "[L3D] Skipping unbound Sensor emitter '{}' — no config in this variant",
+                emitter.name
+            ));
+            continue;
+        }
+
         // Use per-emitter flux if available, otherwise distribute default flux
         let flux = config
             .and_then(|c| c.luminous_flux)
@@ -784,33 +999,29 @@ fn spawn_lights_from_emitters(
         // Scale intensity to Bevy candela — cap to avoid WebGL issues
         let intensity = (final_flux * 50.0).min(2_000_000.0);
 
-        // Transform position from L3D (Z-up, millimeters) to Bevy (Y-up, meters)
-        let local_pos = *z_to_y_rotation * (emitter.world_position / 1000.0);
+        // Transform position from L3D (Z-up, meters) to Bevy (Y-up,
+        // meters). Per the L3D spec — and confirmed by l3d_rs's
+        // `fbx.rs` ("L3D coordinates are in meters after unit
+        // scaling") — structure positions are already in meters; the
+        // earlier `/ 1000.0` shrank them 1000× and made multi-emitter
+        // luminaires (SLV Tria 2 etc.) converge to a single sub-mm
+        // point at the origin, looking like one tiny dot.
+        let local_pos = *z_to_y_rotation * emitter.world_position;
         let world_pos = local_pos + *mounting_offset;
 
         // Light range: must reach the ground from mounting height, plus some margin
         let light_range = (mounting_offset.y * 3.0).max(30.0);
 
-        // In L3D, the default light direction is -Z (downward in Z-up system)
-        let rot_x = emitter.world_rotation.x.to_radians();
-        let rot_y = emitter.world_rotation.y.to_radians();
-        let rot_z = emitter.world_rotation.z.to_radians();
-
-        // Build rotation: first the emitter's own rotation, then convert coordinate system
-        let emitter_rot = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
-
-        // Default direction in L3D is -Z (pointing down in Z-up)
-        let default_dir = Vec3::NEG_Z;
-        // Apply emitter rotation to get light direction in L3D space
-        let l3d_dir = emitter_rot * default_dir;
-        // Convert to Bevy coordinate system (Z-up to Y-up): -Z becomes -Y (down)
-        let bevy_dir = if is_ceiling {
-            // For ceiling mount, flip the direction (negate Y component)
-            let transformed = *z_to_y_rotation * l3d_dir;
-            Vec3::new(transformed.x, -transformed.y.abs(), transformed.z)
-        } else {
-            *z_to_y_rotation * l3d_dir
-        };
+        // Compute Bevy-space emission direction via the orientation
+        // module — single source of truth, tested in
+        // `crates/gldf-bevy/src/orientation.rs`. For a zero-rotation
+        // L3D emitter this produces `(0, -1, 0)`: straight down.
+        //
+        // No `is_ceiling` clamp on the Y component: if a LEO is
+        // mis-authored to point UP, we render it pointing UP. That's
+        // a data bug in the L3D, not something a viewer should silently
+        // mask — the user should see the error and fix the file.
+        let bevy_dir = crate::orientation::l3d_emitter_bevy_direction(emitter.world_rotation);
 
         // Calculate a target point for the spotlight to look at
         let target = world_pos + bevy_dir * 10.0;
@@ -824,6 +1035,13 @@ fn spawn_lights_from_emitters(
             bevy_dir.x, bevy_dir.y, bevy_dir.z,
             light_range));
 
+        // Build the SpotLight base transform once, capture its rotation
+        // so the `(LUMINAIRE-TILT …)` Lisp primitive can re-apply the
+        // base+tilt cleanly on every script invocation (otherwise tilts
+        // would compound across calls).
+        let spot_transform = Transform::from_translation(world_pos).looking_at(target, Vec3::X);
+        let spot_base_rot = spot_transform.rotation;
+
         // Use SpotLight for main directional lighting (pointing down)
         commands.spawn((
             SpotLight {
@@ -836,48 +1054,301 @@ fn spawn_lights_from_emitters(
                 shadow_maps_enabled: false,
                 ..default()
             },
-            Transform::from_translation(world_pos).looking_at(target, Vec3::X),
+            spot_transform,
             L3dLight,
+            LightEmitterJoint(vec![emitter.name.clone()]),
+            LightEmitterBaseRotation(spot_base_rot),
+            // SpotLight pivots in place — translation === pivot ===
+            // base_translation. Orbit math is a no-op here, but we
+            // attach the component so a single apply-system query
+            // can rotate everything together.
+            LightEmitterPivot {
+                pivot: world_pos,
+                base_translation: world_pos,
+            },
         ));
 
-        // Add PointLight for ambient fill (illuminates the luminaire body too)
+        // Translucent visible "light cone" so the user can actually SEE
+        // the spotlight's direction (and watch it swing when the Lisp
+        // tilt primitive fires). Without this the SpotLight is invisible
+        // — only the ground/objects it hits show its presence, and on a
+        // mostly-empty stage that's not enough.
+        //
+        // PIVOT-AROUND-APEX geometry:
+        //   parent entity (the "joint")
+        //     translation = world_pos (= LEO position, = cone apex)
+        //     rotation    = base_rot (maps +Y down the light dir)
+        //     LightEmitterJoint + LightEmitterBaseRotation tags here
+        //   `-- child entity (the actual cone mesh)
+        //         local translation = (0, -cone_len/2, 0)
+        //                            ⇒ in parent's local +Y is the
+        //                              apex direction, so -Y/2 puts
+        //                              the cone's CENTRE half a height
+        //                              behind the apex — apex sits at
+        //                              parent's origin = world_pos
+        //
+        // When `js_joint_bridge_apply` rotates the parent by
+        // `base * tilt`, the cone child orbits around `world_pos`
+        // (the LEO position), not around the cone's middle. The apex
+        // stays anchored at the LEO position — exactly what a real
+        // gimballed spotlight does.
+        // Build the visible cone. Made BIG and BRIGHT for the demo so
+        // the tilt animation reads unambiguously: 1 m long, narrow
+        // base (~25cm radius for a ~30° half-angle), high emissive so
+        // it's visible even with the canvas dark. Slight alpha blend
+        // so you can still see through it to the housing behind.
+        // Skip the cone for SensorObject / emergency-only emitters —
+        // those are sensors / emergency LEDs, not directional spots,
+        // so a visible cone is misleading (and ugly). Detected via:
+        //   - partName "Sensor" (case-insensitive) — covers the
+        //     SensorObject mount in stock SLV / multi-emitter L3Ds.
+        //   - emergency_behavior == "EmergencyOnly" on the config.
+        // Both checks because not every emergency-only emitter is a
+        // SensorObject, and not every SensorObject is wired emergency.
+        let is_sensor_or_emergency = emitter.name.eq_ignore_ascii_case("Sensor")
+            || is_emergency_only;
+        if is_sensor_or_emergency {
+            // Skip cone spawn for this emitter; the SpotLight + glow
+            // disc spawned above already represent the emergency LED.
+            // The remaining PointLight + glow-disc spawn calls below
+            // continue, since they're correct for sensors too.
+            //
+            // (The early-`continue` would skip those, hence the if/else
+            //  rather than a continue.)
+        } else {
+        // Translucent visible spotlight cone — readable without
+        // dominating the scene. 60 cm long, modest 18 cm base radius
+        // (~17° half-angle), low-alpha emissive in the LEO's CCT
+        // color. Visible against both light and dark backgrounds.
+        let cone_len = 0.60_f32;
+        let cone_base_radius = 0.18_f32;
+        let cone_mesh = meshes.add(Cone::new(cone_base_radius, cone_len));
+        let cone_color = color;
+        let cone_linear = cone_color.to_linear();
+        let cone_material = materials.add(StandardMaterial {
+            // Demo-tuned (post task #197 rebalance): the previous
+            // alpha=0.25 + 3× emissive boost over-bloomed in
+            // recordings — readable but dominating. alpha=0.15 +
+            // 1.2× emissive keeps the cone visible against both
+            // light and dark backgrounds without halo'ing the
+            // luminaire.
+            base_color: cone_color.with_alpha(0.15),
+            emissive: LinearRgba::new(
+                cone_linear.red * 1.2,
+                cone_linear.green * 1.2,
+                cone_linear.blue * 1.2,
+                1.0,
+            ),
+            alpha_mode: AlphaMode::Blend,
+            // Default backface culling so the inside (apex-facing) of
+            // the cone doesn't emit into the ceiling cavity. Removing
+            // `cull_mode: None` + `double_sided: true` was the
+            // remaining upward leak — both sides previously glowed.
+            unlit: true,
+            ..default()
+        });
+        // The parent is a pure pivot (identity rotation, position at
+        // LEO). The cone child carries BOTH the cone's mesh-aligning
+        // rotation AND the half-height offset that puts the apex on
+        // the pivot. Then when the tilt animation rotates the parent,
+        // the child orbits around the LEO position — the apex stays
+        // pinned, exactly like a real gimbal.
+        //
+        // Cone-mesh local axes (Bevy convention):
+        //   +Y/2 = apex
+        //   -Y/2 = base
+        // World goal:
+        //   apex at world_pos (LEO)
+        //   base at world_pos + bevy_dir * cone_len
+        // ⇒ the cone-local +Y direction must map to -bevy_dir
+        //   (because the apex is "back" along the light path from the
+        //    base). So q_cone = from_rotation_arc(+Y, -bevy_dir).
+        //   The cone's CENTRE in world is then world_pos + bevy_dir *
+        //   (cone_len/2). Since the parent is at world_pos with
+        //   identity rotation, the child's local translation is just
+        //   bevy_dir * (cone_len/2) in world coordinates.
+        let bevy_dir_n = bevy_dir.normalize_or_zero();
+        let cone_local_rot = Quat::from_rotation_arc(Vec3::Y, -bevy_dir_n);
+        let cone_centre_offset = bevy_dir_n * (cone_len / 2.0);
+        // Compose the cone's final world transform inline rather than
+        // using a parent/child hierarchy. Reason: in Bevy 0.19 a child
+        // entity needs the full visibility bundle
+        // (Visibility/InheritedVisibility/ViewVisibility) to inherit
+        // updates from its parent, AND the parent's transform updates
+        // only reach the child after one frame of propagation. The
+        // child cone's world rotation didn't update reliably — the
+        // tilt wrote to the parent's Transform but the cone mesh stayed
+        // put for the user. Spawning a single mesh entity with the
+        // pre-composed transform sidesteps the hierarchy entirely:
+        // `js_joint_bridge_apply` writes directly to this entity's
+        // Transform, no propagation needed.
+        //
+        // For apex-pinning we redo the math: rotate THIS entity by
+        // base * tilt around its translation = world_pos. Without
+        // child-offset trickery the cone's CENTRE sits at world_pos,
+        // not its apex — so it rotates around its centre and the apex
+        // swings off. Compromise: shift the mesh inside the entity by
+        // pushing the centre of the cone away from world_pos along
+        // bevy_dir at spawn time. Since the apply rotation is applied
+        // around translation (world_pos), the cone's apex stays
+        // approximately at world_pos for small tilts because the apex
+        // is on the rotation axis through `(world_pos, world_pos +
+        // bevy_dir)`.
+        //
+        // For larger tilts the apex drifts, but for the ±35° we use
+        // in the demo the drift is < 5cm and reads correctly as
+        // "spotlight swinging."
+        let cone_centre = world_pos + cone_centre_offset;
+        commands.spawn((
+            Mesh3d(cone_mesh),
+            MeshMaterial3d(cone_material),
+            Transform {
+                translation: cone_centre,
+                rotation: cone_local_rot,
+                scale: Vec3::ONE,
+            },
+            L3dLight,
+            // L3dLightCone tag + Hidden default → cones are invisible
+            // unless the user presses `K` to toggle the debug overlay.
+            // Without this gating the 60 cm emissive cone hangs below
+            // every LEO and dominates the scene (e.g. on the SLV Tria
+            // 2 fixture it looks like a glowing pole stuck to the
+            // bottom of the luminaire). The Lisp tilt animation still
+            // tags the cone via LightEmitterJoint so the tilt math
+            // applies whether or not it's visible.
+            L3dLightCone,
+            Visibility::Hidden,
+            LightEmitterJoint(vec![emitter.name.clone()]),
+            // Capture the rest rotation so the apply system's
+            // `base * tilt` math doesn't drift away from the original
+            // direction when tilt is zero.
+            LightEmitterBaseRotation(cone_local_rot),
+            // Orbit the cone around the LEO position — without this
+            // the cone rotates around its OWN centre (50cm below the
+            // LEO) and barely moves visually. With the pivot at the
+            // LEO and base_translation at the cone's centre, the apply
+            // system swings the cone about the LEO like a gimballed
+            // spotlight pointing in a new direction.
+            LightEmitterPivot {
+                pivot: world_pos,
+                base_translation: cone_centre,
+            },
+        ));
+        } // end else (non-sensor / non-emergency: spawn cone)
+
+        // "Rim-glow" PointLight at the LED face.
+        //
+        // Bevy has no radiosity / GI bounce — so the cup walls and
+        // bezel rim around each LED get NO light from the SpotLight
+        // (which only illuminates whatever its cone hits below). In
+        // reality the LED emits into a reflective cup whose walls
+        // re-radiate light over the surrounding bezel; without
+        // simulating that, the housing right around each LED is
+        // pitch black and looks like "magic light" from nowhere.
+        //
+        // A short-range PointLight at the LED position fakes that
+        // bounce: bright over the immediate cup walls, falling off
+        // before it reaches the housing's outer top plate.
+        //
+        // Range: 0.30 m — covers the cup and the bezel ring around
+        // it, falls off well before reaching the ceiling cavity above
+        // the housing. The L3D mount plate is much further from the
+        // LEO than 30 cm so no spurious top-plate illumination.
+        //
+        // Intensity: 20 % of the SpotLight — enough to clearly read
+        // "this is the light source" without competing with the
+        // SpotLight's floor pool.
         commands.spawn((
             PointLight {
                 color,
-                intensity: intensity * 0.3, // 30% as ambient fill
-                range: light_range,
-                radius: 0.02,
+                intensity: intensity * 0.20,
+                range: 0.30,
+                radius: emitter.size.0.max(emitter.size.1) / 2.0,
                 shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_translation(world_pos),
             L3dLight,
+            LightEmitterJoint(vec![emitter.name.clone()]),
+            LightEmitterBaseRotation(Quat::IDENTITY),
+            LightEmitterPivot {
+                pivot: world_pos,
+                base_translation: world_pos,
+            },
         ));
 
-        // Add emissive mesh to make the light source visible
-        let emitter_size = emitter.size.0.max(emitter.size.1) / 2.0;
-        let emitter_size = emitter_size.max(0.03); // Minimum 3cm radius
+        // Render the LED face EXACTLY as the L3D structure.xml
+        // declares it — nothing added, nothing rounded, nothing
+        // offset. The spec gives us:
+        //   - position: world_pos (from joint accumulation)
+        //   - rotation: emitter.world_rotation (Euler XYZ degrees, L3D)
+        //   - shape:    Circle(diameter) or Rectangle(w, h)
+        //
+        // Build the disc transform from those three pieces and stop.
+        // No `looking_at`, no 2 cm forward offset, no 3 cm minimum
+        // size, no emissive multiplier — those were all patches for
+        // earlier bugs (positions /1000'd to 0, wrong orientation
+        // pipeline) and they distort the result.
+        //
+        // For a Bevy `Circle` primitive, the disc lies in the local
+        // XY plane with normal along **+Z local**. The L3D LED has
+        // its emission axis along **-Z L3D** by spec. So in L3D-local
+        // frame, the disc is rotated π around X to make its +Z (the
+        // primitive's normal) align with -Z L3D (the emission axis).
+        // Then apply the LEO's own Euler rotation, then the Z-up→Y-up
+        // coordinate conversion.
+        //
+        // Composing right-to-left in world-space matrix terms:
+        //   disc_world = R_Zup→Yup · R_LEO · R_X(π)
+        let disc_align = Quat::from_rotation_x(std::f32::consts::PI);
+        let leo_rot = Quat::from_euler(
+            EulerRot::XYZ,
+            emitter.world_rotation.x.to_radians(),
+            emitter.world_rotation.y.to_radians(),
+            emitter.world_rotation.z.to_radians(),
+        );
+        let disc_rot = *z_to_y_rotation * leo_rot * disc_align;
+
+        // Sizes from spec. Rectangle uses width × height; Circle uses
+        // diameter (we receive `(d, d)` from the walker). Pick the
+        // half-extent as radius — accurate for both.
+        let emitter_radius = emitter.size.0.max(emitter.size.1) / 2.0;
+
+        // Material: emissive at face value, unlit so the disc
+        // self-renders at the LEO's CCT colour regardless of scene
+        // lighting. Double-sided so a camera looking AT the back of
+        // the disc still sees a glow (no hidden-face surprises).
         let linear_color = color.to_linear();
+        // Demo-tuned (post task #197): full-strength emissive blew
+        // out on the recordings — the LEO disc visually overpowered
+        // the housing it sits in. 0.4× keeps the lamp clearly lit
+        // but readable against the housing material.
+        let leo_emissive_scale = 0.4_f32;
         let emissive_material = materials.add(StandardMaterial {
             base_color: color,
-            emissive: LinearRgba::new(
-                linear_color.red * 10.0,
-                linear_color.green * 10.0,
-                linear_color.blue * 10.0,
-                1.0,
-            ),
-            unlit: true, // Don't receive lighting, just emit
+            emissive: LinearRgba::from_vec3(linear_color.to_vec3() * leo_emissive_scale),
+            unlit: true,
+            cull_mode: None,
+            double_sided: true,
             ..default()
         });
 
-        // Position slightly in light direction to be visible from below
-        let glow_pos = world_pos + bevy_dir * 0.02;
-
+        let glow_transform = Transform {
+            translation: world_pos,
+            rotation: disc_rot,
+            scale: Vec3::ONE,
+        };
         commands.spawn((
-            Mesh3d(meshes.add(Circle::new(emitter_size))),
+            Mesh3d(meshes.add(Circle::new(emitter_radius))),
             MeshMaterial3d(emissive_material),
-            Transform::from_translation(glow_pos).looking_at(glow_pos + bevy_dir, Vec3::X),
+            glow_transform,
             L3dLight,
+            LightEmitterJoint(vec![emitter.name.clone()]),
+            LightEmitterBaseRotation(disc_rot),
+            LightEmitterPivot {
+                pivot: world_pos,
+                base_translation: world_pos,
+            },
         ));
     }
 }
@@ -944,4 +1415,171 @@ fn calculate_beam_angle(ldt: &eulumdat::Eulumdat) -> f32 {
     }
 
     std::f32::consts::FRAC_PI_2 // 90 degrees if not found
+}
+
+#[cfg(test)]
+mod walker_tests {
+    //! Pure tests for the structure-tree walkers. No Bevy `App`, no
+    //! WASM bridge — just the parsing helpers above.
+    //!
+    //! These regression-guard the bug where the head OBJ failed to
+    //! rotate with its LEO: the old substring-match expected the LEO
+    //! partName in `part.path` ("geom_3/head.obj"), but real L3D files
+    //! keep partNames in the structure XML only. The fix walks the
+    //! structure tree to learn the parent `<Geometry partName>` for
+    //! each LEO and for each part-load slot.
+
+    use super::*;
+
+    /// Tria-2-style L3D: two heads, one LEO each, both heads reuse the
+    /// same `head.obj` asset via separate `<Geometry>` nodes.
+    const TRIA_LIKE_XML: &str = r#"<Luminaire>
+        <Header>
+            <Name/>
+            <CreatedWithApplication>walker_tests</CreatedWithApplication>
+            <CreationTimeCode>2026-06-10T00:00:00Z</CreationTimeCode>
+            <FormatVersion major="0" minor="11"/>
+        </Header>
+        <GeometryDefinitions>
+            <GeometryFileDefinition id="geom_1" filename="base.obj" units="mm"/>
+            <GeometryFileDefinition id="geom_3" filename="head.obj" units="mm"/>
+        </GeometryDefinitions>
+        <Structure>
+            <Geometry partName="base">
+                <Position x="0" y="0" z="0"/>
+                <Rotation x="0" y="0" z="0"/>
+                <GeometryReference geometryId="geom_1"/>
+                <Joints>
+                    <Joint partName="head-joint-0">
+                        <Position x="-0.4" y="0" z="0.0375"/>
+                        <Rotation x="0" y="0" z="0"/>
+                        <XAxis min="-45" max="45" step="1"/>
+                        <DefaultRotation x="0" y="0" z="0"/>
+                        <Geometries>
+                            <Geometry partName="head-0">
+                                <Position x="0.4" y="0" z="-0.0375"/>
+                                <Rotation x="0" y="0" z="0"/>
+                                <GeometryReference geometryId="geom_3"/>
+                                <LightEmittingObjects>
+                                    <LightEmittingObject partName="LEO0">
+                                        <Position x="-0.4" y="0" z="0.01"/>
+                                        <Rotation x="0" y="0" z="90"/>
+                                        <Circle diameter="0.0575"/>
+                                        <LuminousHeights c0="10" c90="10" c180="10" c270="10"/>
+                                    </LightEmittingObject>
+                                </LightEmittingObjects>
+                            </Geometry>
+                        </Geometries>
+                    </Joint>
+                    <Joint partName="head-joint-1">
+                        <Position x="0.4" y="0" z="0.0375"/>
+                        <Rotation x="0" y="0" z="0"/>
+                        <XAxis min="-45" max="45" step="1"/>
+                        <DefaultRotation x="0" y="0" z="0"/>
+                        <Geometries>
+                            <Geometry partName="head-1">
+                                <Position x="0.4" y="0" z="-0.0375"/>
+                                <Rotation x="0" y="0" z="0"/>
+                                <GeometryReference geometryId="geom_3"/>
+                                <LightEmittingObjects>
+                                    <LightEmittingObject partName="LEO1">
+                                        <Position x="-0.4" y="0" z="0.01"/>
+                                        <Rotation x="0" y="0" z="90"/>
+                                        <Circle diameter="0.0575"/>
+                                        <LuminousHeights c0="10" c90="10" c180="10" c270="10"/>
+                                    </LightEmittingObject>
+                                </LightEmittingObjects>
+                            </Geometry>
+                        </Geometries>
+                    </Joint>
+                </Joints>
+            </Geometry>
+        </Structure>
+    </Luminaire>"#;
+
+    #[test]
+    fn each_leo_records_its_owning_geometry_partname() {
+        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
+            .expect("Tria-2-like XML must parse");
+        let mut emitters = Vec::new();
+        extract_light_emitters(&luminaire.structure.geometry, &mut emitters, Mat4::IDENTITY);
+
+        assert_eq!(emitters.len(), 2, "must find LEO0 and LEO1");
+
+        let leo0 = emitters.iter().find(|e| e.name == "LEO0").expect("LEO0 present");
+        let leo1 = emitters.iter().find(|e| e.name == "LEO1").expect("LEO1 present");
+
+        // The key regression guard: each LEO records the partName of
+        // the <Geometry> node that directly contains it — not the
+        // OBJ-file path it references.
+        assert_eq!(
+            leo0.parent_geometry_partname, "head-0",
+            "LEO0 lives in <Geometry partName=head-0>"
+        );
+        assert_eq!(
+            leo1.parent_geometry_partname, "head-1",
+            "LEO1 lives in <Geometry partName=head-1>"
+        );
+    }
+
+    #[test]
+    fn part_geom_partnames_matches_part_walker_order() {
+        // The collector must produce partNames in the SAME order as
+        // l3d_rs::parse_geometry pushes into L3dModel.parts — i.e.
+        // post-order. Tria-like tree:
+        //   base
+        //     joint head-joint-0 → head-0
+        //     joint head-joint-1 → head-1
+        // → post-order children push: head-0, head-1, then base.
+        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
+            .expect("Tria-2-like XML must parse");
+        let mut names = Vec::new();
+        collect_part_geom_partnames(&luminaire.structure.geometry, &mut names);
+        assert_eq!(
+            names,
+            vec![
+                "head-0".to_string(),
+                "head-1".to_string(),
+                "base".to_string(),
+            ],
+            "post-order traversal: children first, then self"
+        );
+    }
+
+    #[test]
+    fn shared_obj_path_disambiguated_by_geometry_partname() {
+        // Both head-0 and head-1 reference geom_3 (head.obj). The OLD
+        // substring-match would have failed completely (no "LEO0" in
+        // "head.obj"). The NEW logic disambiguates by the structure-tree
+        // partName: head-0 owns LEO0, head-1 owns LEO1, even though they
+        // share the same OBJ asset.
+        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
+            .expect("Tria-2-like XML must parse");
+        let mut emitters = Vec::new();
+        extract_light_emitters(&luminaire.structure.geometry, &mut emitters, Mat4::IDENTITY);
+        let mut names = Vec::new();
+        collect_part_geom_partnames(&luminaire.structure.geometry, &mut names);
+
+        // Simulate the part-load loop: for each entry in `names`, find
+        // LEOs whose parent_geometry_partname matches.
+        let leos_for_head_0: Vec<&str> = emitters
+            .iter()
+            .filter(|e| e.parent_geometry_partname == "head-0")
+            .map(|e| e.name.as_str())
+            .collect();
+        let leos_for_head_1: Vec<&str> = emitters
+            .iter()
+            .filter(|e| e.parent_geometry_partname == "head-1")
+            .map(|e| e.name.as_str())
+            .collect();
+        let leos_for_base: Vec<&str> = emitters
+            .iter()
+            .filter(|e| e.parent_geometry_partname == "base")
+            .map(|e| e.name.as_str())
+            .collect();
+
+        assert_eq!(leos_for_head_0, vec!["LEO0"]);
+        assert_eq!(leos_for_head_1, vec!["LEO1"]);
+        assert!(leos_for_base.is_empty(), "base node has no LEOs");
+    }
 }

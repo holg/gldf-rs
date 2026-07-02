@@ -23,6 +23,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
     let product = &app.state.product;
+    let row = app.selected_row;
     match section {
         Section::Overview => vec![
             kv("Author", &product.header.author),
@@ -98,24 +99,32 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
         }
         Section::LightSources => {
             let ls = product.general_definitions.light_sources.as_ref();
+            let fixed = ls.map(|l| &l.fixed_light_source[..]).unwrap_or(&[]);
+            let changeable = ls.map(|l| &l.changeable_light_source[..]).unwrap_or(&[]);
+            let mc = ls.map(|l| &l.multi_channel_light_source[..]).unwrap_or(&[]);
             let mut out = vec![];
-            for f in ls.map(|l| &l.fixed_light_source[..]).unwrap_or(&[]) {
-                out.push(Line::from(format!(
-                    "Fixed       · {}  manuf={}",
-                    f.id,
-                    f.manufacturer.as_deref().unwrap_or("—")
-                )));
+            // The selected_row index points into fixed_light_source for
+            // editing purposes (matches edit_modal::fixed_light_source_fields).
+            for (i, f) in fixed.iter().enumerate() {
+                out.push(cursor_line(
+                    i == row,
+                    format!(
+                        "Fixed       · {}  manuf={}",
+                        f.id,
+                        f.manufacturer.as_deref().unwrap_or("—")
+                    ),
+                ));
             }
-            for c in ls.map(|l| &l.changeable_light_source[..]).unwrap_or(&[]) {
+            for c in changeable {
                 out.push(Line::from(format!(
-                    "Changeable  · {}  manuf={}",
+                    "  Changeable  · {}  manuf={}",
                     c.id,
                     c.manufacturer.as_deref().unwrap_or("—")
                 )));
             }
-            for m in ls.map(|l| &l.multi_channel_light_source[..]).unwrap_or(&[]) {
+            for m in mc {
                 out.push(Line::from(format!(
-                    "MultiChannel· {}  channels={}",
+                    "  MultiChannel· {}  channels={}",
                     m.id,
                     m.channels.channel.len()
                 )));
@@ -136,15 +145,19 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
                 vec![muted("(no Emitter blocks declared)")]
             } else {
                 es.iter()
-                    .map(|e| {
-                        Line::from(format!(
-                            "· {}  fixed={} chg={} mc={} sensor={}",
-                            e.id,
-                            e.fixed_light_emitter.len(),
-                            e.changeable_light_emitter.len(),
-                            e.multi_channel_light_emitter.len(),
-                            e.sensor_emitter.len()
-                        ))
+                    .enumerate()
+                    .map(|(i, e)| {
+                        cursor_line(
+                            i == row,
+                            format!(
+                                "{}  fixed={} chg={} mc={} sensor={}",
+                                e.id,
+                                e.fixed_light_emitter.len(),
+                                e.changeable_light_emitter.len(),
+                                e.multi_channel_light_emitter.len(),
+                                e.sensor_emitter.len()
+                            ),
+                        )
                     })
                     .collect()
             }
@@ -160,7 +173,8 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
                 vec![muted("(no Variants declared)")]
             } else {
                 vs.iter()
-                    .map(|v| Line::from(format!("· {}", v.id)))
+                    .enumerate()
+                    .map(|(i, v)| cursor_line(i == row, v.id.to_string()))
                     .collect()
             }
         }
@@ -171,11 +185,12 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
             } else {
                 files
                     .iter()
-                    .map(|f| {
-                        Line::from(format!(
-                            "· {}  [{}]  {}",
-                            f.id, f.content_type, f.file_name
-                        ))
+                    .enumerate()
+                    .map(|(i, f)| {
+                        cursor_line(
+                            i == row,
+                            format!("{}  [{}]  {}", f.id, f.content_type, f.file_name),
+                        )
                     })
                     .collect()
             }
@@ -221,6 +236,22 @@ fn kv(label: &str, value: &str) -> Line<'static> {
             Style::default().fg(Color::DarkGray),
         ),
         Span::raw(value),
+    ])
+}
+
+fn cursor_line(selected: bool, text: String) -> Line<'static> {
+    let marker = if selected { "▸ " } else { "  " };
+    let style = if selected {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    Line::from(vec![
+        Span::raw(marker.to_string()),
+        Span::styled(text, style),
     ])
 }
 

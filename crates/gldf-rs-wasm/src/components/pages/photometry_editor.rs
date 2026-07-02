@@ -24,10 +24,13 @@
 
 use crate::components::edit_util::{event_f64, event_i32, event_value, optional_string};
 use crate::components::pages::link_hint::LinkHint;
+use crate::components::{IdRenameChip, LdtPanel};
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
 use eulumdat::{Eulumdat, GldfPhotometricData};
 use gldf_rs::gldf::general_definitions::photometries::Photometry;
 use leptos::prelude::*;
+use std::sync::Arc;
 
 /// Read view — declared GLDF values + calculated comparison, both display-only.
 #[component]
@@ -74,7 +77,7 @@ fn photometry_page(editable: bool) -> impl IntoView {
                 // <File> definition say? Surfaced via a `<details>` block on
                 // each row so we can diagnose missing-Calc cases without
                 // round-tripping through a rebuild.
-                let with_calc: Vec<(Photometry, Option<CalculatedFields>, PhotometryProbe)> = entries
+                let with_calc: Vec<(Photometry, Option<CalculatedFields>, PhotometryProbe, Option<Vec<u8>>)> = entries
                     .into_iter()
                     .map(|p| {
                         use crate::components::photometry_decode::{
@@ -82,6 +85,10 @@ fn photometry_page(editable: bool) -> impl IntoView {
                         };
                         let mut probe = PhotometryProbe::default();
                         probe.file_id = p.photometry_file_reference.as_ref().map(|r| r.file_id.clone());
+                        let raw_bytes: Option<Vec<u8>> = probe
+                            .file_id
+                            .as_ref()
+                            .and_then(|fid| s.embedded_files.get(fid).cloned());
                         if let Some(ref fid) = probe.file_id {
                             probe.in_embedded = s.embedded_files.contains_key(fid);
                             if let Some(file_def) = s.product.general_definitions.files.file.iter().find(|f| &f.id == fid) {
@@ -114,7 +121,7 @@ fn photometry_page(editable: bool) -> impl IntoView {
                                 parsed.map(|(ldt, _)| ldt)
                             })
                             .map(|ldt| CalculatedFields::from_ldt(&ldt));
-                        (p, calc, probe)
+                        (p, calc, probe, raw_bytes)
                     })
                     .collect();
 
@@ -127,7 +134,7 @@ fn photometry_page(editable: bool) -> impl IntoView {
                 // to wire them into a Photometry block.
                 let referenced_ids: std::collections::HashSet<String> = with_calc
                     .iter()
-                    .filter_map(|(p, _, _)| {
+                    .filter_map(|(p, _, _, _)| {
                         p.photometry_file_reference.as_ref().map(|r| r.file_id.clone())
                     })
                     .collect();
@@ -143,8 +150,8 @@ fn photometry_page(editable: bool) -> impl IntoView {
 
                 view! {
                     <div class="photometry-entries" style="display: flex; flex-direction: column; gap: 16px;">
-                        {with_calc.into_iter().enumerate().map(|(idx, (photometry, calc, probe))| view! {
-                            <PhotometryRow idx=idx photometry=photometry calculated=calc probe=probe editable=editable />
+                        {with_calc.into_iter().enumerate().map(|(idx, (photometry, calc, probe, raw_bytes))| view! {
+                            <PhotometryRow idx=idx photometry=photometry calculated=calc probe=probe raw_bytes=raw_bytes editable=editable />
                         }).collect::<Vec<_>>()}
 
                         {if orphan_files.is_empty() {
@@ -229,10 +236,37 @@ fn PhotometryRow(
     photometry: Photometry,
     calculated: Option<CalculatedFields>,
     probe: PhotometryProbe,
+    raw_bytes: Option<Vec<u8>>,
     editable: bool,
 ) -> impl IntoView {
     let state = use_gldf();
+    let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let id = photometry.id.clone();
+    let id_for_rename = id.clone();
+    let id_for_remove = id.clone();
+    let on_rename_id: Arc<dyn Fn(String) + Send + Sync> = {
+        let old_id = id_for_rename.clone();
+        Arc::new(move |new_id| {
+            state.update(|s| s.apply(GldfAction::RenamePhotometry {
+                old_id: old_id.clone(),
+                new_id,
+            }));
+        })
+    };
+    let on_remove = move |_| {
+        let template = ui_t(
+            "gldf.photometry.remove_confirm",
+            &state.with(|s| s.ui_language.clone()),
+        );
+        let msg = template.replace("{id}", &id_for_remove);
+        if web_sys::window()
+            .and_then(|w| w.confirm_with_message(&msg).ok())
+            .unwrap_or(false)
+        {
+            let id_now = id_for_remove.clone();
+            state.update(|s| s.apply(GldfAction::RemovePhotometry { id: id_now }));
+        }
+    };
     let file_ref = photometry.photometry_file_reference.as_ref().map(|r| r.file_id.clone());
     let desc = photometry.descriptive_photometry.clone();
     let ugr = desc.as_ref().and_then(|d| d.ugr4_h8_h705020_lq.clone());
@@ -365,7 +399,7 @@ fn PhotometryRow(
     view! {
         <div class="photometry-entry" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
             <div class="entry-header" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
-                <span class="entry-id code" style="font-family: var(--font-mono); font-weight: 600;">{ id }</span>
+                <IdRenameChip current_id=id editable=editable on_rename=on_rename_id />
                 {file_ref.map(|f| view! {
                     <span style="color: var(--text-tertiary); font-size: 11px;">{ format!("file: {}", f) }</span>
                 })}
@@ -375,10 +409,17 @@ fn PhotometryRow(
                             type="button"
                             on:click=on_use_calc
                             style="margin-left: auto; padding: 4px 10px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
-                            title="Fill empty GLDF fields from the LDT/IES calculator. Vendor-declared values are preserved."
+                            title=tr("gldf.photometry.fill_calc_title")
                         >
-                            { "📥 Fill empty from calc" }
+                            { tr("gldf.photometry.fill_calc") }
                         </button>
+                    }.into_any()
+                } else { ().into_any() }}
+                {if editable {
+                    let ml = if has_calculated { "" } else { "margin-left: auto; " };
+                    let style = format!("{}padding: 2px 10px; background: none; border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 4px; cursor: pointer; font-size: 12px;", ml);
+                    view! {
+                        <button type="button" on:click=on_remove style=style title=tr("gldf.photometry.remove_title")>{ tr("gldf.photometry.remove") }</button>
                     }.into_any()
                 } else { ().into_any() }}
             </div>
@@ -387,6 +428,16 @@ fn PhotometryRow(
 
             <ProbeBlock probe=probe.clone() />
 
+            // Small angular-distribution thumbnail — this is the file
+            // as authored. The "real" rendering (per-emitter, with
+            // rotations and the right LightSource binding) lives on
+            // the LightSource card; this is just an at-a-glance shape
+            // check while editing DescriptivePhotometry values.
+            {raw_bytes.map(|bytes| view! {
+                <div style="margin-bottom: 12px;">
+                    <LdtPanel bytes=bytes width=320.0 height=240.0 />
+                </div>
+            })}
 
             <div class="form-grid" style="display: flex; flex-direction: column; gap: 8px;">
                 <DualField label="CIE Flux Code" gldf=gldf_cie calc=calc_cie input_type="text" step="" editable=editable on_change=Box::new(on_cie) />

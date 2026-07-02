@@ -4,6 +4,7 @@
 //! + `view_variants_overview` from the Yew side.
 
 use crate::components::{LocaleFooView, ValidationBanner};
+use crate::i18n::ui::t as ui_t;
 use crate::state::use_gldf;
 use gldf_rs::gldf::general_definitions::lightsources::ColorInformation;
 use gldf_rs::gldf::product_definitions::Variant;
@@ -15,6 +16,8 @@ pub fn OverviewPage() -> impl IntoView {
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             let header = &s.product.header;
             let files_count = s.embedded_files.len();
             let ls = s.product.general_definitions.light_sources.as_ref();
@@ -52,7 +55,7 @@ pub fn OverviewPage() -> impl IntoView {
                 .unwrap_or(0);
 
             let manufacturer = if header.manufacturer.is_empty() {
-                "Unknown Manufacturer".to_string()
+                tr("gldf.overview.unknown_manufacturer")
             } else {
                 header.manufacturer.clone()
             };
@@ -67,7 +70,7 @@ pub fn OverviewPage() -> impl IntoView {
             } else {
                 header.creation_time_code.clone()
             };
-            let format_version = format!("{:?}", header.format_version);
+            let format_version = header.format_version.to_version_string();
 
             view! {
                 <>
@@ -78,24 +81,24 @@ pub fn OverviewPage() -> impl IntoView {
                                 <span class="icon">{ "💡" }</span>
                                 <div>
                                     <h2>{ manufacturer }</h2>
-                                    <p class="format-version">{ format!("GLDF Format {}", format_version.clone()) }</p>
+                                    <p class="format-version">{ format!("{} {}", tr("gldf.overview.gldf_format"), format_version.clone()) }</p>
                                 </div>
                             </div>
                             <div class="info-grid">
                                 <div class="info-row">
-                                    <span class="label">{ "Author" }</span>
+                                    <span class="label">{ tr("gldf.overview.author") }</span>
                                     <span class="value">{ author }</span>
                                 </div>
                                 <div class="info-row">
-                                    <span class="label">{ "Created With" }</span>
+                                    <span class="label">{ tr("gldf.overview.created_with") }</span>
                                     <span class="value">{ created_with }</span>
                                 </div>
                                 <div class="info-row">
-                                    <span class="label">{ "Creation Date" }</span>
+                                    <span class="label">{ tr("gldf.overview.creation_date") }</span>
                                     <span class="value">{ creation_time }</span>
                                 </div>
                                 <div class="info-row">
-                                    <span class="label">{ "Format Version" }</span>
+                                    <span class="label">{ tr("gldf.overview.format_version") }</span>
                                     <span class="value">{ format_version }</span>
                                 </div>
                             </div>
@@ -106,30 +109,30 @@ pub fn OverviewPage() -> impl IntoView {
                         <div class="stat-card">
                             <div class="icon blue">{ "📁" }</div>
                             <div class="value">{ files_count }</div>
-                            <div class="label">{ "Files" }</div>
+                            <div class="label">{ tr("gldf.overview.files") }</div>
                         </div>
                         <div class="stat-card">
                             <div class="icon yellow">{ "💡" }</div>
                             <div class="value">{ fixed_ls_count + changeable_ls_count }</div>
-                            <div class="label">{ "Light Sources" }</div>
+                            <div class="label">{ tr("gldf.overview.light_sources") }</div>
                         </div>
                         <div class="stat-card">
                             <div class="icon purple">{ "📦" }</div>
                             <div class="value">{ variants_count }</div>
-                            <div class="label">{ "Variants" }</div>
+                            <div class="label">{ tr("gldf.overview.variants") }</div>
                         </div>
                         <div class="stat-card">
                             <div class="icon orange">{ "☀️" }</div>
                             <div class="value">{ photometries_count }</div>
-                            <div class="label">{ "Photometries" }</div>
+                            <div class="label">{ tr("gldf.overview.photometries") }</div>
                         </div>
                         {if control_gear_count > 0 {
                             let label = if dimmable_count == control_gear_count {
-                                "Control Gear · all dimmable".to_string()
+                                tr("gldf.overview.all_dimmable")
                             } else if dimmable_count > 0 {
-                                format!("Control Gear · {} dimmable", dimmable_count)
+                                tr("gldf.overview.n_dimmable").replace("{n}", &dimmable_count.to_string())
                             } else {
-                                "Control Gear".to_string()
+                                tr("gldf.overview.control_gear")
                             };
                             view! {
                                 <div class="stat-card">
@@ -144,7 +147,7 @@ pub fn OverviewPage() -> impl IntoView {
                                 <div class="stat-card">
                                     <div class="icon" style="color: var(--accent-blue);">{ "🔌" }</div>
                                     <div class="value">{ equipment_count }</div>
-                                    <div class="label">{ "Equipment" }</div>
+                                    <div class="label">{ tr("gldf.overview.equipment") }</div>
                                 </div>
                             }.into_any()
                         } else { ().into_any() }}
@@ -171,6 +174,8 @@ fn FilesOverviewCard() -> impl IntoView {
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             // The embedded_files key is the <File id="..."> id. To classify by
             // type, we walk product.general_definitions.files.file (the XML
             // declarations) and use their declared file_name.
@@ -191,19 +196,20 @@ fn FilesOverviewCard() -> impl IntoView {
                 .map(|f| f.file_name.clone())
                 .collect();
             let total = files.len();
+            let lang_for_more = lang.clone();
 
             view! {
                 <div class="collapsible open">
                     <div class="collapsible-header">
                         <span class="icon blue">{ "📁" }</span>
-                        <h4>{ "Files" }</h4>
+                        <h4>{ tr("gldf.overview.files") }</h4>
                         <span class="count">{ total }</span>
                         <span class="chevron">{ "▶" }</span>
                     </div>
                     <div class="collapsible-content">
-                        <FileCategorySection title="Photometric" icon="☀️" color="var(--accent-orange)" names=photometric />
-                        <FileCategorySection title="Images" icon="🖼" color="var(--accent-blue)" names=images />
-                        <FileCategorySection title="Geometry" icon="🧊" color="var(--accent-green)" names=geometry />
+                        <FileCategorySection title=tr("gldf.overview.photometric") icon="☀️" color="var(--accent-orange)" names=photometric ui_language=lang_for_more.clone() />
+                        <FileCategorySection title=tr("gldf.overview.images") icon="🖼" color="var(--accent-blue)" names=images ui_language=lang_for_more.clone() />
+                        <FileCategorySection title=tr("gldf.overview.geometry") icon="🧊" color="var(--accent-green)" names=geometry ui_language=lang_for_more />
                     </div>
                 </div>
             }
@@ -213,10 +219,11 @@ fn FilesOverviewCard() -> impl IntoView {
 
 #[component]
 fn FileCategorySection(
-    title: &'static str,
+    title: String,
     icon: &'static str,
     color: &'static str,
     names: Vec<String>,
+    ui_language: String,
 ) -> impl IntoView {
     if names.is_empty() {
         return view! { <></> }.into_any();
@@ -224,7 +231,10 @@ fn FileCategorySection(
     let total = names.len();
     let visible = names.iter().take(3).cloned().collect::<Vec<_>>();
     let extra = if total > 3 {
-        Some(format!("+ {} more...", total - 3))
+        Some(
+            ui_t("gldf.overview.more_count", &ui_language)
+                .replace("{n}", &(total - 3).to_string()),
+        )
     } else {
         None
     };
@@ -248,6 +258,10 @@ fn LightSourcesOverviewCard() -> impl IntoView {
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
+            let more_tmpl = tr("gldf.overview.more_count");
+            let render_more = |n: usize| more_tmpl.replace("{n}", &n.to_string());
             let ls = s.product.general_definitions.light_sources.as_ref();
             let fixed = ls
                 .map(|l| l.fixed_light_source.clone())
@@ -261,7 +275,7 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                 <div class="collapsible open">
                     <div class="collapsible-header">
                         <span class="icon yellow">{ "💡" }</span>
-                        <h4>{ "Light Sources" }</h4>
+                        <h4>{ tr("gldf.overview.light_sources") }</h4>
                         <span class="count">{ total }</span>
                         <span class="chevron">{ "▶" }</span>
                     </div>
@@ -269,10 +283,10 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                         {if !fixed.is_empty() {
                             let take = fixed.iter().take(5).cloned().collect::<Vec<_>>();
                             let extra = if fixed.len() > 5 {
-                                Some(format!("+ {} more...", fixed.len() - 5))
+                                Some(render_more(fixed.len() - 5))
                             } else { None };
                             view! {
-                                <div class="file-category-title">{ "Fixed" }</div>
+                                <div class="file-category-title">{ tr("gldf.overview.fixed") }</div>
                                 {take.into_iter().map(|ls| {
                                     let chips = color_info_chips(ls.color_information.as_ref());
                                     view! {
@@ -296,10 +310,10 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                         {if !changeable.is_empty() {
                             let take = changeable.iter().take(5).cloned().collect::<Vec<_>>();
                             let extra = if changeable.len() > 5 {
-                                Some(format!("+ {} more...", changeable.len() - 5))
+                                Some(render_more(changeable.len() - 5))
                             } else { None };
                             view! {
-                                <div class="file-category-title" style="margin-top: 12px;">{ "Changeable" }</div>
+                                <div class="file-category-title" style="margin-top: 12px;">{ tr("gldf.overview.changeable") }</div>
                                 {take.into_iter().map(|ls| {
                                     let chips = color_info_chips(ls.color_information.as_ref());
                                     view! {
@@ -321,7 +335,7 @@ fn LightSourcesOverviewCard() -> impl IntoView {
                             }.into_any()
                         } else { ().into_any() }}
                         {if total == 0 {
-                            view! { <p style="color: var(--text-tertiary); font-size: 13px;">{ "No light sources defined" }</p> }.into_any()
+                            view! { <p style="color: var(--text-tertiary); font-size: 13px;">{ tr("gldf.overview.no_light_sources") }</p> }.into_any()
                         } else { ().into_any() }}
                     </div>
                 </div>
@@ -336,6 +350,8 @@ fn VariantsOverviewCard() -> impl IntoView {
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             let variants = s
                 .product
                 .product_definitions
@@ -346,20 +362,20 @@ fn VariantsOverviewCard() -> impl IntoView {
             let count = variants.len();
             let take = variants.iter().take(10).cloned().collect::<Vec<_>>();
             let extra = if count > 10 {
-                Some(format!("+ {} more...", count - 10))
+                Some(tr("gldf.overview.more_count").replace("{n}", &(count - 10).to_string()))
             } else { None };
 
             view! {
                 <div class="collapsible open">
                     <div class="collapsible-header">
                         <span class="icon purple">{ "📦" }</span>
-                        <h4>{ "Variants" }</h4>
+                        <h4>{ tr("gldf.overview.variants") }</h4>
                         <span class="count">{ count }</span>
                         <span class="chevron">{ "▶" }</span>
                     </div>
                     <div class="collapsible-content">
                         {if variants.is_empty() {
-                            view! { <p style="color: var(--text-tertiary); font-size: 13px;">{ "No variants defined" }</p> }.into_any()
+                            view! { <p style="color: var(--text-tertiary); font-size: 13px;">{ tr("gldf.overview.no_variants") }</p> }.into_any()
                         } else {
                             view! {
                                 {take.into_iter().map(|v| {
@@ -440,11 +456,18 @@ fn variant_housing_color_chips(v: &Variant) -> Vec<(String, String)> {
         return out;
     };
     for c in hc.housing_color.iter().take(4) {
-        let label = match (c.ral, c.locale.value.trim()) {
+        // First Locale entry (HousingColor wraps the complex Locale type).
+        let name = c
+            .locale
+            .locale
+            .first()
+            .map(|l| l.value.as_str().trim())
+            .unwrap_or("");
+        let label = match (c.ral, name) {
             (Some(r), "") => format!("RAL {}", r),
-            (Some(r), name) => format!("RAL {} — {}", r, name),
+            (Some(r), n) => format!("RAL {} — {}", r, n),
             (None, "") => continue,
-            (None, name) => name.to_string(),
+            (None, n) => n.to_string(),
         };
         out.push(("color".to_string(), label));
     }

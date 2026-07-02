@@ -17,7 +17,9 @@
 //! banner self-hides.
 
 use crate::state::use_gldf;
-use gldf_rs::validation::{validate, validate_gldf, ValidationLevel};
+use gldf_rs::validation::{
+    validate, validate_gldf, xsd_validate_product_xml, ValidationLevel,
+};
 use leptos::prelude::*;
 
 #[component]
@@ -33,6 +35,27 @@ pub fn ValidationBanner() -> impl IntoView {
             // not to bother memoising.
             let engine = validate_gldf(&s.product, &s.embedded_files);
             let canon = validate(&s.product);
+            // XSD: serialize the in-memory model the same way `Save` does
+            // and run it past uppsala. Empty findings = clean. Cost is a
+            // few ms per state change — fast enough to leave un-memoised
+            // since the rest of this closure already walks the whole tree.
+            let xsd_findings: Vec<(String, String)> = match s.product.to_xml() {
+                Ok(xml) => match xsd_validate_product_xml(&xml) {
+                    Ok(fs) => fs
+                        .into_iter()
+                        .map(|f| {
+                            let loc = match (f.line, f.column) {
+                                (Some(l), Some(c)) => format!("line {l}, col {c}"),
+                                (Some(l), _) => format!("line {l}"),
+                                _ => "—".to_string(),
+                            };
+                            (loc, f.message)
+                        })
+                        .collect(),
+                    Err(_) => Vec::new(),
+                },
+                Err(_) => Vec::new(),
+            };
 
             // Bucket by severity. Engine `Error` / `Warning` / `Info`
             // map to red / amber / blue. Canonical violations are
@@ -40,6 +63,7 @@ pub fn ValidationBanner() -> impl IntoView {
             let mut errors: Vec<(String, String)> = Vec::new();
             let mut warnings: Vec<(String, String)> = Vec::new();
             let mut info: Vec<(String, String)> = Vec::new();
+            let mut xsd_rows: Vec<(String, String)> = xsd_findings;
             for e in &engine.errors {
                 let row = (e.path.clone(), e.message.clone());
                 match e.level {
@@ -57,15 +81,19 @@ pub fn ValidationBanner() -> impl IntoView {
                 warnings.push((v.path.clone(), msg));
             }
 
-            let total = errors.len() + warnings.len() + info.len();
+            let total = errors.len() + warnings.len() + info.len() + xsd_rows.len();
             if total == 0 {
                 return ().into_any();
             }
 
-            // Banner colour follows the worst severity present.
-            let (bg, border, icon, headline) = if !errors.is_empty() {
-                ("#3a1818", "#a33", "⛔", format!("{} validation error{}", errors.len(),
-                    if errors.len() == 1 { "" } else { "s" }))
+            // XSD findings count as errors for headline severity — they
+            // mean the file won't validate against the official XSD,
+            // which is the strictest gate downstream.
+            let xsd_count = xsd_rows.len();
+            let (bg, border, icon, headline) = if !errors.is_empty() || xsd_count > 0 {
+                let n = errors.len() + xsd_count;
+                ("#3a1818", "#a33", "⛔", format!("{} validation error{}", n,
+                    if n == 1 { "" } else { "s" }))
             } else if !warnings.is_empty() {
                 ("#3a2a18", "#a73", "⚠️", format!("{} warning{}", warnings.len(),
                     if warnings.len() == 1 { "" } else { "s" }))
@@ -74,12 +102,15 @@ pub fn ValidationBanner() -> impl IntoView {
                     if info.len() == 1 { "" } else { "s" }))
             };
             let summary = format!(
-                "{headline} · {warn} warning{ws} · {inf} note{is_}",
+                "{headline} · {xsd} XSD · {warn} warning{ws} · {inf} note{is_}",
+                xsd = xsd_count,
                 warn = warnings.len(),
                 ws = if warnings.len() == 1 { "" } else { "s" },
                 inf = info.len(),
                 is_ = if info.len() == 1 { "" } else { "s" },
             );
+            // Move xsd_rows into the view via local binding for clone below.
+            let xsd_rows_view = std::mem::take(&mut xsd_rows);
 
             view! {
                 <div
@@ -94,7 +125,7 @@ pub fn ValidationBanner() -> impl IntoView {
                             <span style="margin-right: 6px;">{ icon }</span>
                             <strong>{ summary }</strong>
                             <span style="margin-left: 10px; font-size: 11px; color: var(--text-tertiary);">
-                                { "Model-side check — no XSD validator runs in-browser yet" }
+                                { "Model-side + XSD (rc-3) — runs in-browser via uppsala" }
                             </span>
                         </div>
                         <span style="font-size: 11px; color: var(--text-tertiary);">
@@ -103,6 +134,7 @@ pub fn ValidationBanner() -> impl IntoView {
                     </div>
                     {move || open.get().then(|| view! {
                         <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 11px; max-height: 280px; overflow: auto; padding-right: 4px;">
+                            <ViolationGroup label="XSD (rc-3)" tint="#ffb0b0" rows=xsd_rows_view.clone() />
                             <ViolationGroup label="Errors" tint="#ffb0b0" rows=errors.clone() />
                             <ViolationGroup label="Warnings" tint="#ffd28a" rows=warnings.clone() />
                             <ViolationGroup label="Notes" tint="#9fd0ff" rows=info.clone() />

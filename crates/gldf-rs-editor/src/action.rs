@@ -74,6 +74,13 @@ pub enum GldfAction {
     /// implementation. On error, `last_error` is set and `is_modified` stays as
     /// it was.
     AddPhotometryFile { bytes: Vec<u8>, filename: String },
+    /// Drop-and-link: embed a sensor data sheet (`.sensxml` / `.sensldt`)
+    /// and mint a fresh `<Sensor>` linked to it. Mirrors AddPhotometryFile
+    /// but writes to `GeneralDefinitions/Sensors` instead of `Photometries`
+    /// and uses the correct `sensor/*` content type so the Files page
+    /// doesn't need a follow-up retype dispatch. Delegates to
+    /// `EditableGldf::add_sensor_file`.
+    AddSensorFile { bytes: Vec<u8>, filename: String },
     /// Drop-and-link: embed a spectrum file (`.spd`) linked to a light source.
     /// Delegates to `EditableGldf::add_spectrum_file`. Errors (e.g. unknown
     /// light-source id) surface via `last_error`.
@@ -309,6 +316,21 @@ pub enum GldfAction {
     /// Remove an Emitter by id. Variants that bind this emitter will
     /// dangle — surface via Linkage. Delegates to `remove_emitter`.
     RemoveEmitter { id: String },
+    /// Create an `<Emitter>` with an EXPLICIT id whose single
+    /// FixedLightEmitter binds the photometry + light source and carries
+    /// the given RatedLuminousFlux — all atomically. Unlike
+    /// `AddEmitterWithChild` (which auto-generates the id and sets flux
+    /// to 0), this lets scripted / generated callers reference the
+    /// emitter by a stable name and set its lumens in one step, so there
+    /// are no predicted-id off-by-one bugs and no "0 lm" gaps. If
+    /// `emitter_id` is empty an id is auto-generated.
+    AddFixedEmitter {
+        emitter_id: String,
+        child_name: Option<String>,
+        photometry_id: String,
+        light_source_id: String,
+        rated_luminous_flux: i32,
+    },
     /// Add a new `<FixedLightEmitter>` child to the named Emitter,
     /// referencing the given photometry + fixed light source. Both ids
     /// should exist in the catalog; the action does not validate them
@@ -416,12 +438,41 @@ pub enum GldfAction {
     /// actions because they also create the wrapper entry (`<Photometry>`
     /// / `<Spectrum>`) and (for spectrum) the link to a light source.
     AddFileWithBytes { bytes: Vec<u8>, filename: String },
+    /// Drop-and-link a product picture: embed the image bytes as a
+    /// `<File>` (content_type inferred from the extension) AND add a
+    /// matching `ProductMetaData/Pictures/Image` reference with the
+    /// given `image_type` (e.g. "Product Picture"), atomically. Mirrors
+    /// `AddPhotometryFile` so scripted callers don't have to predict the
+    /// auto file id. Scope is always Product.
+    AddProductPictureFile {
+        bytes: Vec<u8>,
+        filename: String,
+        image_type: String,
+    },
     /// Rename a `<File>` id, cascading into every referencing slot
     /// (Photometry / Spectrum / LightSource images / Geometry /
     /// Sensor / ProductMetaData pictures / Variant pictures+symbol).
     /// Also moves the bytes in `embedded_files` so the bundle stays
     /// internally consistent. Delegates to `GldfProduct::rename_file`.
     RenameFile { old_id: String, new_id: String },
+    /// Rename a Photometry by id; cascades to every PhotometryReference.
+    RenamePhotometry { old_id: String, new_id: String },
+    /// Remove a `<Photometry>` entry by id. Does NOT touch the underlying
+    /// `<File>` it points to — drop or repurpose that separately on the
+    /// Files page. Use when an auto-imported Photometry block is no longer
+    /// appropriate (e.g. the file was reclassified as a sensor payload).
+    RemovePhotometry { id: String },
+    // --- Sensors (GeneralDefinitions/Sensors/Sensor) ---
+    AddSensor,
+    RemoveSensor { index: usize },
+    RenameSensor { old_id: String, new_id: String },
+    SetSensorFileId { index: usize, file_id: Option<String> },
+    /// Replace the full DetectorCharacteristic list (XSD enum, max 3).
+    SetSensorDetectorCharacteristics { index: usize, values: Vec<String> },
+    /// Replace the full DetectionMethod list (XSD enum, max 6).
+    SetSensorDetectionMethods { index: usize, values: Vec<String> },
+    /// Replace the full DetectorType list (XSD enum, max 4).
+    SetSensorDetectorTypes { index: usize, values: Vec<String> },
     /// Remove a file by id
     RemoveFile(String),
     /// Update a file's properties
@@ -593,6 +644,36 @@ pub enum GldfAction {
         value: String,
     },
     RemoveApprovalMark {
+        scope: Scope,
+        index: usize,
+    },
+    // --- DescriptiveAttributes.CustomProperties.Property (scope-aware).
+    // XSD: id (string), Name (Locale), PropertySource (string, e.g. ISO/CIE/DIN),
+    // Value (string) XOR FileReference (file id). We expose Value via this
+    // action set; FileReference editing isn't covered yet (rare, and would
+    // need a file picker UI). ---
+    AddCustomProperty(Scope),
+    UpdateCustomPropertyId {
+        scope: Scope,
+        index: usize,
+        value: String,
+    },
+    UpdateCustomPropertyName {
+        scope: Scope,
+        index: usize,
+        value: gldf_rs::gldf::LocaleFoo,
+    },
+    UpdateCustomPropertySource {
+        scope: Scope,
+        index: usize,
+        value: String,
+    },
+    UpdateCustomPropertyValue {
+        scope: Scope,
+        index: usize,
+        value: String,
+    },
+    RemoveCustomProperty {
         scope: Scope,
         index: usize,
     },

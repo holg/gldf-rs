@@ -3,13 +3,24 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>GLDF Viewer</title>
+    <title>GLDF Editor</title>
 
     <link data-trunk rel="css" href="src/static/styles.css">
+    <link data-trunk rel="copy-file" href="src/static/prolumia_demo.gldf" />
     <link data-trunk rel="copy-file" href="src/static/slv_tria_2.gldf" />
     <link data-trunk rel="copy-file" href="src/static/FLOODLIGHT_MAX_1200W_757_SYM_10_WAL_enriched.gldf" />
     <link data-trunk rel="copy-file" href="src/static/LEDVANCE_FLOODLIGHT_MAX.gldf" />
     <link data-trunk rel="copy-file" href="src/static/biolux_hcl.gldf" />
+    <!-- Demo source assets the λ Lisp REPL's Prolumia build fetches by
+         name (NEEDS-FILES), so the demo runs with no manual file-drop. -->
+    <link data-trunk rel="copy-file" href="src/static/middle.ldt" />
+    <link data-trunk rel="copy-file" href="src/static/narrow.ldt" />
+    <link data-trunk rel="copy-file" href="src/static/wide.ldt" />
+    <link data-trunk rel="copy-file" href="src/static/emergency.ldt" />
+    <link data-trunk rel="copy-file" href="src/static/sensor.ldt" />
+    <link data-trunk rel="copy-file" href="src/static/example_007.l3d" />
+    <link data-trunk rel="copy-file" href="src/static/spectrum_2700K.spd" />
+    <link data-trunk rel="copy-file" href="src/static/product_picture.jpg" />
     <link data-trunk rel="rust" data-bin="gldf_rs_wasm" data-wasm-opt="0" />
     <!-- Inline bevy-loader.js to avoid caching issues - content is embedded in HTML -->
     <link data-trunk rel="inline" href="src/static/bevy-loader.js" type="js" />

@@ -1,0 +1,12 @@
+{
+  "chapter": "Bonus — Lisp REPL choreography",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "_comment": "Single cue at 5s SRT, but the choreography runs another ~115s. Write ~50–55s of speech for context; the rest is the camera + tilt animation speaking for itself.",
+  "cues": [
+    {
+      "cue": "Act 20b — Lisp REPL choreography",
+      "text": "One last bonus. The 3D viewer is scriptable through a built-in Lisp REPL. The lambda panel exposes primitives for camera moves, joint tilts, variant swaps, and room-tweaks. Here we run a forty-five second choreography that orbits the camera, tilts each LEO independently, and cycles through three of the four variants. The script is editable live, the commands queue and animate smoothly, and the camera state can be saved back into the script with a single keystroke for repeatable shots. The same primitives drive automated lighting tours and configurator animations in catalog applications. Everything you see here is computed in WebAssembly, on the same canvas the editor uses — no separate viewer, no plugin, no installation."
+    }
+  ]
+}

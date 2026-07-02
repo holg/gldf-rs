@@ -39,6 +39,22 @@ pub struct ProductDescriptiveAttributes {
     pub ip_code: Option<String>,
     /// Median useful life (e.g., "L80B50 70000h 25°C")
     pub median_useful_life: Option<String>,
+    /// Power factor (cos φ), Electrical.
+    pub power_factor: Option<f64>,
+    /// Constant light output flag, Electrical.
+    pub constant_light_output: Option<bool>,
+    /// Weight in kg, Mechanical.
+    pub weight: Option<f64>,
+    /// IK impact rating (e.g. IK08), Mechanical.
+    pub ik_rating: Option<String>,
+    /// Product form / housing shape, Mechanical.
+    pub product_form: Option<String>,
+    /// Overall dimensions in mm (width, height, length), Mechanical.
+    pub overall_width_mm: Option<i32>,
+    pub overall_height_mm: Option<i32>,
+    pub overall_length_mm: Option<i32>,
+    /// Dedicated emergency lighting type, Emergency.
+    pub dedicated_emergency_lighting_type: Option<String>,
 }
 
 /// Embedded file from GLDF (image, sensor, etc.)
@@ -296,6 +312,19 @@ impl IfcImporter {
             luminaire.descriptive_attributes.ip_code = first_variant.properties.ip_code.clone();
             luminaire.descriptive_attributes.median_useful_life =
                 first_variant.properties.median_useful_life.clone();
+        }
+
+        // Scan the Pset_GLDF_* buckets (written by our exporter, keyed
+        // by buildingSMART bSDD GlobalIds) and populate the full
+        // product-level attribute set. This is the import side of the
+        // BIM-properties spec round-trip — it recognises properties by
+        // their stable dictionary id, so it works regardless of which
+        // Pset they landed in or how the name was localised.
+        if let Some(first_type) = fixture_types.first() {
+            self.scan_bim_properties(
+                first_type.id,
+                &mut luminaire.descriptive_attributes,
+            );
         }
 
         // Extract embedded files (images, sensors) from Pset_GLDF_EmbeddedFile
@@ -764,6 +793,146 @@ impl IfcImporter {
     }
 
     /// Find property set for an element
+    /// Scan every property set attached to `element_id` for properties
+    /// that carry a buildingSMART bSDD GlobalId (in their Description as
+    /// `bSDD:<id>`) and populate `da` accordingly. The import-side of
+    /// the BIM-properties spec round-trip — see
+    /// [`crate::ifc::bim_properties`].
+    fn scan_bim_properties(
+        &self,
+        element_id: u64,
+        da: &mut ProductDescriptiveAttributes,
+    ) {
+        use crate::ifc::bim_properties::resolve_imported_property;
+
+        // Collect every IFCPROPERTYSET attached to the element.
+        let mut pset_ids: Vec<u64> = Vec::new();
+        for rel in self.parser.find_by_type("IFCRELDEFINESBYPROPERTIES") {
+            let params = rel.get_params();
+            let attached = params
+                .get(4)
+                .and_then(|v| v.as_list())
+                .map(|l| l.iter().any(|v| v.as_ref() == Some(element_id)))
+                .unwrap_or(false);
+            if !attached {
+                continue;
+            }
+            if let Some(pset_ref) = params.get(5).and_then(|v| v.as_ref()) {
+                pset_ids.push(pset_ref);
+            }
+        }
+
+        for pset_id in pset_ids {
+            let Some(pset) = self.parser.get(pset_id) else { continue };
+            if pset.entity_type != "IFCPROPERTYSET" {
+                continue;
+            }
+            let pset_params = pset.get_params();
+            let Some(props) = pset_params.get(4).and_then(|v| v.as_list()) else {
+                continue;
+            };
+            for prop_ref in props {
+                let Some(prop_id) = prop_ref.as_ref() else { continue };
+                let Some(prop) = self.parser.get(prop_id) else { continue };
+                if prop.entity_type != "IFCPROPERTYSINGLEVALUE" {
+                    continue;
+                }
+                let pp = prop.get_params();
+                let name = pp.first().and_then(|v| v.as_string()).unwrap_or("");
+                // Description (param[1]) may carry `bSDD:<id>`.
+                let bsdd = pp
+                    .get(1)
+                    .and_then(|v| v.as_string())
+                    .and_then(|d| d.strip_prefix("bSDD:"))
+                    .unwrap_or("");
+                // NominalValue (param[2]) — unwrap the measure/label
+                // text. `as_string` handles IFCLABEL/IFCTEXT/IFCIDENTIFIER;
+                // `as_real` handles the numeric measures (and unwraps
+                // the Typed wrapper); booleans round-trip via as_boolean.
+                let nominal = pp.get(2);
+                let value = nominal
+                    .and_then(|v| v.as_string().map(|s| s.to_string()))
+                    .or_else(|| {
+                        nominal.and_then(|v| v.as_boolean()).map(|b| b.to_string())
+                    })
+                    .or_else(|| {
+                        nominal.and_then(|v| v.as_real()).map(|f| f.to_string())
+                    })
+                    .unwrap_or_default();
+                if value.is_empty() {
+                    continue;
+                }
+
+                if let Some(resolved) = resolve_imported_property(name, bsdd, value) {
+                    Self::apply_bim_property(da, resolved.name, &resolved.value);
+                }
+            }
+        }
+    }
+
+    /// Write one resolved BIM property into the descriptive-attributes
+    /// struct. Only fills empty fields — earlier extraction (from
+    /// Pset_ElectricalDeviceCommon etc.) wins, since those are the
+    /// canonical IFC Psets.
+    fn apply_bim_property(
+        da: &mut ProductDescriptiveAttributes,
+        name: &str,
+        value: &str,
+    ) {
+        match name {
+            "ElectricalSafetyClass" => {
+                da.electrical_safety_class.get_or_insert_with(|| value.to_string());
+            }
+            "IngressProtectionIPCode" => {
+                da.ip_code.get_or_insert_with(|| value.to_string());
+            }
+            "MedianUsefulLife" => {
+                da.median_useful_life.get_or_insert_with(|| value.to_string());
+            }
+            "PowerFactor" => {
+                if da.power_factor.is_none() {
+                    da.power_factor = value.parse().ok();
+                }
+            }
+            "ConstantLightOutput" => {
+                if da.constant_light_output.is_none() {
+                    da.constant_light_output = parse_ifc_bool(value);
+                }
+            }
+            "Weight" => {
+                if da.weight.is_none() {
+                    da.weight = value.parse().ok();
+                }
+            }
+            "IKRating" => {
+                da.ik_rating.get_or_insert_with(|| value.to_string());
+            }
+            "ProductForm" => {
+                da.product_form.get_or_insert_with(|| value.to_string());
+            }
+            "OverallWidth" => {
+                if da.overall_width_mm.is_none() {
+                    da.overall_width_mm = parse_length_mm(value);
+                }
+            }
+            "OverallHeight" => {
+                if da.overall_height_mm.is_none() {
+                    da.overall_height_mm = parse_length_mm(value);
+                }
+            }
+            "OverallLength" => {
+                if da.overall_length_mm.is_none() {
+                    da.overall_length_mm = parse_length_mm(value);
+                }
+            }
+            "DedicatedEmergencyLightingType" => {
+                da.dedicated_emergency_lighting_type
+                    .get_or_insert_with(|| value.to_string());
+            }
+            _ => {}
+        }
+    }
+
     fn find_property_set(&self, element_id: u64, pset_name: &str) -> Option<u64> {
         // Look for IFCRELDEFINESBYPROPERTIES that references our element
         for entity in self.parser.find_by_type("IFCRELDEFINESBYPROPERTIES") {
@@ -1248,6 +1417,23 @@ impl IfcImporter {
             triangles,
         }
     }
+}
+
+/// Parse an IFC boolean value (already stringified to "true"/"false"
+/// by the scan, or a raw `.T.`/`.F.` enum text).
+fn parse_ifc_bool(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "t" | ".t." | "1" => Some(true),
+        "false" | "f" | ".f." | "0" => Some(false),
+        _ => None,
+    }
+}
+
+/// Parse an IFCPOSITIVELENGTHMEASURE (metres, as written by the
+/// exporter) back to GLDF's native millimetres. The exporter divided
+/// mm by 1000; we multiply back and round to the nearest mm.
+fn parse_length_mm(value: &str) -> Option<i32> {
+    value.trim().parse::<f64>().ok().map(|m| (m * 1000.0).round() as i32)
 }
 
 #[cfg(test)]

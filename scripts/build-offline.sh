@@ -7,8 +7,10 @@
 #                                          Drop it anywhere (USB stick, email,
 #                                          file:///tmp/) and double-click to
 #                                          prove gldf.icu runs without a server.
-#                                          Bevy 3D viewer is omitted (~26 MB);
-#                                          Leptos editor only. ~40 MB output.
+#                                          Now also inlines Bevy 3D viewer
+#                                          (~26 MB) and the AcadLisp REPL (lives
+#                                          inside the Leptos editor crate).
+#                                          ~80 MB output.
 #
 #   tmp/gldf-editor-offline-folder/     — Path-rewritten copy of dist/. Open
 #                                          index.html via file:// — the
@@ -72,10 +74,29 @@ JS_NAME=$(basename "$JS_PATH")
 WASM_NAME=$(basename "$WASM_PATH")
 CSS_NAME=$(basename "$CSS_PATH")
 
+# Bevy 3D viewer assets — lazy-loaded in dist/, inlined here so the single
+# HTML can drive 3D rendering AND the Lisp REPL (which calls into Bevy via
+# the `gldf_bevy_*` window bridges). The Lisp interpreter itself lives in
+# the Leptos crate's WASM, but it's useless without Bevy to drive.
+BEVY_JS_PATH=$(find "$DIST_DIR/bevy" -maxdepth 1 -name 'gldf_bevy-*.js' ! -name '*.br' 2>/dev/null | head -1)
+BEVY_WASM_PATH=$(find "$DIST_DIR/bevy" -maxdepth 1 -name 'gldf_bevy-*_bg.wasm' ! -name '*.br' 2>/dev/null | head -1)
+HAVE_BEVY=false
+if [[ -n "$BEVY_JS_PATH" && -f "$BEVY_JS_PATH" && -n "$BEVY_WASM_PATH" && -f "$BEVY_WASM_PATH" ]]; then
+    HAVE_BEVY=true
+    BEVY_JS_NAME=$(basename "$BEVY_JS_PATH")
+    BEVY_WASM_NAME=$(basename "$BEVY_WASM_PATH")
+fi
+
 echo "→ source:        $DIST_DIR"
 echo "  JS:            $JS_NAME ($(du -h "$JS_PATH" | cut -f1))"
 echo "  WASM:          $WASM_NAME ($(du -h "$WASM_PATH" | cut -f1))"
 echo "  CSS:           $CSS_NAME ($(du -h "$CSS_PATH" | cut -f1))"
+if [[ "$HAVE_BEVY" == "true" ]]; then
+    echo "  Bevy JS:       $BEVY_JS_NAME ($(du -h "$BEVY_JS_PATH" | cut -f1))"
+    echo "  Bevy WASM:     $BEVY_WASM_NAME ($(du -h "$BEVY_WASM_PATH" | cut -f1))"
+else
+    echo "  Bevy:          (not found in $DIST_DIR/bevy/ — 3D viewer will be stubbed)"
+fi
 
 mkdir -p "$OUT_DIR"
 
@@ -150,8 +171,16 @@ b64_encode() {
     fi
 }
 
-echo "  encoding WASM → base64 ($(du -h "$WASM_PATH" | cut -f1) source)"
+echo "  encoding Leptos WASM → base64 ($(du -h "$WASM_PATH" | cut -f1) source)"
 WASM_B64=$(b64_encode "$WASM_PATH")
+
+BEVY_JS_CONTENT=""
+BEVY_WASM_B64=""
+if [[ "$HAVE_BEVY" == "true" ]]; then
+    echo "  encoding Bevy WASM → base64 ($(du -h "$BEVY_WASM_PATH" | cut -f1) source)"
+    BEVY_WASM_B64=$(b64_encode "$BEVY_WASM_PATH")
+    BEVY_JS_CONTENT=$(cat "$BEVY_JS_PATH")
+fi
 
 # Build the JS module that:
 #   1. Inlines the JS shim from dist/.
@@ -237,14 +266,98 @@ window.fetch = function offlineFetch(input, init) {
     return __OFFLINE_REAL_FETCH(input, init);
 };
 
-// Tell the Bevy lazy-loader (which lives in the inlined main page script)
-// to short-circuit: the 3D viewer module isn't inlined in single-HTML mode.
-window.loadBevyViewer = async () => {
-    console.warn('[offline] 3D viewer disabled in single-HTML build. Use the folder build for 3D.');
-    return null;
-};
-window.isBevyLoaded = () => false;
-window.isBevyLoading = () => false;
+// Bevy lazy-loader: replace the dist version (which fetches manifest.json +
+// dynamic-imports the bevy bundle from the network) with an in-memory shim.
+// When `__OFFLINE_BEVY_AVAILABLE__ === true` we load the inlined Bevy JS
+// shim + WASM bytes; otherwise we stub the API so the editor still runs
+// without 3D. This needs to override the bevy-loader.js that gets inlined
+// later in <head> — that file also assigns window.loadBevyViewer, so we
+// re-override AFTER it runs by reassigning on DOMContentLoaded.
+
+let __offlineBevyLoaded = false;
+let __offlineBevyLoading = false;
+let __offlineBevyPromise = null;
+
+async function __offlineLoadBevyViewer() {
+    if (!window.__OFFLINE_BEVY_AVAILABLE__) {
+        console.warn('[offline] 3D viewer not inlined in this build.');
+        return null;
+    }
+    if (__offlineBevyLoaded) return;
+    if (__offlineBevyLoading && __offlineBevyPromise) return __offlineBevyPromise;
+    __offlineBevyLoading = true;
+    console.log('[offline-bevy] Booting inlined 3D viewer…');
+    __offlineBevyPromise = (async () => {
+        try {
+            const shimSource = document.getElementById('offline-bevy-shim').textContent;
+            const shimBlob = new Blob([shimSource], { type: 'text/javascript' });
+            const shimUrl = URL.createObjectURL(shimBlob);
+            const bevy = await import(shimUrl);
+            const bevyBytes = __offlineB64ToBytes(window.__OFFLINE_BEVY_WASM_B64__);
+            // Free the giant base64 string immediately — we don't need it again.
+            window.__OFFLINE_BEVY_WASM_B64__ = null;
+            await bevy.default({ module_or_path: bevyBytes });
+            // Attach all camera/joint/room bridges to window so the Lisp
+            // panel + DevTools console can call them. Must run AFTER
+            // bevy.default() (the shim's exports are unreachable until init).
+            for (const name of [
+                'gldf_bevy_set_camera',
+                'gldf_bevy_get_camera',
+                'gldf_bevy_luminaire_tilt',
+                'gldf_bevy_camera_animate',
+                'gldf_bevy_luminaire_animate',
+                'gldf_bevy_reset_tilts',
+                'gldf_bevy_set_ambient',
+                'gldf_bevy_set_room_size',
+                'gldf_bevy_set_surface_color',
+                'gldf_bevy_set_surface_reflectance',
+                'gldf_bevy_set_surface_emissive',
+                'gldf_bevy_get_ambient',
+                'gldf_bevy_get_room_size',
+                'gldf_bevy_get_surface',
+            ]) {
+                if (typeof bevy[name] === 'function') {
+                    window[name] = bevy[name];
+                }
+            }
+            // Suppress browser contextmenu over the canvas (same reason as
+            // the dist bevy-loader: without this, right-mouse-look gets
+            // stuck because the contextmenu eats the mouseup).
+            window.addEventListener('contextmenu', (ev) => {
+                if (ev.target && ev.target.id === 'bevy-canvas') ev.preventDefault();
+            }, true);
+            bevy.run_on_canvas('#bevy-canvas');
+            __offlineBevyLoaded = true;
+            __offlineBevyLoading = false;
+            URL.revokeObjectURL(shimUrl);
+            console.log('[offline-bevy] ✅ 3D viewer running');
+        } catch (e) {
+            const s = String(e);
+            if (s.includes('Using exceptions for control flow') || s.includes("don't mind me")) {
+                __offlineBevyLoaded = true;
+                __offlineBevyLoading = false;
+                return;
+            }
+            console.error('[offline-bevy] failed:', e);
+            __offlineBevyLoading = false;
+            __offlineBevyPromise = null;
+            throw e;
+        }
+    })();
+    return __offlineBevyPromise;
+}
+
+// Install on window now AND re-install once the inlined bevy-loader.js
+// has run (it overwrites window.loadBevyViewer with its network version,
+// so we need to win the last assignment).
+window.loadBevyViewer = __offlineLoadBevyViewer;
+window.isBevyLoaded = () => __offlineBevyLoaded;
+window.isBevyLoading = () => __offlineBevyLoading;
+document.addEventListener('DOMContentLoaded', () => {
+    window.loadBevyViewer = __offlineLoadBevyViewer;
+    window.isBevyLoaded = () => __offlineBevyLoaded;
+    window.isBevyLoading = () => __offlineBevyLoading;
+});
 
 PROLOGUE
 )
@@ -279,10 +392,32 @@ TMP_HTML="$HTML_OUT.tmp"
     echo '    </style>'
 
     # Inline our bootstrap script and the sample base64 map.
+    # The Bevy WASM base64 is HUGE (~36 MB); attach it to window via a
+    # separate small script so V8 can free the intermediate string after
+    # we decode it. The shim source goes into a non-executable <script>
+    # element textContent (same trick as the Leptos shim) so the browser
+    # doesn't try to parse it as JS until we Blob+import it on demand.
     echo '    <script>'
     echo "$SAMPLES_JS_BLOCK"
+    if [[ "$HAVE_BEVY" == "true" ]]; then
+        echo 'window.__OFFLINE_BEVY_AVAILABLE__ = true;'
+    else
+        echo 'window.__OFFLINE_BEVY_AVAILABLE__ = false;'
+    fi
     echo "$BOOTSTRAP_PROLOGUE"
     echo '    </script>'
+
+    if [[ "$HAVE_BEVY" == "true" ]]; then
+        # Bevy WASM as base64 (~36 MB string). Separate <script> so the
+        # parser can hand it off and free the source range quickly.
+        echo '    <script>'
+        echo "window.__OFFLINE_BEVY_WASM_B64__ = '$BEVY_WASM_B64';"
+        echo '    </script>'
+        # Bevy wasm-bindgen shim — same Blob-URL dance as the Leptos shim.
+        echo '    <script type="x-offline-bevy-shim" id="offline-bevy-shim">'
+        echo "$BEVY_JS_CONTENT"
+        echo '    </script>'
+    fi
 
     # The wasm-bindgen JS shim is an ES module (top-level `export`
     # statements) so we can't paste it into a normal <script>. We
@@ -338,7 +473,11 @@ echo
 echo "  ── Single-HTML build ── (THE incredulity-demo: ONE file, ZERO infra)"
 echo "  open '$HTML_OUT'"
 echo "      Works in every browser via file://."
-echo "      Leptos editor only; 3D viewer omitted."
+if [[ "$HAVE_BEVY" == "true" ]]; then
+    echo "      Includes Leptos editor + Bevy 3D viewer + AcadLisp REPL."
+else
+    echo "      Leptos editor only; 3D viewer omitted (no dist/bevy/ found)."
+fi
 echo "      Drag-drop any .gldf to load; 4 sample GLDFs inlined."
 echo
 echo "  ── Folder build ── (practical: lighter, plus the 3D viewer)"

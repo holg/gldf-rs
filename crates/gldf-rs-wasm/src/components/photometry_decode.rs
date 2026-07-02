@@ -68,6 +68,8 @@ pub enum ParseKind {
     Ies,
     /// `Eulumdat::parse` succeeded (`.ldt` / EULUMDAT).
     Eulumdat,
+    /// `eulumdat::atla::xml::parse` succeeded (TM-33-23 / ATLA-S001 XML).
+    Tm33,
 }
 
 impl ParseKind {
@@ -76,18 +78,42 @@ impl ParseKind {
         match self {
             ParseKind::Ies => "IES",
             ParseKind::Eulumdat => "EULUMDAT",
+            ParseKind::Tm33 => "TM-33 XML",
         }
     }
 }
 
-/// Try IES first, then EULUMDAT. The previous magic-string approach
-/// (`starts_with("IESNA")`) missed LM-63-2019 (`IES:LM-63-2019`) and
-/// LM-63-1986 (no header at all); IES parse errors are reliable enough to
-/// drive a try-then-fall-back path without false positives, so we use
-/// that instead. Returns the parsed `Eulumdat` + which parser succeeded.
+/// Try IES first, then EULUMDAT, then TM-33 XML.
+///
+/// The previous magic-string approach (`starts_with("IESNA")`) missed
+/// LM-63-2019 (`IES:LM-63-2019`) and LM-63-1986 (no header at all); IES
+/// parse errors are reliable enough to drive a try-then-fall-back path
+/// without false positives.
+///
+/// TM-33-23 / ATLA-S001 is IESNA's XML photometric format — content
+/// that starts with `<` (after BOM/whitespace stripping) and parses
+/// via `atla::xml::parse` converts cleanly to `Eulumdat` via
+/// `From<&LuminaireOpticalData>`. We gate on the XML opener so we
+/// don't waste a parse attempt on every malformed LDT.
+///
+/// Returns the parsed `Eulumdat` + which parser succeeded.
 pub fn parse_photometry_with_fallback(content: &str) -> Option<(Eulumdat, ParseKind)> {
     if let Ok(ldt) = IesParser::parse(content) {
         return Some((ldt, ParseKind::Ies));
     }
-    Eulumdat::parse(content).ok().map(|ldt| (ldt, ParseKind::Eulumdat))
+    if let Ok(ldt) = Eulumdat::parse(content) {
+        return Some((ldt, ParseKind::Eulumdat));
+    }
+    // TM-33 XML fallback. content.trim_start_matches('\u{feff}') drops
+    // an optional UTF-8 BOM the way atla::xml::parse expects.
+    let trimmed = content
+        .trim_start_matches('\u{feff}')
+        .trim_start();
+    if trimmed.starts_with('<') {
+        if let Ok(doc) = eulumdat::atla::xml::parse(content) {
+            let ldt: Eulumdat = (&doc).into();
+            return Some((ldt, ParseKind::Tm33));
+        }
+    }
+    None
 }

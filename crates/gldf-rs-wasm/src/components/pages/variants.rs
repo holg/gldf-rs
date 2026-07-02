@@ -13,7 +13,8 @@
 //! port; the mounting editor/render and per-variant DescriptiveAttributes
 //! badges land in slice 2 with the editor pages.
 
-use crate::components::{LdtPanel, LocaleFooView};
+use crate::components::pages::variant_editor::VariantModalHost;
+use crate::components::LocaleFooView;
 use crate::exports::export_patched_variant_photometry;
 use crate::state::use_gldf;
 use gldf_rs::{
@@ -21,6 +22,7 @@ use gldf_rs::{
     VariantPhotometryResolution,
 };
 use leptos::prelude::*;
+use std::sync::Arc;
 
 /// One resolved photometry slot, ready to render: the patched (or raw) LDT
 /// bytes plus the resolution metadata (lumens/watts/emitter id). Built once
@@ -51,6 +53,14 @@ struct VariantProbe {
 #[component]
 pub fn VariantsPage() -> impl IntoView {
     let state = use_gldf();
+    // Shared signal for the per-card Edit affordance: `Some(idx)` while
+    // the modal for that variant is open. The modal host below is the
+    // same `<VariantModalHost>` the editor page uses — clicking Edit
+    // on a read-mode card opens the *full* editor (Mountings, GTIN,
+    // ProductSeries, Geometry, etc.) without forcing a global mode flip.
+    let editing = RwSignal::new(None::<usize>);
+    let open = Memo::new(move |_| editing.get().is_some());
+    let on_close: Arc<dyn Fn() + Send + Sync> = Arc::new(move || editing.set(None));
 
     view! {
         {move || state.with(|s| {
@@ -74,7 +84,7 @@ pub fn VariantsPage() -> impl IntoView {
             view! {
                 <div class="variants-container">
                     <div class="variant-cards">
-                        {variants.into_iter().map(|v| {
+                        {variants.into_iter().enumerate().map(|(idx, v)| {
                             let id = v.id.clone();
                             let emitter_data = get_variant_emitter_data(&product, &id);
                             // Probe: capture chain state for the diagnostic
@@ -133,6 +143,8 @@ pub fn VariantsPage() -> impl IntoView {
                                 .collect();
                             view! {
                                 <VariantCard
+                                    idx=idx
+                                    editing=editing
                                     variant=v
                                     emitters=emitter_data.emitters
                                     photometry_slots=slots
@@ -144,13 +156,18 @@ pub fn VariantsPage() -> impl IntoView {
                 </div>
             }.into_any()
         })}
+        // Shared modal — opens whichever variant the user clicked Edit on.
+        // The host is rendered unconditionally; `open` derives from
+        // `editing.is_some()`, so it stays invisible until the user
+        // clicks an Edit button.
+        <VariantModalHost editing=editing open=open on_close=on_close />
     }
 }
 
 /// Walk Photometry → File → embedded_files to pull the raw .ies/.ldt bytes
 /// for `photometry_id`. Returns `None` if the photometry has no file ref or
 /// the referenced file isn't embedded.
-fn resolve_raw_photometry_bytes(
+pub(crate) fn resolve_raw_photometry_bytes(
     product: &gldf_rs::GldfProduct,
     embedded_files: &std::collections::HashMap<String, Vec<u8>>,
     photometry_id: &str,
@@ -166,6 +183,13 @@ fn resolve_raw_photometry_bytes(
 
 #[component]
 fn VariantCard(
+    /// Position of this variant in `product_definitions.variants.variant`.
+    /// The Edit button writes this index into `editing` to open the
+    /// shared modal at the right slot.
+    idx: usize,
+    /// Shared signal driven by the page's `VariantModalHost`. Setting
+    /// it to `Some(idx)` opens the per-variant editor.
+    editing: RwSignal<Option<usize>>,
     variant: gldf_rs::gldf::product_definitions::Variant,
     emitters: Vec<gldf_rs::EmitterRenderData>,
     photometry_slots: Vec<VariantPhotometrySlot>,
@@ -180,8 +204,70 @@ fn VariantCard(
     let product_number = variant.product_number.clone();
     let tender_text = variant.tender_text.clone();
     let id_for_dl = variant.id.clone();
+    // Human-readable summary of `<Mountings>` for the read view. The
+    // XSD allows any combination of the four top-level branches
+    // (Ceiling / Wall / Ground / WorkingPlane); we join whichever
+    // branches are set with " · " separators. Returns `None` when the
+    // variant has no Mountings at all so the read view stays quiet.
+    let mountings_summary: Option<String> = variant.mountings.as_ref().and_then(|m| {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(c) = m.ceiling.as_ref() {
+            if let Some(r) = c.recessed.as_ref() {
+                let mut s = format!("Ceiling · Recessed {} mm", r.recessed_depth);
+                if let Some(rc) = r.rectangular_cutout.as_ref() {
+                    s.push_str(&format!(
+                        " · cutout {}×{} mm",
+                        rc.width, rc.length
+                    ));
+                } else if let Some(cc) = r.circular_cutout.as_ref() {
+                    s.push_str(&format!(" · ⌀ {} mm cutout", cc.diameter));
+                }
+                parts.push(s);
+            } else if c.surface_mounted.is_some() {
+                parts.push("Ceiling · Surface mounted".to_string());
+            } else if let Some(p) = c.pendant.as_ref() {
+                parts.push(format!("Ceiling · Pendant {:.0} mm", p.pendant_length));
+            } else {
+                parts.push("Ceiling".to_string());
+            }
+        }
+        if let Some(w) = m.wall.as_ref() {
+            let mut s = format!("Wall · h {} mm", w.mounting_height);
+            if let Some(r) = w.recessed.as_ref() {
+                s.push_str(&format!(" · Recessed {} mm", r.recessed_depth));
+            } else if w.surface_mounted.is_some() {
+                s.push_str(" · Surface mounted");
+            }
+            parts.push(s);
+        }
+        if let Some(g) = m.ground.as_ref() {
+            if let Some(pt) = g.pole_top.as_ref() {
+                let h = pt.get_pole_height().unwrap_or(0);
+                parts.push(format!("Ground · Pole-top {} mm", h));
+            } else if let Some(pi) = g.pole_integrated.as_ref() {
+                let h = pi.get_pole_height().unwrap_or(0);
+                parts.push(format!("Ground · Pole-integrated {} mm", h));
+            } else if g.free_standing.is_some() {
+                parts.push("Ground · Free-standing".to_string());
+            } else if g.surface_mounted.is_some() {
+                parts.push("Ground · Surface mounted".to_string());
+            } else {
+                parts.push("Ground".to_string());
+            }
+        }
+        if m.working_plane.is_some() {
+            parts.push("Working plane".to_string());
+        }
+        if parts.is_empty() { None } else { Some(parts.join(" · ")) }
+    });
 
     let id_for_anchor = format!("variant-{}", id);
+    // `data-testid="variant-edit-<id>"` so the e2e demo can target the
+    // button per variant. The `move ||` closure captures `editing` and
+    // `idx` — clicking flips the same signal `VariantModalHost` is
+    // listening on, so the modal opens for THIS variant.
+    let id_for_testid = id.clone();
+    let on_edit = move |_| editing.set(Some(idx));
     view! {
         <div id=id_for_anchor class="variant-card variant-card-expanded">
             <div class="card-header-row">
@@ -194,6 +280,13 @@ fn VariantCard(
                         { format!("GTIN {}", g) }
                     </span>
                 })}
+                <button
+                    class="btn btn-secondary"
+                    data-testid=format!("variant-edit-{}", id_for_testid)
+                    on:click=on_edit
+                    style="padding: 4px 12px; font-size: 12px; margin-left: 8px;"
+                    title="Edit this variant — Mountings, ProductNumber, Name, GTIN, ProductSeries, Geometry bindings"
+                >{ "✎ Edit" }</button>
             </div>
             <div class="card-content">
                 {name.map(|n| view! {
@@ -218,6 +311,19 @@ fn VariantCard(
                     <div style="margin-bottom: 4px;">
                         <span style="font-size: 11px; color: var(--text-secondary);">{ "Tender: " }</span>
                         <LocaleFooView value=tt compact=true />
+                    </div>
+                })}
+                // Mountings — read-only summary. Same data the Edit modal
+                // shows; rendered here so users can confirm depth +
+                // cutout without opening the editor. Skipped when the
+                // variant has no `<Mountings>` (XSD minOccurs=0).
+                {mountings_summary.map(|s| view! {
+                    <div
+                        data-testid=format!("variant-mountings-{}", id_for_testid.clone())
+                        style="margin-bottom: 4px;"
+                    >
+                        <span style="font-size: 11px; color: var(--text-secondary);">{ "Mounting: " }</span>
+                        <span style="font-size: 12px;">{ s }</span>
                     </div>
                 })}
 
@@ -291,36 +397,84 @@ fn VariantCard(
                                     (None, Some(w)) => format!("override: {w:.1} W"),
                                     (None, None) => "raw photometry (no variant override)".to_string(),
                                 };
+                                // Per-row format chooser. Default = LDT,
+                                // the historical behaviour. The select
+                                // sits inline next to the Download button
+                                // so the user picks the wire format AT
+                                // download time, without a modal. Lib does
+                                // the conversion (LDT / IES / TM-33 XML);
+                                // the WASM stays a UI shell.
+                                let format_sig = RwSignal::new(
+                                    gldf_rs::PhotometryExportFormat::Ldt,
+                                );
+                                let pid_for_change = pid_for_dl.clone();
+                                let on_format = move |e: web_sys::Event| {
+                                    use wasm_bindgen::JsCast;
+                                    let _ = &pid_for_change;
+                                    if let Some(target) = e.target() {
+                                        if let Ok(sel) =
+                                            target.dyn_into::<web_sys::HtmlSelectElement>()
+                                        {
+                                            if let Some(fmt) =
+                                                gldf_rs::PhotometryExportFormat::from_str(
+                                                    &sel.value(),
+                                                )
+                                            {
+                                                format_sig.set(fmt);
+                                            }
+                                        }
+                                    }
+                                };
                                 let on_click = move |_| {
                                     if let Err(err) = export_patched_variant_photometry(
                                         state,
                                         &pid_for_dl,
                                         lumens,
                                         watts,
+                                        format_sig.get(),
                                     ) {
                                         log::error!("variant {} photometry {}: {}", id_dl, pid_for_dl, err);
                                     }
                                 };
-                                let ldt_panel = slot.ldt_bytes.map(|bytes| view! {
-                                    <div style="margin: 6px 0;">
-                                        <LdtPanel bytes=bytes width=420.0 height=320.0 />
-                                    </div>
-                                });
+                                // Inline LdtPanel render lived here, but
+                                // moved to the LightSource card: that's
+                                // the only place that uniquely owns the
+                                // chain (one Emitter can carry many
+                                // FixedLightEmitter children with their
+                                // own rotations, so Emitter rendering is
+                                // ambiguous; a Variant just composes
+                                // existing chains). The patched-download
+                                // button stays here because variant flux
+                                // overrides are what produce the patched
+                                // bytes.
+                                let _ = slot.ldt_bytes;
                                 view! {
                                     <div style="margin-bottom: 12px; padding: 8px; background: var(--bg-secondary); border-radius: 6px;">
-                                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px;">
+                                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                             <span style="font-family: var(--font-mono); font-size: 11px;">{ pid.clone() }</span>
                                             <span style="color: var(--text-tertiary); font-size: 10px;">{ emitter_label }</span>
                                             <span style="color: var(--text-secondary); font-size: 10px;">{ override_summary }</span>
+                                            <select
+                                                on:change=on_format
+                                                style="margin-left: auto; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 6px; font-size: 11px;"
+                                                title="Output format"
+                                            >
+                                                <option value="ldt" selected>{ "LDT (EULUMDAT)" }</option>
+                                                <option value="ies">{ "IES LM-63" }</option>
+                                                <option value="atla_xml">{ "TM-33 XML" }</option>
+                                                <option value="atla_json">{ "ATLA JSON" }</option>
+                                            </select>
                                             <button
                                                 class="btn-download-file"
                                                 on:click=on_click
-                                                style="margin-left: auto; background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--accent-blue); font-size: 11px;"
+                                                style="background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--accent-blue); font-size: 11px;"
                                             >
                                                 { "⬇ Download (patched)" }
                                             </button>
                                         </div>
-                                        { ldt_panel }
+                                        <div style="margin-top: 4px; font-size: 10px; color: var(--text-tertiary); font-style: italic;">
+                                            { "Diagram on the Light Sources page." }
+                                        </div>
                                     </div>
                                 }
                             }).collect::<Vec<_>>()}

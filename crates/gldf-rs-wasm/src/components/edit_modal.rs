@@ -26,27 +26,24 @@ pub fn EditModal(
     on_close: Arc<dyn Fn() + Send + Sync>,
     children: ChildrenFn,
 ) -> impl IntoView {
-    // Esc key handler — install once per mount, tear down on unmount.
-    // Re-runs only when `open` flips so we don't keep a stale listener.
+    // Esc key handler — install ONCE per modal instance and gate by
+    // `open.get_untracked()` inside the closure. Previous version
+    // re-ran an Effect on every open flip and called `cb.forget()` in
+    // each branch, which leaked one listener per open cycle. Doing it
+    // once at mount keeps the listener count constant at 1; the
+    // forget() leak is bounded to that single instance and torn down
+    // with the page.
     let on_close_for_esc = on_close.clone();
-    Effect::new(move |_| {
-        if !open.get() {
-            return;
-        }
-        let Some(window) = web_sys::window() else { return };
-        let on_close = on_close_for_esc.clone();
+    if let Some(window) = web_sys::window() {
         let cb = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
-            if e.key() == "Escape" {
-                on_close();
+            if e.key() == "Escape" && open.get_untracked() {
+                (on_close_for_esc)();
             }
         }) as Box<dyn FnMut(_)>);
         let _ = window
             .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
-        // Leak the closure: it's tiny and the listener tears down with the
-        // page unload. Keeping it would need wrapping in StoredValue +
-        // explicit cleanup; not worth the complexity here.
         cb.forget();
-    });
+    }
 
     let on_backdrop = {
         let on_close = on_close.clone();
@@ -57,12 +54,25 @@ pub fn EditModal(
         e.stop_propagation();
     };
 
+    // Swallow drag-and-drop on the backdrop. Without this, a file dropped
+    // onto the wizard (or any modal) bubbles past it to the Welcome
+    // screen's `on:drop`, which then loads the file as a brand-new GLDF
+    // and abandons whatever the user was doing. preventDefault stops the
+    // browser's "navigate to file://…" fallback when nothing handles it.
+    let on_dnd_swallow = move |e: web_sys::DragEvent| {
+        e.prevent_default();
+        e.stop_propagation();
+    };
+
     view! {
         {move || if open.get() {
             view! {
                 <div
                     class="edit-modal-backdrop"
                     on:click=on_backdrop.clone()
+                    on:dragenter=on_dnd_swallow
+                    on:dragover=on_dnd_swallow
+                    on:drop=on_dnd_swallow
                     style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; overflow-y: auto;"
                 >
                     <div

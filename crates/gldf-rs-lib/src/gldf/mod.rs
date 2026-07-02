@@ -35,7 +35,16 @@ fn get_xmlns_xsi() -> String {
 ///
 /// This struct is intended to represent GLDF products conforming to the schema specified at
 /// `<https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd>`
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+// Manual `Default` impl below — the derived one would zero-init the
+// xmlns_xsi and xsnonamespaceschemaLocation fields to empty strings,
+// which produces XML with `xmlns:xsi=""` and an empty schema attr.
+// That round-trips through OUR parser (the serde defaults rehydrate
+// the missing attrs) but breaks GLDF tooling that does proper XML
+// namespace handling — including this repo's own reload path, which
+// fails with "Failed to parse product.xml" when the namespace attr
+// is the empty string. Regression: every wizard-built GLDF couldn't
+// be re-imported.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "Root")]
 pub struct GldfProduct {
     /// This field is not serialized or deserialized but can be used to store the path to the
@@ -65,4 +74,17 @@ pub struct GldfProduct {
     /// The product definitions section of the GLDF product.
     #[serde(rename = "ProductDefinitions")]
     pub product_definitions: ProductDefinitions,
+}
+
+impl Default for GldfProduct {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            xmlns_xsi: get_xmlns_xsi(),
+            xsnonamespaceschemalocation: get_xsnonamespaceschemalocation(),
+            header: Header::default(),
+            general_definitions: GeneralDefinitions::default(),
+            product_definitions: ProductDefinitions::default(),
+        }
+    }
 }

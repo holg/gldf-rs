@@ -258,8 +258,11 @@ html, body {
 
 .welcome-buttons {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 12px;
     margin-top: 8px;
+    max-width: 720px;
 }
 
 /* Drop Zone */
@@ -2812,6 +2815,11 @@ label {
     color: var(--accent-yellow);
 }
 
+.content-type-spectrum {
+    background: rgba(100, 210, 255, 0.2);
+    color: var(--accent-cyan);
+}
+
 .content-type-other {
     background: rgba(142, 142, 147, 0.2);
     color: var(--text-secondary);
@@ -3178,7 +3186,7 @@ fieldset legend {
     font-size: 11px;
     padding: 3px 8px;
     background: var(--bg-input);
-    color: var(--text-secondary);
+    color: var(--text-primary);
     border-radius: 4px;
     margin: 2px;
 }

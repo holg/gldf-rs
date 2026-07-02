@@ -178,7 +178,7 @@ pub fn EmitterTypeForm(
                             </p>
                             <label style="display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; font-size: 12px;">
                                 <span style="color: var(--text-secondary);">{ "Photometry" }</span>
-                                <select on:change=on_photo style="font-size: 12px; padding: 3px 6px;">
+                                <select on:change=on_photo data-testid="emitter-form-photometry" style="font-size: 12px; padding: 3px 6px;">
                                     {if photos.is_empty() {
                                         view! { <option value="">{ "(no Photometry declared)" }</option> }.into_any()
                                     } else {
@@ -193,7 +193,7 @@ pub fn EmitterTypeForm(
                             </label>
                             <label style="display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; font-size: 12px;">
                                 <span style="color: var(--text-secondary);">{ "Fixed LightSource" }</span>
-                                <select on:change=on_fixed style="font-size: 12px; padding: 3px 6px;">
+                                <select on:change=on_fixed data-testid="emitter-form-lightsource" style="font-size: 12px; padding: 3px 6px;">
                                     {if fixed_ls.is_empty() {
                                         view! { <option value="">{ "(no FixedLightSource)" }</option> }.into_any()
                                     } else {
@@ -305,6 +305,7 @@ pub fn EmitterTypeForm(
                         <button
                             on:click=on_click
                             disabled=disabled
+                            data-testid="emitter-form-submit"
                             style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                         >{ label }</button>
                         <button

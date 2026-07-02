@@ -1,0 +1,52 @@
+{
+  "chapter": "Fill the metadata panes",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "_comment": "Chapter 2 has 11 cues of very mixed length. Cues 1–3 and 5–9 are short (2–8s); cue 4 is 14.5s, cue 7 is 13s, cue 10 is 35s. Match length to cue duration — Aria reads about 2.5 words per second.",
+  "cues": [
+    {
+      "cue": "Act 9 — Header pane",
+      "text": "Header metadata."
+    },
+    {
+      "cue": "Act 10 — Photometry pane",
+      "text": "The photometry pane."
+    },
+    {
+      "cue": "Act 11 — Electrical pane",
+      "text": "Electrical attributes: safety class, IP code, power factor."
+    },
+    {
+      "cue": "Act 12 — Mechanical pane",
+      "text": "Mechanical: housing dimensions, weight, IK rating. The fields populate as we click through, and the editor stamps each change into the live GLDF state in memory."
+    },
+    {
+      "cue": "Act 13 — Applications pane",
+      "text": "Applications — the closed XSD enum of intended use cases."
+    },
+    {
+      "cue": "Act 14 — Approval Marks pane",
+      "text": "Approval marks — the certificates the luminaire ships with."
+    },
+    {
+      "cue": "Act 15 — Hyperlinks pane",
+      "text": "Hyperlinks for the manufacturer page and the product spec sheet. These show up on the overview and become clickable in downstream catalogs."
+    },
+    {
+      "cue": "Act 16 — Pictures pane",
+      "text": "Pictures — the product photo."
+    },
+    {
+      "cue": "Act 17 — Emergency pane",
+      "text": "Emergency mode is tagged as Guide Light."
+    },
+    {
+      "cue": "Act 18 — Marketing pane",
+      "text": "Marketing data. Housing color by RAL number, per variant — the RAL picker shows real sRGB swatches so the color choice is unambiguous. Two target markets, two approvals, and an industry award round out the marketing record. Notice how each setting on the variants page is scope-aware: editing on the variant tab overrides the product-level value, and you can see the inheritance indicator switch as you toggle between scopes."
+    },
+    {
+      "cue": "Act 19 — Custom Properties pane",
+      "text": "Custom properties — vendor-specific extensions the XSD can't natively represent. None for this file."
+    }
+  ]
+}

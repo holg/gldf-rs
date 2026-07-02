@@ -12,7 +12,11 @@
 //! photometry/spectrum/light-source triangle is actually wired up.
 
 use crate::components::pages::link_hint::LinkHint;
-use crate::components::{EditModal, IdRenameChip, LocaleFooView};
+use crate::components::pages::variants::resolve_raw_photometry_bytes;
+use crate::components::{
+    EditModal, IdRenameChip, LdtPanel, LightSourceExportMenu, LocaleFooView, SpdPanel,
+};
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
 use std::sync::Arc;
 use gldf_rs::gldf::general_definitions::electrical::Voltage;
@@ -22,7 +26,6 @@ use gldf_rs::gldf::general_definitions::lightsources::{
 };
 use gldf_rs::gldf::header::{Locale, LocaleFoo};
 use leptos::prelude::*;
-use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 
@@ -54,6 +57,8 @@ pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoVie
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             let ls = s.product.general_definitions.light_sources.as_ref();
             let fixed: Vec<FixedLightSource> = ls
                 .map(|l| l.fixed_light_source.clone())
@@ -70,37 +75,40 @@ pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoVie
                     <div class="light-sources-toolbar" style="display: flex; gap: 8px; margin: 0 0 12px 0;">
                         <button
                             on:click=on_add_fixed
+                            data-testid="ls-add-fixed"
                             style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                         >
-                            { "+ New Fixed LightSource" }
+                            { tr("gldf.light_sources.add_fixed") }
                         </button>
                         <button
                             on:click=on_add_changeable
                             style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                         >
-                            { "+ New Changeable LightSource" }
+                            { tr("gldf.light_sources.add_changeable") }
                         </button>
                         <button
                             on:click=on_add_multi_channel
                             style="padding: 4px 10px; font-size: 12px; background: var(--accent-purple); color: white; border: none; border-radius: 4px; cursor: pointer;"
                         >
-                            { "+ New MultiChannel LightSource" }
+                            { tr("gldf.light_sources.add_multi_channel") }
                         </button>
                     </div>
                 }.into_any()
             } else { ().into_any() };
 
             if fixed.is_empty() && changeable.is_empty() && multi_channel.is_empty() {
+                let empty_msg = if editable {
+                    tr("gldf.light_sources.empty_editor_hint")
+                } else {
+                    tr("gldf.light_sources.empty")
+                };
                 return view! {
                     <>
                         { toolbar }
                         <div class="empty-state">
                             <div class="icon">{ "💡" }</div>
-                            <h3>{ "No Light Sources" }</h3>
-                            <p>{
-                                if editable { "Click + New … above to add the first one." }
-                                else { "This GLDF file has no light source definitions" }
-                            }</p>
+                            <h3>{ tr("gldf.light_sources.no_sources") }</h3>
+                            <p>{ empty_msg }</p>
                         </div>
                     </>
                 }.into_any();
@@ -109,13 +117,13 @@ pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoVie
             view! {
                 <>
                     <LinkHint
-                        title="This is where photometry, spectrum, and light source come together.".to_string()
-                        body="A FixedLightSource / ChangeableLightSource is where the GLDF schema lets you attach a SpectrumReference. The Spectrum row below is interactive — pick one of the declared spectra or drop a .spd file to embed and link it in one step. Emitters then pair this light source with a photometry to compose the beam.".to_string()
+                        title=tr("gldf.light_sources.hint_title")
+                        body=tr("gldf.light_sources.description")
                     />
                     { toolbar }
                     {if !fixed.is_empty() {
                         view! {
-                            <h3 style="margin-bottom: 16px; color: var(--text-secondary);">{ "Fixed Light Sources" }</h3>
+                            <h3 style="margin-bottom: 16px; color: var(--text-secondary);">{ tr("gldf.light_sources.fixed_title") }</h3>
                             <div class="light-source-cards">
                                 {fixed.into_iter().map(|ls| view! { <FixedCard ls=ls editable=editable /> }).collect::<Vec<_>>()}
                             </div>
@@ -123,7 +131,7 @@ pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoVie
                     } else { ().into_any() }}
                     {if !changeable.is_empty() {
                         view! {
-                            <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ "Changeable Light Sources" }</h3>
+                            <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ tr("gldf.light_sources.changeable_title") }</h3>
                             <div class="light-source-cards">
                                 {changeable.into_iter().map(|ls| view! { <ChangeableCard ls=ls editable=editable /> }).collect::<Vec<_>>()}
                             </div>
@@ -131,7 +139,7 @@ pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoVie
                     } else { ().into_any() }}
                     {if !multi_channel.is_empty() {
                         view! {
-                            <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ "Multi-Channel Light Sources" }</h3>
+                            <h3 style="margin: 24px 0 16px; color: var(--text-secondary);">{ tr("gldf.light_sources.multi_channel_title") }</h3>
                             <div class="light-source-cards">
                                 {multi_channel.into_iter().map(|ls| view! { <MultiChannelCard ls=ls editable=editable /> }).collect::<Vec<_>>()}
                             </div>
@@ -178,12 +186,16 @@ fn FixedCard(ls: FixedLightSource, editable: bool) -> impl IntoView {
                 <IdRenameChip current_id=ls_id.clone() editable=editable on_rename=on_rename />
                 <span class="card-type">{ "Fixed" }</span>
                 {if editable && !is_editing.get() {
+                    let ls_id_for_testid = ls_id.clone();
+                    let ls_id_for_export = ls_id.clone();
                     view! {
                         <span style="margin-left: auto; display: inline-flex; gap: 6px;">
                             <button
                                 on:click=on_edit
+                                data-testid=format!("ls-edit-{}", ls_id_for_testid)
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                             >{ "✎ Edit" }</button>
+                            <LightSourceExportMenu light_source_id=ls_id_for_export />
                             <button
                                 on:click=on_remove
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--accent-orange); border-radius: 4px; cursor: pointer; color: var(--accent-orange);"
@@ -195,6 +207,7 @@ fn FixedCard(ls: FixedLightSource, editable: bool) -> impl IntoView {
             <div class="card-content">
                 <FixedReadBody ls=ls.clone() />
             </div>
+            <FixedLightSourceRenders light_source_id=ls.id.clone() />
             {if editable {
                 let ls_for_modal = ls.clone();
                 let on_close_for_modal: Arc<dyn Fn() + Send + Sync> = Arc::new(move || is_editing.set(false));
@@ -269,6 +282,18 @@ fn FixedReadBody(ls: FixedLightSource) -> impl IntoView {
                         {color.color_rendering_index.map(|cri| view! {
                             <PropertyRow label="CRI (Ra)" value=format!("{}", cri) code=false />
                         })}
+                        {color.tlci.map(|t| view! {
+                            <PropertyRow label="TLCI" value=format!("{}", t) code=false />
+                        })}
+                        {color.melanopic_factor.map(|m| view! {
+                            <PropertyRow label="Melanopic factor" value=format!("{:.3}", m) code=false />
+                        })}
+                        {color.initial_color_tolerance.clone().map(|t| view! {
+                            <PropertyRow label="Initial color tolerance" value=t code=false />
+                        })}
+                        {color.maintained_color_tolerance.clone().map(|t| view! {
+                            <PropertyRow label="Maintained color tolerance" value=t code=false />
+                        })}
                     </>
                 })}
                 {ls.light_source_maintenance.clone().map(|m| view! {
@@ -333,12 +358,14 @@ fn ChangeableCard(ls: ChangeableLightSource, editable: bool) -> impl IntoView {
                 <IdRenameChip current_id=ls_id.clone() editable=editable on_rename=on_rename />
                 <span class="card-type changeable">{ "Changeable" }</span>
                 {if editable && !is_editing.get() {
+                    let ls_id_for_export = ls_id.clone();
                     view! {
                         <span style="margin-left: auto; display: inline-flex; gap: 6px;">
                             <button
                                 on:click=on_edit
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                             >{ "✎ Edit" }</button>
+                            <LightSourceExportMenu light_source_id=ls_id_for_export />
                             <button
                                 on:click=on_remove
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--accent-orange); border-radius: 4px; cursor: pointer; color: var(--accent-orange);"
@@ -395,6 +422,36 @@ fn ChangeableReadBody(ls: ChangeableLightSource) -> impl IntoView {
                 {ls.spectrum_reference.clone().map(|sr| view! {
                     <PropertyRow label="Spectrum" value=sr.spectrum_id code=true />
                 })}
+                {ls.color_information.clone().map(|color| view! {
+                    <>
+                        {color.correlated_color_temperature.map(|cct| view! {
+                            <PropertyRow label="Color Temperature" value=format!("{} K", cct) code=false />
+                        })}
+                        {color.color_temperature_adjusting_range.clone().and_then(|range| {
+                            match (range.lower, range.upper) {
+                                (Some(lo), Some(hi)) => Some(view! {
+                                    <PropertyRow label="CCT Range (Tunable)" value=format!("{}–{} K", lo, hi) code=false />
+                                }),
+                                _ => None,
+                            }
+                        })}
+                        {color.color_rendering_index.map(|cri| view! {
+                            <PropertyRow label="CRI (Ra)" value=format!("{}", cri) code=false />
+                        })}
+                        {color.tlci.map(|t| view! {
+                            <PropertyRow label="TLCI" value=format!("{}", t) code=false />
+                        })}
+                        {color.melanopic_factor.map(|m| view! {
+                            <PropertyRow label="Melanopic factor" value=format!("{:.3}", m) code=false />
+                        })}
+                        {color.initial_color_tolerance.clone().map(|t| view! {
+                            <PropertyRow label="Initial color tolerance" value=t code=false />
+                        })}
+                        {color.maintained_color_tolerance.clone().map(|t| view! {
+                            <PropertyRow label="Maintained color tolerance" value=t code=false />
+                        })}
+                    </>
+                })}
                 {ls.light_source_maintenance.clone().map(|m| view! {
                     <>
                         {m.lifetime.map(|l| view! {
@@ -416,7 +473,6 @@ fn ChangeableReadBody(ls: ChangeableLightSource) -> impl IntoView {
 #[component]
 fn MultiChannelCard(ls: MultiChannelLightSource, editable: bool) -> impl IntoView {
     let state = use_gldf();
-    let ls_id = ls.id.clone();
     let ls_for_rename = ls.id.clone();
     let ls_for_remove = ls.id.clone();
     let is_editing = RwSignal::new(false);
@@ -443,21 +499,24 @@ fn MultiChannelCard(ls: MultiChannelLightSource, editable: bool) -> impl IntoVie
     };
 
     let ls_id_for_modal_title = ls.id.clone();
+    let ls_id_for_export = ls.id.clone();
     let ls_for_modal = ls.clone();
     let close_modal: Arc<dyn Fn() + Send + Sync> = Arc::new(move || is_editing.set(false));
 
     view! {
         <div class="light-source-card">
             <div class="card-header-row">
-                <IdRenameChip current_id=ls_id editable=editable on_rename=on_rename />
+                <IdRenameChip current_id=ls.id.clone() editable=editable on_rename=on_rename />
                 <span class="card-type" style="background: var(--accent-purple);">{ "MultiChannel" }</span>
                 {if editable {
+                    let ls_id_for_export = ls_id_for_export.clone();
                     view! {
                         <span style="margin-left: auto; display: inline-flex; gap: 6px;">
                             <button
                                 on:click=on_edit
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                             >{ "✎ Edit" }</button>
+                            <LightSourceExportMenu light_source_id=ls_id_for_export />
                             <button
                                 on:click=on_remove
                                 style="padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--accent-orange); border-radius: 4px; cursor: pointer; color: var(--accent-orange);"
@@ -1164,6 +1223,12 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
     let voltage = ls.rated_input_voltage.as_ref().and_then(|v| v.fixed_voltage).map(|v| v.to_string()).unwrap_or_default();
     let cct = ls.color_information.as_ref().and_then(|c| c.correlated_color_temperature).map(|v| v.to_string()).unwrap_or_default();
     let cri = ls.color_information.as_ref().and_then(|c| c.color_rendering_index).map(|v| v.to_string()).unwrap_or_default();
+    let cct_low = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.lower).map(|v| v.to_string()).unwrap_or_default();
+    let cct_high = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.upper).map(|v| v.to_string()).unwrap_or_default();
+    let initial_tol = ls.color_information.as_ref().and_then(|c| c.initial_color_tolerance.clone()).unwrap_or_default();
+    let maintained_tol = ls.color_information.as_ref().and_then(|c| c.maintained_color_tolerance.clone()).unwrap_or_default();
+    let tlci = ls.color_information.as_ref().and_then(|c| c.tlci).map(|v| v.to_string()).unwrap_or_default();
+    let melanopic = ls.color_information.as_ref().and_then(|c| c.melanopic_factor).map(|v| v.to_string()).unwrap_or_default();
     let lifetime = ls.light_source_maintenance.as_ref().and_then(|m| m.lifetime).map(|v| v.to_string()).unwrap_or_default();
     let lamp_type = ls.light_source_maintenance.as_ref().and_then(|m| m.cie97_lamp_type.clone()).unwrap_or_default();
     let position = ls.light_source_position_of_usage.clone().unwrap_or_default();
@@ -1177,6 +1242,12 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
     let s_volt = RwSignal::new(voltage);
     let s_cct = RwSignal::new(cct);
     let s_cri = RwSignal::new(cri);
+    let s_cct_low = RwSignal::new(cct_low);
+    let s_cct_high = RwSignal::new(cct_high);
+    let s_init_tol = RwSignal::new(initial_tol);
+    let s_maint_tol = RwSignal::new(maintained_tol);
+    let s_tlci = RwSignal::new(tlci);
+    let s_melanopic = RwSignal::new(melanopic);
     let s_life = RwSignal::new(lifetime);
     let s_lamp = RwSignal::new(lamp_type);
     let s_pos = RwSignal::new(position);
@@ -1199,7 +1270,17 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
         new_ls.gtin = empty_to_none(s_gtin.get());
         new_ls.rated_input_power = parse_opt_f64(&s_power.get());
         new_ls.rated_input_voltage = build_voltage(new_ls.rated_input_voltage, &s_volt.get());
-        new_ls.color_information = build_color_info(new_ls.color_information, &s_cct.get(), &s_cri.get());
+        new_ls.color_information = build_color_info(
+            new_ls.color_information,
+            &s_cct.get(),
+            &s_cri.get(),
+            &s_cct_low.get(),
+            &s_cct_high.get(),
+            &s_init_tol.get(),
+            &s_maint_tol.get(),
+            &s_tlci.get(),
+            &s_melanopic.get(),
+        );
         new_ls.light_source_maintenance = build_maintenance(new_ls.light_source_maintenance, &s_life.get(), &s_lamp.get());
         new_ls.light_source_position_of_usage = empty_to_none(s_pos.get());
         new_ls.zhaga_standard = Some(s_zhaga.get());
@@ -1215,14 +1296,20 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
 
     view! {
         <div class="ls-edit-form" style="display: flex; flex-direction: column; gap: 6px;">
-            <TextRow label="Name (default locale)" value=s_name />
+            <TextRow label="Name (default locale)" value=s_name testid="ls-edit-name" />
             <TextRow label="Description" value=s_desc />
-            <TextRow label="Manufacturer" value=s_manuf />
+            <TextRow label="Manufacturer" value=s_manuf testid="ls-edit-manufacturer" />
             <TextRow label="GTIN" value=s_gtin />
-            <TextRow label="Rated Power (W)" value=s_power />
+            <TextRow label="Rated Power (W)" value=s_power testid="ls-edit-power" />
             <TextRow label="Fixed Voltage (V)" value=s_volt />
-            <TextRow label="CCT (K)" value=s_cct />
+            <TextRow label="CCT (K)" value=s_cct testid="ls-edit-cct" />
             <TextRow label="CRI (Ra)" value=s_cri />
+            <TextRow label="CCT range lower (K)" value=s_cct_low />
+            <TextRow label="CCT range upper (K)" value=s_cct_high />
+            <TextRow label="Initial color tolerance" value=s_init_tol />
+            <TextRow label="Maintained color tolerance" value=s_maint_tol />
+            <TextRow label="TLCI" value=s_tlci />
+            <TextRow label="Melanopic factor" value=s_melanopic />
             <TextRow label="Lifetime (h)" value=s_life />
             <TextRow label="Lamp Type (CIE 97)" value=s_lamp />
             <TextRow label="Position of Usage" value=s_pos />
@@ -1231,11 +1318,12 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
                 light_source_id=ls_id_for_pickers.clone()
                 current=current_spectrum.clone()
             />
+            <FixedLightSourcePhotometryUsage light_source_id=ls_id_for_pickers.clone() />
             <p style="margin: 4px 0 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
                 { "Other fields (energy labels, active power table, light source images, …) preserved on save." }
             </p>
             <div style="display: flex; gap: 6px; margin-top: 6px;">
-                <button on:click=on_save style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;">{ "Save" }</button>
+                <button on:click=on_save data-testid="ls-edit-save" style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;">{ "Save" }</button>
                 <button on:click=on_cancel style="padding: 4px 10px; font-size: 12px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);">{ "Cancel" }</button>
             </div>
         </div>
@@ -1256,12 +1344,28 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
     let name_first = first_locale_value(&ls.name);
     let desc_first = ls.description.as_ref().map(first_locale_value).unwrap_or_default();
     let manufacturer = ls.manufacturer.clone().unwrap_or_default();
+    let cct = ls.color_information.as_ref().and_then(|c| c.correlated_color_temperature).map(|v| v.to_string()).unwrap_or_default();
+    let cri = ls.color_information.as_ref().and_then(|c| c.color_rendering_index).map(|v| v.to_string()).unwrap_or_default();
+    let cct_low = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.lower).map(|v| v.to_string()).unwrap_or_default();
+    let cct_high = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.upper).map(|v| v.to_string()).unwrap_or_default();
+    let initial_tol = ls.color_information.as_ref().and_then(|c| c.initial_color_tolerance.clone()).unwrap_or_default();
+    let maintained_tol = ls.color_information.as_ref().and_then(|c| c.maintained_color_tolerance.clone()).unwrap_or_default();
+    let tlci = ls.color_information.as_ref().and_then(|c| c.tlci).map(|v| v.to_string()).unwrap_or_default();
+    let melanopic = ls.color_information.as_ref().and_then(|c| c.melanopic_factor).map(|v| v.to_string()).unwrap_or_default();
     let lifetime = ls.light_source_maintenance.as_ref().and_then(|m| m.lifetime).map(|v| v.to_string()).unwrap_or_default();
     let lamp_type = ls.light_source_maintenance.as_ref().and_then(|m| m.cie97_lamp_type.clone()).unwrap_or_default();
 
     let s_name = RwSignal::new(name_first);
     let s_desc = RwSignal::new(desc_first);
     let s_manuf = RwSignal::new(manufacturer);
+    let s_cct = RwSignal::new(cct);
+    let s_cri = RwSignal::new(cri);
+    let s_cct_low = RwSignal::new(cct_low);
+    let s_cct_high = RwSignal::new(cct_high);
+    let s_init_tol = RwSignal::new(initial_tol);
+    let s_maint_tol = RwSignal::new(maintained_tol);
+    let s_tlci = RwSignal::new(tlci);
+    let s_melanopic = RwSignal::new(melanopic);
     let s_life = RwSignal::new(lifetime);
     let s_lamp = RwSignal::new(lamp_type);
 
@@ -1279,6 +1383,17 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
             Some(upsert_locale_value(new_ls.description.unwrap_or_default(), &desc_text))
         };
         new_ls.manufacturer = empty_to_none(s_manuf.get());
+        new_ls.color_information = build_color_info(
+            new_ls.color_information,
+            &s_cct.get(),
+            &s_cri.get(),
+            &s_cct_low.get(),
+            &s_cct_high.get(),
+            &s_init_tol.get(),
+            &s_maint_tol.get(),
+            &s_tlci.get(),
+            &s_melanopic.get(),
+        );
         new_ls.light_source_maintenance = build_maintenance(new_ls.light_source_maintenance, &s_life.get(), &s_lamp.get());
 
         state.update(|s| {
@@ -1295,6 +1410,14 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
             <TextRow label="Name (default locale)" value=s_name />
             <TextRow label="Description" value=s_desc />
             <TextRow label="Manufacturer" value=s_manuf />
+            <TextRow label="CCT (K)" value=s_cct />
+            <TextRow label="CRI (Ra)" value=s_cri />
+            <TextRow label="CCT range lower (K)" value=s_cct_low />
+            <TextRow label="CCT range upper (K)" value=s_cct_high />
+            <TextRow label="Initial color tolerance" value=s_init_tol />
+            <TextRow label="Maintained color tolerance" value=s_maint_tol />
+            <TextRow label="TLCI" value=s_tlci />
+            <TextRow label="Melanopic factor" value=s_melanopic />
             <TextRow label="Lifetime (h)" value=s_life />
             <TextRow label="Lamp Type (CIE 97)" value=s_lamp />
             <PhotometryPicker
@@ -1317,7 +1440,11 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
 }
 
 #[component]
-fn TextRow(label: &'static str, value: RwSignal<String>) -> impl IntoView {
+fn TextRow(
+    label: &'static str,
+    value: RwSignal<String>,
+    #[prop(default = "")] testid: &'static str,
+) -> impl IntoView {
     let on_input = move |e: web_sys::Event| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
@@ -1333,6 +1460,7 @@ fn TextRow(label: &'static str, value: RwSignal<String>) -> impl IntoView {
                 type="text"
                 prop:value=move || value.get()
                 on:input=on_input
+                data-testid=testid
                 style="padding: 3px 6px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
             />
         </label>
@@ -1369,12 +1497,24 @@ fn first_locale_value(lf: &LocaleFoo) -> String {
 /// Insert/overwrite the first Locale's `value`; if no locales exist, push a
 /// blank-language one. Preserves any other locale entries.
 fn upsert_locale_value(mut lf: LocaleFoo, value: &str) -> LocaleFoo {
+    // Avoid emitting `<Locale language=""/>` for an empty value. The
+    // self-closing form trips `quick-xml`'s `#[serde(rename = "$text")]`
+    // deserializer on reload — "missing field `$text`" — so an empty
+    // Locale becomes a non-round-trippable file. Drop the entry
+    // entirely when the user clears the name field.
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        if !lf.locale.is_empty() {
+            lf.locale.remove(0);
+        }
+        return lf;
+    }
     if let Some(first) = lf.locale.first_mut() {
-        first.value = value.to_string();
+        first.value = trimmed.to_string();
     } else {
         lf.locale.push(Locale {
             language: String::new(),
-            value: value.to_string(),
+            value: trimmed.to_string(),
         });
     }
     lf
@@ -1418,16 +1558,32 @@ fn build_voltage(prior: Option<Voltage>, text: &str) -> Option<Voltage> {
 
 /// Preserve prior `color_information` (tunable range, x/y coordinates,
 /// MacAdam steps) and overwrite CCT + CRI fields from the form.
+#[allow(clippy::too_many_arguments)]
 fn build_color_info(
     prior: Option<ColorInformation>,
     cct: &str,
     cri: &str,
+    cct_low: &str,
+    cct_high: &str,
+    initial_tol: &str,
+    maintained_tol: &str,
+    tlci: &str,
+    melanopic: &str,
 ) -> Option<ColorInformation> {
-    let cct = parse_opt_i32(cct);
-    let cri = parse_opt_i32(cri);
+    use gldf_rs::gldf::general_definitions::lightsources::ColorTemperatureAdjustingRange;
     let mut info = prior.unwrap_or_default();
-    info.correlated_color_temperature = cct;
-    info.color_rendering_index = cri;
+    info.correlated_color_temperature = parse_opt_i32(cct);
+    info.color_rendering_index = parse_opt_i32(cri);
+    let low = parse_opt_i32(cct_low);
+    let high = parse_opt_i32(cct_high);
+    info.color_temperature_adjusting_range = match (low, high) {
+        (None, None) => None,
+        (l, h) => Some(ColorTemperatureAdjustingRange { lower: l, upper: h }),
+    };
+    info.initial_color_tolerance = empty_to_none(initial_tol.to_string());
+    info.maintained_color_tolerance = empty_to_none(maintained_tol.to_string());
+    info.tlci = parse_opt_i32(tlci);
+    info.melanopic_factor = parse_opt_f64(melanopic);
     if info == ColorInformation::default() {
         None
     } else {
@@ -1530,8 +1686,9 @@ fn PhotometryPicker(light_source_id: String, current: Option<String>) -> impl In
 }
 
 /// Interactive Spectrum row: a `<select>` picking one of the declared
-/// `<Spectrum>` ids, a clear button when one is already bound, and an
-/// `<input type="file">` that drops a `.spd` to embed + link in one shot.
+/// `<Spectrum>` ids and a clear button when one is bound. The actual
+/// `.spd` upload happens on the Files page — dropping `.spd` there
+/// auto-registers a `<Spectrum>` entry that shows up in this dropdown.
 ///
 /// `current` is the currently-bound spectrum id (None when unset).
 #[component]
@@ -1577,35 +1734,6 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
         });
     };
 
-    let ls_id_for_drop = light_source_id.clone();
-    let on_spd_drop = move |e: web_sys::Event| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        let filename = file.name();
-        let gloo_file = gloo::file::File::from(file);
-        let ls_id = ls_id_for_drop.clone();
-        spawn_local(async move {
-            match gloo::file::futures::read_as_bytes(&gloo_file).await {
-                Ok(bytes) => {
-                    state.update(|s| {
-                        s.apply(GldfAction::AddSpectrumFile {
-                            bytes,
-                            filename,
-                            light_source_id: ls_id,
-                        });
-                    });
-                }
-                Err(e) => log::error!("read spectrum: {}", e),
-            }
-        });
-        input.set_value("");
-    };
-
     let current_for_show = current.clone();
     view! {
         <div class="property spectrum-picker" style="grid-column: 1 / -1;">
@@ -1627,15 +1755,20 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
                         style="font-size: 12px; padding: 2px 8px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                     >{ "Clear" }</button>
                 })}
-                <label style="font-size: 12px; padding: 2px 8px; border: 1px dashed var(--accent-orange); border-radius: 4px; cursor: pointer; color: var(--accent-orange);">
-                    { "Drop .spd…" }
-                    <input
-                        type="file"
-                        accept=".spd"
-                        on:change=on_spd_drop
-                        style="display: none;"
-                    />
-                </label>
+                {move || {
+                    let empty = spectrum_ids.with(|v| v.is_empty());
+                    if empty {
+                        view! {
+                            <span style="font-size: 11px; color: var(--text-secondary);">
+                                { "No Spectrum declared — drop a .spd on " }
+                                <strong style="color: var(--accent-blue);">{ "📁 Files" }</strong>
+                                { " to register one." }
+                            </span>
+                        }.into_any()
+                    } else {
+                        view! { <span /> }.into_any()
+                    }
+                }}
             </div>
         </div>
     }
@@ -1648,6 +1781,258 @@ fn PropertyRow(label: &'static str, value: String, code: bool) -> impl IntoView 
         <div class="property">
             <span class="property-label">{ label }</span>
             <span class=value_class>{ value }</span>
+        </div>
+    }
+}
+
+/// Photometry usage picker for FixedLightSource.
+///
+/// The XSD doesn't put a `<PhotometryReference>` directly on
+/// `FixedLightSource` — it lives on the `FixedLightEmitter` that binds
+/// LS↔Photometry. So instead of mirroring the `SpectrumPicker` we
+/// surface every emitter wired to this LS as a row with a
+/// `<select>` of the available photometries, and dispatch
+/// [`GldfAction::SetFixedLightEmitterPhotometry`] on change.
+///
+/// Mirrors the user's request: *"editing the lightsource, still does
+/// not allow us to reassign the photometry, like for Spectrum"*. They
+/// can now repoint each emitter's photometry from the LS edit modal
+/// without round-tripping through the Emitters page.
+#[component]
+fn FixedLightSourcePhotometryUsage(light_source_id: String) -> impl IntoView {
+    let state = use_gldf();
+    let ls_id = light_source_id.clone();
+
+    let bindings = Signal::derive(move || {
+        let ls_id = ls_id.clone();
+        state.with(|s| {
+            let mut out: Vec<(String, usize, String)> = Vec::new();
+            let Some(emitters) = s.product.general_definitions.emitters.as_ref() else {
+                return out;
+            };
+            for em in &emitters.emitter {
+                for (idx, fle) in em.fixed_light_emitter.iter().enumerate() {
+                    if fle.light_source_reference.fixed_light_source_id.as_deref()
+                        == Some(ls_id.as_str())
+                    {
+                        out.push((
+                            em.id.clone(),
+                            idx,
+                            fle.photometry_reference.photometry_id.clone(),
+                        ));
+                    }
+                }
+            }
+            out
+        })
+    });
+
+    let photometry_ids = Signal::derive(move || {
+        state.with(|s| {
+            s.product
+                .general_definitions
+                .photometries
+                .as_ref()
+                .map(|ps| ps.photometry.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                .unwrap_or_default()
+        })
+    });
+
+    view! {
+        <div class="property" style="grid-column: 1 / -1;">
+            <span class="property-label">{ "Photometry bindings" }</span>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                {move || {
+                    let rows = bindings.get();
+                    if rows.is_empty() {
+                        view! {
+                            <span style="font-size: 11px; color: var(--text-secondary); font-style: italic;">
+                                { "No emitter binds this LightSource yet — go to " }
+                                <strong style="color: var(--accent-blue);">{ "💡 Emitters" }</strong>
+                                { " to wire it up." }
+                            </span>
+                        }.into_any()
+                    } else {
+                        let ids = photometry_ids.get();
+                        rows.into_iter().map(|(emitter_id, idx, current)| {
+                            let emitter_id_for_pick = emitter_id.clone();
+                            let on_pick = move |e: web_sys::Event| {
+                                let Some(target) = e.target() else { return };
+                                let select: HtmlSelectElement = match target.dyn_into() {
+                                    Ok(s) => s,
+                                    Err(_) => return,
+                                };
+                                let val = select.value();
+                                if val.is_empty() {
+                                    return;
+                                }
+                                let emitter_id = emitter_id_for_pick.clone();
+                                state.update(|s| {
+                                    s.apply(GldfAction::SetFixedLightEmitterPhotometry {
+                                        emitter_id,
+                                        index: idx,
+                                        photometry_id: val,
+                                    });
+                                });
+                            };
+                            let ids = ids.clone();
+                            let current_for_match = current.clone();
+                            view! {
+                                <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;">
+                                    <span style="color: var(--text-secondary);">{ format!("{emitter_id}[{idx}]") }</span>
+                                    <span style="color: var(--text-secondary);">{ "→" }</span>
+                                    <select
+                                        on:change=on_pick
+                                        data-testid=format!("ls-photometry-{emitter_id}-{idx}")
+                                        style="font-size: 12px; padding: 2px 6px;"
+                                    >
+                                        {ids.into_iter().map(|pid| {
+                                            let selected = pid == current_for_match;
+                                            let label = pid.clone();
+                                            view! {
+                                                <option value=pid selected=selected>{ label }</option>
+                                            }
+                                        }).collect::<Vec<_>>()}
+                                    </select>
+                                </div>
+                            }
+                        }).collect::<Vec<_>>().into_any()
+                    }
+                }}
+            </div>
+        </div>
+    }
+}
+
+/// Render the LightSource's photometric + spectral signatures inline on
+/// the card. This is the **sole rendering point** for these in the
+/// editor — the XSD's reference graph makes LightSource the natural
+/// home (Spectrum is owned via `SpectrumReference`, Photometry resolves
+/// via the FixedLightEmitter chain bound to this LS). Emitter cards
+/// don't render because one Emitter can hold many FixedLightEmitter
+/// children with their own rotations; Variant cards don't render
+/// because they only compose existing chains.
+///
+/// What lands:
+/// * One mini `<LdtPanel>` per FixedLightEmitter that references this
+///   LS — labelled with `emitter_id[idx]` + the photometry id +
+///   optional rotation.
+/// * One `<SpdPanel>` per `SpectrumReference` — driven by the
+///   embedded SPD bytes (TM-33 / Luxeon / generic SPD all handled by
+///   SpdPanel's parse fallbacks).
+///
+/// Empty when no emitter binds this LS yet — keeps the card tidy
+/// during early wizard flows.
+#[component]
+fn FixedLightSourceRenders(light_source_id: String) -> impl IntoView {
+    let state = use_gldf();
+    let ls_id = light_source_id.clone();
+
+    view! {
+        <div class="light-source-renders" style="margin-top: 10px;">
+            {move || state.with(|s| {
+                let mut bindings: Vec<(String, usize, String, Option<String>, Vec<u8>)> = Vec::new();
+                if let Some(emitters) = s.product.general_definitions.emitters.as_ref() {
+                    for em in &emitters.emitter {
+                        for (idx, fle) in em.fixed_light_emitter.iter().enumerate() {
+                            if fle.light_source_reference.fixed_light_source_id.as_deref()
+                                != Some(ls_id.as_str())
+                            {
+                                continue;
+                            }
+                            let photometry_id = fle.photometry_reference.photometry_id.clone();
+                            let bytes = resolve_raw_photometry_bytes(
+                                &s.product,
+                                &s.embedded_files,
+                                &photometry_id,
+                            );
+                            let rot = fle.rotation.as_ref().map(|r| {
+                                format!("rot {}/{}/{} G0={}", r.x, r.y, r.z, r.g0)
+                            });
+                            if let Some(b) = bytes {
+                                bindings.push((em.id.clone(), idx, photometry_id, rot, b));
+                            }
+                        }
+                    }
+                }
+
+                let spectrum_bytes: Option<Vec<u8>> = s
+                    .product
+                    .general_definitions
+                    .light_sources
+                    .as_ref()
+                    .and_then(|lss| {
+                        lss.fixed_light_source
+                            .iter()
+                            .find(|f| f.id == ls_id)
+                            .and_then(|f| f.spectrum_reference.as_ref())
+                    })
+                    .and_then(|sr| {
+                        s.product
+                            .general_definitions
+                            .spectrums
+                            .as_ref()
+                            .and_then(|ss| ss.spectrum.iter().find(|sp| sp.id == sr.spectrum_id))
+                    })
+                    .and_then(|sp| sp.spectrum_file_reference.as_ref())
+                    .and_then(|sfr| s.embedded_files.get(&sfr.file_id).cloned());
+
+                let no_photometry = bindings.is_empty();
+                let no_spectrum = spectrum_bytes.is_none();
+                if no_photometry && no_spectrum {
+                    return view! {
+                        <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
+                            { "No emitter binds this LightSource yet, and no SpectrumReference is set — wire one on the Emitters page or via the Spectrum picker." }
+                        </p>
+                    }.into_any();
+                }
+
+                let bindings_label = bindings.len();
+                let spectrum_label = if no_spectrum { "—".to_string() } else { "1".to_string() };
+                view! {
+                    <details open=true style="border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px;">
+                        <summary style="cursor: pointer; font-size: 12px; color: var(--text-secondary);">
+                            { format!("📊 Photometry ({}) · 🌈 Spectrum ({})", bindings_label, spectrum_label) }
+                        </summary>
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                            {if no_photometry {
+                                view! {
+                                    <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
+                                        { "No emitter binds this LightSource yet." }
+                                    </p>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                                        {bindings.into_iter().map(|(em_id, idx, photometry_id, rotation, bytes)| {
+                                            let label = format!("{em_id}[{idx}] → {photometry_id}");
+                                            view! {
+                                                <div style="flex: 0 0 300px;">
+                                                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                                        { label }
+                                                        {rotation.map(|r| view! {
+                                                            <span style="color: var(--text-tertiary); margin-left: 6px;">{ format!("· {r}") }</span>
+                                                        })}
+                                                    </div>
+                                                    <LdtPanel bytes=bytes width=280.0 height=220.0 />
+                                                </div>
+                                            }
+                                        }).collect::<Vec<_>>()}
+                                    </div>
+                                }.into_any()
+                            }}
+                            {spectrum_bytes.map(|sb| view! {
+                                <div>
+                                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                        { "Spectrum (from SpectrumReference)" }
+                                    </div>
+                                    <SpdPanel bytes=sb />
+                                </div>
+                            })}
+                        </div>
+                    </details>
+                }.into_any()
+            })}
         </div>
     }
 }

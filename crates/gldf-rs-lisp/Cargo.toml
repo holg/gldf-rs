@@ -1,0 +1,33 @@
+[package]
+name = "gldf-rs-lisp"
+description = "AutoLISP scripting engine for GLDF luminaire data (acadlisp + gldf-rs). Mirrors the bimifc-lisp pattern: domain crate that hands acadlisp a user-data struct plus a fistful of foreign functions for querying / mutating / exporting GLDF product trees."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+name = "gldf_rs_lisp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gldf-lisp"
+path = "src/main.rs"
+
+[dependencies]
+# Interpreter. Sibling crate, path dep (matches `bimifc-lisp`'s
+# `../../../acadlisp`). When we publish, version pinning the matching
+# released acadlisp will replace the path.
+acadlisp = { path = "../../../acadlisp" }
+# Core GLDF model: load / query / serialize. Eulumdat + L3D pulled in
+# because the export functions need to drive them.
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
+
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The smoke tests load a real fixture from tests/data/.
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }

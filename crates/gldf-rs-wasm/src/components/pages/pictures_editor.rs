@@ -1,13 +1,18 @@
 //! Pictures editor — `Image` references with `@fileId` + `@imageType`.
+//! Scope-aware: switches between `ProductMetaData.Pictures` and
+//! `Variant[idx].Pictures` via the shared `ScopePicker`.
 
 use crate::components::edit_util::event_value;
-use crate::state::{use_gldf, GldfAction};
+use crate::components::ScopePicker;
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
+use gldf_rs::gldf::general_definitions::Image;
 use gldf_rs::validation::xsd_enums::IMAGE_TYPES;
 use leptos::prelude::*;
 
 #[component]
 pub fn PicturesEditorPage() -> impl IntoView {
     let state = use_gldf();
+    let scope = use_active_scope();
     let pending_file_id = RwSignal::new(String::new());
     let pending_image_type = RwSignal::new("Product Picture".to_string());
 
@@ -23,10 +28,17 @@ pub fn PicturesEditorPage() -> impl IntoView {
     };
     let on_add = move |_| {
         let fid = pending_file_id.with(|v| v.trim().to_string());
-        if fid.is_empty() { return; }
+        if fid.is_empty() {
+            return;
+        }
         let img_type = pending_image_type.get();
+        let cur_scope = scope.get();
         state.update(|s| {
-            s.apply(GldfAction::AddProductMetaPicture { file_id: fid, image_type: img_type });
+            s.apply(GldfAction::AddProductMetaPicture {
+                scope: cur_scope,
+                file_id: fid,
+                image_type: img_type,
+            });
         });
         pending_file_id.set(String::new());
     };
@@ -35,10 +47,13 @@ pub fn PicturesEditorPage() -> impl IntoView {
         <div class="editor-section pictures-editor">
             <h2>{ "Pictures" }</h2>
             <p class="section-description">
-                { "Image references from ProductMetaData. Each entry points to a File defined in General Definitions and tags it with an XSD-enumerated image type." }
+                { "Image references for the product or a specific variant. Each entry points to a File defined in General Definitions and tags it with an XSD-enumerated image type." }
             </p>
 
+            <ScopePicker scope=scope />
+
             {move || state.with(|s| {
+                let cur_scope = scope.get();
                 let image_files: Vec<String> = s
                     .product
                     .general_definitions
@@ -48,14 +63,25 @@ pub fn PicturesEditorPage() -> impl IntoView {
                     .filter(|f| f.content_type.starts_with("image/"))
                     .map(|f| f.id.clone())
                     .collect();
-                let pictures = s
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_ref()
-                    .and_then(|m| m.pictures.as_ref())
-                    .map(|p| p.image.clone())
-                    .unwrap_or_default();
+                let pictures: Vec<Image> = match cur_scope {
+                    Scope::Product => s
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_ref()
+                        .and_then(|m| m.pictures.as_ref())
+                        .map(|p| p.image.clone())
+                        .unwrap_or_default(),
+                    Scope::Variant(idx) => s
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_ref()
+                        .and_then(|vs| vs.variant.get(idx))
+                        .and_then(|v| v.pictures.as_ref())
+                        .map(|p| p.image.clone())
+                        .unwrap_or_default(),
+                };
 
                 view! {
                     {if pictures.is_empty() {
@@ -70,12 +96,14 @@ pub fn PicturesEditorPage() -> impl IntoView {
                                     let on_type = move |e: web_sys::Event| {
                                         let Some(v) = event_value(&e) else { return };
                                         let fid = file_id_for_action.clone();
+                                        let scp = scope.get();
                                         state.update(|s| s.apply(GldfAction::UpdateProductMetaPicture {
-                                            index: idx, file_id: fid, image_type: v
+                                            scope: scp, index: idx, file_id: fid, image_type: v
                                         }));
                                     };
                                     let on_remove = move |_| {
-                                        state.update(|s| s.apply(GldfAction::RemoveProductMetaPicture(idx)));
+                                        let scp = scope.get();
+                                        state.update(|s| s.apply(GldfAction::RemoveProductMetaPicture { scope: scp, index: idx }));
                                     };
                                     view! {
                                         <div class="picture-row" style="display: flex; gap: 6px; align-items: center;">
@@ -98,9 +126,14 @@ pub fn PicturesEditorPage() -> impl IntoView {
                         <h4>{ "Add picture" }</h4>
                         {if image_files.is_empty() {
                             view! {
-                                <p class="hint">
-                                    { "No image-typed files in General Definitions yet. Add a File with contentType starting with image/ first." }
-                                </p>
+                                <div style="padding: 10px 12px; border: 1px dashed var(--accent-blue); border-radius: 6px; background: var(--bg-secondary); font-size: 12px; color: var(--text-secondary);">
+                                    <strong style="color: var(--accent-blue);">{ "ℹ Pictures reference existing Files" }</strong>
+                                    <p style="margin: 6px 0 0;">
+                                        { "Pictures don't accept direct uploads — they bind to image-typed File entries in General Definitions. Open " }
+                                        <strong>{ "📁 Files" }</strong>
+                                        { " in the left sidebar and drop a .png/.jpg/.svg there first; that file then appears in the dropdown here." }
+                                    </p>
+                                </div>
                             }.into_any()
                         } else {
                             view! {

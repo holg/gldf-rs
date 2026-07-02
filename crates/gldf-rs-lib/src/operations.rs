@@ -3,6 +3,9 @@
 //! This module provides methods for creating, reading, updating, and deleting
 //! elements within a GLDF product structure.
 
+use crate::gldf::general_definitions::electrical::{
+    ControlGear, ControlGears, Equipment, Equipments,
+};
 use crate::gldf::general_definitions::files::File;
 use crate::gldf::general_definitions::geometries::{Geometries, ModelGeometry, SimpleGeometry};
 use crate::gldf::general_definitions::lightsources::{
@@ -332,6 +335,75 @@ impl GldfProduct {
         Ok(())
     }
 
+    /// Renames a Photometry by id and cascades every `PhotometryReference`
+    /// in the document.
+    ///
+    /// Cascade sites:
+    ///   - `ChangeableLightSource.PhotometryReference` (optional)
+    ///   - `MultiChannelLightSource.Channels.Channel.PhotometryReference`
+    ///   - `Emitter.FixedLightEmitter.PhotometryReference` (Vec)
+    ///   - `Emitter.ChangeableLightEmitter.PhotometryReference` (Vec)
+    ///
+    /// `FixedLightSource` has no PhotometryReference field of its own —
+    /// it binds photometry via the Emitter wrapper instead.
+    ///
+    /// Returns an error if the new id is empty, the old id is unknown,
+    /// or the new id is already taken.
+    pub fn rename_photometry(&mut self, old_id: &str, new_id: &str) -> Result<()> {
+        if old_id == new_id {
+            return Ok(());
+        }
+        if new_id.is_empty() {
+            anyhow::bail!("New photometry id must not be empty");
+        }
+        let Some(ps) = self.general_definitions.photometries.as_mut() else {
+            anyhow::bail!("Photometry with id '{}' not found", old_id);
+        };
+        if !ps.photometry.iter().any(|p| p.id == old_id) {
+            anyhow::bail!("Photometry with id '{}' not found", old_id);
+        }
+        if ps.photometry.iter().any(|p| p.id == new_id) {
+            anyhow::bail!("Photometry id '{}' is already in use", new_id);
+        }
+        if let Some(p) = ps.photometry.iter_mut().find(|p| p.id == old_id) {
+            p.id = new_id.to_string();
+        }
+        // ChangeableLightSource + MultiChannel PhotometryReference sites.
+        if let Some(ls) = self.general_definitions.light_sources.as_mut() {
+            for c in &mut ls.changeable_light_source {
+                if let Some(pr) = c.photometry_reference.as_mut() {
+                    if pr.photometry_id == old_id {
+                        pr.photometry_id = new_id.to_string();
+                    }
+                }
+            }
+            for m in &mut ls.multi_channel_light_source {
+                for ch in &mut m.channels.channel {
+                    if ch.photometry_reference.photometry_id == old_id {
+                        ch.photometry_reference.photometry_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        // Emitter PhotometryReference sites — both light-emitter kinds
+        // are stored as Vec<…> on the Emitter wrapper.
+        if let Some(ems) = self.general_definitions.emitters.as_mut() {
+            for em in &mut ems.emitter {
+                for fle in &mut em.fixed_light_emitter {
+                    if fle.photometry_reference.photometry_id == old_id {
+                        fle.photometry_reference.photometry_id = new_id.to_string();
+                    }
+                }
+                for cle in &mut em.changeable_light_emitter {
+                    if cle.photometry_reference.photometry_id == old_id {
+                        cle.photometry_reference.photometry_id = new_id.to_string();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Gets a file definition by ID.
     pub fn get_file(&self, id: &str) -> Option<&File> {
         self.general_definitions
@@ -457,6 +529,35 @@ impl GldfProduct {
         }
 
         photometries.photometry.push(photometry);
+        Ok(())
+    }
+
+    /// Adds a sensor definition to `GeneralDefinitions/Sensors`.
+    ///
+    /// Creates the `Sensors` container if absent. The sensor's
+    /// `SensorFileReference.file_id` should point at an embedded `<File>`
+    /// with content type `sensor/sensxml` or `sensor/sensldt`; see
+    /// [`crate::editable::EditableGldf::add_sensor_file`] for the
+    /// high-level "embed + link" helper.
+    ///
+    /// # Errors
+    /// Returns an error if a sensor with the same ID already exists.
+    pub fn add_sensor(
+        &mut self,
+        sensor: crate::gldf::general_definitions::sensors::Sensor,
+    ) -> Result<()> {
+        use crate::gldf::general_definitions::sensors::Sensors;
+        if self.general_definitions.sensors.is_none() {
+            self.general_definitions.sensors = Some(Sensors::default());
+        }
+        let sensors = self.general_definitions.sensors.as_mut().unwrap();
+        if sensors.sensor.iter().any(|s| s.id == sensor.id) {
+            return Err(anyhow!(
+                "Sensor with ID '{}' already exists",
+                sensor.id
+            ));
+        }
+        sensors.sensor.push(sensor);
         Ok(())
     }
 
@@ -632,6 +733,69 @@ impl GldfProduct {
 
         geometries.model_geometry.push(geometry);
         Ok(())
+    }
+
+    /// Adds a new control gear. Returns an error if a control gear with the
+    /// same ID already exists.
+    pub fn add_control_gear(&mut self, gear: ControlGear) -> Result<()> {
+        if self.general_definitions.control_gears.is_none() {
+            self.general_definitions.control_gears = Some(ControlGears::default());
+        }
+        let cgs = self.general_definitions.control_gears.as_mut().unwrap();
+        if cgs.control_gear.iter().any(|g| g.id == gear.id) {
+            return Err(anyhow!("Control gear with ID '{}' already exists", gear.id));
+        }
+        cgs.control_gear.push(gear);
+        Ok(())
+    }
+
+    /// Removes a control gear by ID. Returns an error if no control gear
+    /// with the given ID exists.
+    pub fn remove_control_gear(&mut self, id: &str) -> Result<ControlGear> {
+        let cgs = self
+            .general_definitions
+            .control_gears
+            .as_mut()
+            .ok_or_else(|| anyhow!("No control gears defined"))?;
+        let pos = cgs
+            .control_gear
+            .iter()
+            .position(|g| g.id == id)
+            .ok_or_else(|| anyhow!("Control gear with ID '{}' not found", id))?;
+        Ok(cgs.control_gear.remove(pos))
+    }
+
+    /// Adds a new equipment. Returns an error if an equipment with the same
+    /// ID already exists.
+    pub fn add_equipment(&mut self, equipment: Equipment) -> Result<()> {
+        if self.general_definitions.equipments.is_none() {
+            self.general_definitions.equipments = Some(Equipments::default());
+        }
+        let eqs = self.general_definitions.equipments.as_mut().unwrap();
+        if eqs.equipment.iter().any(|e| e.id == equipment.id) {
+            return Err(anyhow!(
+                "Equipment with ID '{}' already exists",
+                equipment.id
+            ));
+        }
+        eqs.equipment.push(equipment);
+        Ok(())
+    }
+
+    /// Removes an equipment by ID. Returns an error if no equipment with
+    /// the given ID exists.
+    pub fn remove_equipment(&mut self, id: &str) -> Result<Equipment> {
+        let eqs = self
+            .general_definitions
+            .equipments
+            .as_mut()
+            .ok_or_else(|| anyhow!("No equipments defined"))?;
+        let pos = eqs
+            .equipment
+            .iter()
+            .position(|e| e.id == id)
+            .ok_or_else(|| anyhow!("Equipment with ID '{}' not found", id))?;
+        Ok(eqs.equipment.remove(pos))
     }
 
     /// Removes a simple geometry by ID.
@@ -869,12 +1033,13 @@ impl GldfProduct {
         }
 
         // 4) Update every Equipment.light_source_reference (each Equipment
-        //    can hold one optional fixed-light-source-id reference).
+        //    can hold one optional light-source-id reference; per the
+        //    rc-3 XSD the attribute is always `@changeableLightSourceId`).
         if let Some(equipments) = self.general_definitions.equipments.as_mut() {
             for equipment in &mut equipments.equipment {
                 if let Some(lsr) = equipment.light_source_reference.as_mut() {
-                    if lsr.fixed_light_source_id.as_deref() == Some(old_id) {
-                        lsr.fixed_light_source_id = Some(new_id.to_string());
+                    if lsr.changeable_light_source_id == old_id {
+                        lsr.changeable_light_source_id = new_id.to_string();
                     }
                 }
             }
@@ -990,8 +1155,8 @@ impl GldfProduct {
         if let Some(equipments) = self.general_definitions.equipments.as_mut() {
             for equipment in &mut equipments.equipment {
                 if let Some(lsr) = equipment.light_source_reference.as_mut() {
-                    if lsr.changeable_light_source_id.as_deref() == Some(old_id) {
-                        lsr.changeable_light_source_id = Some(new_id.to_string());
+                    if lsr.changeable_light_source_id == old_id {
+                        lsr.changeable_light_source_id = new_id.to_string();
                     }
                 }
             }

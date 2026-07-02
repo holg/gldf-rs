@@ -1,0 +1,16 @@
+{
+  "chapter": "3D variants — edit + static showcase",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "_comment": "Cue 2's SRT marker is the default last-cue 5s timeout, but the real video continues another 70s through static variant switching. Write cue 2 at ~30s of speech so audio fills the variant-tour tail.",
+  "cues": [
+    {
+      "cue": "Act 20a — Variant mountings view (edit)",
+      "text": "Before we flip to the 3D viewer, a quick look at the variant editor. The mounting we picked in the wizard — ceiling-recessed, fifty millimetres of cavity depth — shows up here as a Mountings block, and you can see the editor lays it out alongside the rest of the variant configuration."
+    },
+    {
+      "cue": "Act 20 — Bevy 3D variants (static)",
+      "text": "Now the Bevy 3D viewer. Picking a variant chip swaps the housing color live — yellow green, traffic yellow, signal white, and jet black for the emergency-only variant. The cones show each LEO's beam shape and color temperature, and you can see the recessed mounting we declared in the wizard: the luminaire sinks into the ceiling cavity instead of floating below it. The viewer runs in WebGL through Bevy compiled to WebAssembly, sharing a single canvas with the rest of the editor and reading the live document state, so any edit on the panes propagates to the 3D view on the next frame. Notice how each variant carries its own emitter configuration — the cones change shape between the narrow and wide beams as we switch. This is the same view BIM tools and product configurators will show when they consume the file we exported."
+    }
+  ]
+}

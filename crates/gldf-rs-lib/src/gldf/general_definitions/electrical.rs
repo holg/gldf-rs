@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::lightsources::LightSourceReference;
 use super::LocaleFoo;
 
 /// Represents a range of voltage values in the GLDF data structure.
@@ -110,7 +109,7 @@ pub struct EnergyLabel {
     pub region: String,
 
     /// The value of the energy label (e.g. A++)
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub value: String,
 }
 
@@ -243,6 +242,27 @@ pub struct ControlGearReference {
     pub control_gear_count: Option<i32>,
 }
 
+/// `LightSourceReference` as it appears INSIDE an `<Equipment>`.
+///
+/// Distinct from the `LightSourceReference` used by `FixedLightEmitter`:
+/// the XSD only permits `@changeableLightSourceId` here (no
+/// `@fixedLightSourceId`, no `@multiChannelLightSourceId`), so we model
+/// it as its own type with a single attribute. Round-tripping older
+/// data that wrote `@fixedLightSourceId` is handled by the `#[serde(alias)]`.
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EquipmentLightSourceReference {
+    /// The XSD-canonical attribute: id of a LightSource under
+    /// GeneralDefinitions/LightSources. We accept the legacy
+    /// `@fixedLightSourceId` spelling on input via the alias so existing
+    /// (non-conformant) fixtures keep round-tripping.
+    #[serde(
+        rename = "@changeableLightSourceId",
+        alias = "@fixedLightSourceId",
+        default
+    )]
+    pub changeable_light_source_id: String,
+}
+
 /// Represents equipment data in the GLDF data structure.
 ///
 /// This struct defines the properties of equipment associated with a luminaire.
@@ -253,12 +273,14 @@ pub struct Equipment {
     pub id: String,
 
     /// A reference to the light source associated with the equipment.
+    /// Wraps [`EquipmentLightSourceReference`] so the on-disk attribute
+    /// is always `@changeableLightSourceId` (XSD requirement).
     #[serde(
         rename = "LightSourceReference",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub light_source_reference: Option<LightSourceReference>,
+    pub light_source_reference: Option<EquipmentLightSourceReference>,
 
     /// A reference to the control gear associated with the equipment.
     #[serde(
@@ -290,11 +312,45 @@ pub struct Equipment {
 }
 
 /// Represents a collection of equipment data in the GLDF data structure.
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 pub struct Equipments {
     /// The list of equipment items.
     #[serde(rename = "Equipment", default)]
     pub equipment: Vec<Equipment>,
+}
+
+/// Custom Serialize: skip any Equipment without a `LightSourceReference`
+/// (rc-3 XSD requires `minOccurs=1`). This lets the editor hold an
+/// in-progress Equipment without a bound LightSource (the user is mid-
+/// edit) while still emitting a conformant document. If no Equipment in
+/// the collection has an LSR, the whole `<Equipments>` block is empty —
+/// the caller's `skip_serializing_if = "is_equipments_empty"` will drop
+/// it entirely.
+impl serde::Serialize for Equipments {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let filtered: Vec<&Equipment> = self
+            .equipment
+            .iter()
+            .filter(|e| e.light_source_reference.is_some())
+            .collect();
+        let mut s = serializer.serialize_struct("Equipments", 1)?;
+        s.serialize_field("Equipment", &filtered)?;
+        s.end()
+    }
+}
+
+/// Helper for `skip_serializing_if`: a `Some(Equipments { equipment })`
+/// where every entry has no LSR ends up emitting an empty `<Equipments/>`,
+/// which the XSD rejects (Equipment is `minOccurs=1` inside Equipments).
+/// Use on any `Option<Equipments>` field that should drop empty.
+pub fn is_equipments_empty(eqs: &Option<Equipments>) -> bool {
+    eqs.as_ref()
+        .map(|e| e.equipment.iter().all(|x| x.light_source_reference.is_none()))
+        .unwrap_or(true)
 }
 
 /// Represents a reference to an equipment in the GLDF data structure.

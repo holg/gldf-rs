@@ -70,7 +70,17 @@ fn read_housing_colors(s: &crate::state::GldfState, scope: Scope) -> Vec<(Option
         .map(|hc| {
             hc.housing_color
                 .iter()
-                .map(|h| (h.ral, h.locale.language.clone(), h.locale.value.clone()))
+                .map(|h| {
+                    // HousingColor wraps a LocaleFoo (rc-3 XSD requires
+                    // the complex Locale type). The editor surface only
+                    // exposes one row per color, so take the first locale.
+                    let first = h.locale.locale.first();
+                    (
+                        h.ral,
+                        first.map(|l| l.language.clone()).unwrap_or_default(),
+                        first.map(|l| l.value.clone()).unwrap_or_default(),
+                    )
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -99,7 +109,16 @@ fn read_markets(s: &crate::state::GldfState, scope: Scope) -> Vec<(String, Strin
         .map(|mk| {
             mk.region
                 .iter()
-                .map(|r| (r.language.clone(), r.value.clone()))
+                .map(|r| {
+                    // Markets.region is Vec<LocaleFoo> (complex Locale).
+                    // Editor exposes one row per region, so read the
+                    // first inner locale.
+                    let first = r.locale.first();
+                    (
+                        first.map(|l| l.language.clone()).unwrap_or_default(),
+                        first.map(|l| l.value.clone()).unwrap_or_default(),
+                    )
+                })
                 .collect()
         })
         .unwrap_or_default()

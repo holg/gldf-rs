@@ -12,6 +12,7 @@ mod light_source_export;
 pub mod photometry_decode;
 mod wizard;
 mod ldt_panel;
+mod lisp_panel;
 mod locale_edit;
 mod locale_view;
 pub mod pages;
@@ -40,9 +41,11 @@ pub use pages::{
     LinkagePage, LinkageTarget, MarketingEditorPage, MechanicalEditorPage, MechanicalReadPage,
     NavJump, OverviewPage,
     PhotometryEditorPage, PhotometryReadPage, PicturesEditorPage, PicturesReadPage, PluginsPage,
-    RawDataPage, StatisticsPage, VariantEditorPage, VariantsPage,
+    RawDataPage, SensorsEditorPage, SensorsReadPage, StatisticsPage, VariantEditorPage,
+    VariantsPage,
 };
 pub use scope_picker::ScopePicker;
 pub use spd_viewer::{SpdPanel, SpdViewer, SvgEmbed};
 pub use tm33_panel::{is_tm33, Tm33Panel};
+pub use lisp_panel::LispPanel;
 pub use validation_banner::ValidationBanner;

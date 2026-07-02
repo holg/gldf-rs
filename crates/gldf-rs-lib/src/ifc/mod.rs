@@ -31,12 +31,17 @@
 //! std::fs::write("luminaire.ifc", ifc_content)?;
 //! ```
 
+mod bim_properties;
 mod gldf_generator;
 mod ifc_import;
 mod step_parser;
 mod step_writer;
 mod types;
 
+pub use bim_properties::{
+    extract_product_bim_properties, property_name_for_bsdd, resolve_imported_property,
+    BimProperty, BimPset, BimValueKind, ImportedBimProperty,
+};
 pub use gldf_generator::GldfGenerator;
 pub use ifc_import::{
     DistributionPlane, EmbeddedFile, IfcImporter, ImportedDistribution, ImportedGeometry,
@@ -376,6 +381,10 @@ impl GldfToIfc {
 
             // Add GLDF descriptive attributes (safety class, maintenance, etc.)
             Self::add_descriptive_attributes(gldf, &mut writer, fixture_type, owner_history);
+
+            // Add buildingSMART BIM-property sets (bSDD GlobalIds) from
+            // the product-level DescriptiveAttributes mapping table.
+            Self::add_bim_property_sets(gldf, &mut writer, fixture_type, owner_history);
 
             // Add variant-level attributes (mounting, recessed depth)
             if variant.mounting_type.is_some() || variant.recessed_depth.is_some() {
@@ -1068,6 +1077,84 @@ impl GldfToIfc {
         }
     }
 
+    /// Emit the buildingSMART BIM-property sets (one per domain
+    /// bucket) carrying bSDD GlobalIds. Sourced from the
+    /// `BIM_Properties_to_GLDF` mapping table. These are the
+    /// product-level DescriptiveAttributes; BIM tools match them by
+    /// GlobalId against the buildingSMART data dictionary.
+    ///
+    /// `allow(dead_code)`: the only caller is the variant export loop
+    /// in `export_with_mesh_and_files`, whose surrounding photometry
+    /// code is `feature = "eulumdat"`-gated. Under default features
+    /// (no eulumdat) the loop body is trimmed and this helper looks
+    /// unused — it isn't, in any build a real consumer ships.
+    #[allow(dead_code)]
+    fn add_bim_property_sets(
+        gldf: &GldfProduct,
+        writer: &mut StepWriter,
+        fixture_type: EntityRef,
+        owner_history: EntityRef,
+    ) {
+        use crate::ifc::bim_properties::{
+            extract_product_bim_properties, BimPset, BimValueKind,
+        };
+        use std::collections::BTreeMap;
+
+        let props = extract_product_bim_properties(gldf);
+        if props.is_empty() {
+            return;
+        }
+
+        // Group by Pset bucket, preserving a stable order.
+        let mut by_pset: BTreeMap<&'static str, Vec<(String, Option<String>, String)>> =
+            BTreeMap::new();
+
+        for p in &props {
+            // Render the STEP value expression by IFC type.
+            let value_expr = match p.kind {
+                BimValueKind::Label => {
+                    format!("IFCLABEL('{}')", StepWriter::escape_string_public(&p.value))
+                }
+                BimValueKind::Boolean => {
+                    let b = matches!(p.value.as_str(), "true" | "True" | "1");
+                    format!("IFCBOOLEAN({})", if b { ".T." } else { ".F." })
+                }
+                BimValueKind::PowerMeasure => {
+                    format!("IFCPOWERMEASURE({})", p.value)
+                }
+                BimValueKind::MassMeasure => {
+                    format!("IFCMASSMEASURE({})", p.value)
+                }
+                BimValueKind::Real => format!("IFCREAL({})", p.value),
+                BimValueKind::LengthMm => {
+                    // GLDF mm → IFC project length unit (metres).
+                    let mm: f64 = p.value.parse().unwrap_or(0.0);
+                    format!("IFCPOSITIVELENGTHMEASURE({})", mm / 1000.0)
+                }
+            };
+            let desc = if p.bsdd_id.is_empty() {
+                None
+            } else {
+                Some(format!("bSDD:{}", p.bsdd_id))
+            };
+            let bucket: &'static str = match p.pset {
+                BimPset::Electrical => "Pset_GLDF_Electrical",
+                BimPset::Mechanical => "Pset_GLDF_Mechanical",
+                BimPset::OperationsAndMaintenance => "Pset_GLDF_OperationsAndMaintenance",
+                BimPset::Emergency => "Pset_GLDF_Emergency",
+                BimPset::Marketing => "Pset_GLDF_Marketing",
+            };
+            by_pset
+                .entry(bucket)
+                .or_default()
+                .push((p.name.clone(), desc, value_expr));
+        }
+
+        for (pset_name, entries) in by_pset {
+            writer.add_property_set_with_ids(fixture_type, owner_history, pset_name, &entries);
+        }
+    }
+
     fn get_product_name(gldf: &GldfProduct) -> String {
         if let Some(meta) = &gldf.product_definitions.product_meta_data {
             if let Some(name) = &meta.name {
@@ -1280,6 +1367,93 @@ pub fn import_ifc(ifc_content: &str) -> Result<ImportedLuminaire> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// End-to-end: a GLDF with DescriptiveAttributes exports IFC
+    /// carrying the new BIM property sets with their bSDD GlobalIds in
+    /// the property Description. Verifies the mapping-table wiring
+    /// actually reaches the STEP output.
+    #[test]
+    #[cfg(feature = "eulumdat")]
+    fn bim_property_sets_appear_in_exported_ifc() {
+        let paths = [
+            "tests/data/SLV - Tria 2.gldf",
+            "../../tests/data/SLV - Tria 2.gldf",
+        ];
+        let loaded = paths.iter().find_map(|p| {
+            std::fs::read(p)
+                .ok()
+                .and_then(|buf| crate::GldfProduct::load_gldf_from_buf_all(buf).ok())
+        });
+        let Some(loaded) = loaded else {
+            eprintln!("SLV Tria 2 fixture not found; skipping");
+            return;
+        };
+
+        let ifc =
+            GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
+                .expect("IFC export");
+
+        // SLV Tria 2 declares ElectricalSafetyClass=III + IP20, so the
+        // Pset_GLDF_Electrical bucket must appear with the safety-class
+        // bSDD id carried in the property description.
+        assert!(
+            ifc.contains("Pset_GLDF_Electrical"),
+            "expected Pset_GLDF_Electrical in IFC output"
+        );
+        assert!(
+            ifc.contains("ElectricalSafetyClass"),
+            "expected ElectricalSafetyClass property"
+        );
+        assert!(
+            ifc.contains("bSDD:0Ias3th8D2cg4EvP$KqQcv"),
+            "expected the safety-class bSDD GlobalId in a property description"
+        );
+        // The maintenance bucket carries the median-useful-life id.
+        if ifc.contains("MedianUsefulLife") {
+            assert!(ifc.contains("bSDD:0NMpOQzNH679doR_IuOYUl"));
+        }
+    }
+
+    /// Full BIM-properties round-trip: GLDF → IFC → import. The
+    /// product-level DescriptiveAttributes written as bSDD-keyed
+    /// Psets on export must come back on import. Verifies both
+    /// directions of the spec mapping.
+    #[test]
+    #[cfg(feature = "eulumdat")]
+    fn bim_properties_round_trip_through_ifc() {
+        let paths = [
+            "tests/data/SLV - Tria 2.gldf",
+            "../../tests/data/SLV - Tria 2.gldf",
+        ];
+        let loaded = paths.iter().find_map(|p| {
+            std::fs::read(p)
+                .ok()
+                .and_then(|buf| crate::GldfProduct::load_gldf_from_buf_all(buf).ok())
+        });
+        let Some(loaded) = loaded else {
+            eprintln!("SLV Tria 2 fixture not found; skipping");
+            return;
+        };
+
+        let ifc =
+            GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
+                .expect("IFC export");
+        let imported = import_ifc(&ifc).expect("IFC import");
+        let da = &imported.descriptive_attributes;
+
+        // SLV Tria 2 has ElectricalSafetyClass=III, IP20, and a
+        // median-useful-life string — all should survive the trip.
+        assert_eq!(
+            da.electrical_safety_class.as_deref(),
+            Some("III"),
+            "safety class lost in round-trip"
+        );
+        assert_eq!(da.ip_code.as_deref(), Some("IP20"), "IP code lost");
+        assert!(
+            da.median_useful_life.is_some(),
+            "median useful life lost in round-trip"
+        );
+    }
 
     #[test]
     fn test_step_writer_basic() {

@@ -20,6 +20,10 @@ default = ["http"]
 http = ["dep:reqwest", "dep:tokio", "dep:async-std"]
 eulumdat = ["dep:eulumdat"]
 l3d = ["dep:l3d_rs"]
+# XSD validation via uppsala (pure Rust, zero deps, WASM-friendly).
+# Off by default: it embeds the rc-3 XSD (~250 KB) and links uppsala —
+# only opt in where validation actually runs (CLI, WASM banner, T4).
+xsd = ["dep:uppsala"]
 
 [dependencies]
 # Serialization
@@ -54,3 +58,22 @@ base64 = "0.22"
 
 # L3D geometry parsing (optional)
 l3d_rs = { workspace = true, optional = true }
+
+# XSD validation (optional). Pure-Rust, no system XML libs needed — works
+# in WASM builds.
+uppsala = { version = "0.4.0", optional = true }
+
+# WASM-only: `std::time::SystemTime::now()` panics on
+# `wasm32-unknown-unknown`. We use `js_sys::Date::now()` / `web_sys::window()`
+# to seed the UUID PRNG instead. These crates are already in the WASM
+# build's transitive deps via leptos + gldf-bevy, so this adds no extra
+# weight on native targets (cfg-gated to wasm32).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+web-sys = "0.3"
+
+[dev-dependencies]
+# Integration tests need direct access to eulumdat's ATLA parser
+# (the optional `eulumdat` lib feature is required to compile these
+# tests at all — run with `cargo test --features eulumdat`).
+eulumdat = { workspace = true }

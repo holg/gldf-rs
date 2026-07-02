@@ -116,6 +116,12 @@ impl StepWriter {
         s.replace('\\', "\\\\").replace('\'', "''")
     }
 
+    /// Public STEP-escape, for callers building value expressions
+    /// outside the writer (e.g. the BIM-property mapping in `mod.rs`).
+    pub fn escape_string_public(s: &str) -> String {
+        Self::escape_string(s)
+    }
+
     /// Create an IFCAXIS2PLACEMENT3D entity (properly, not inline!)
     fn add_axis2_placement_3d(
         &mut self,
@@ -1077,6 +1083,60 @@ impl StepWriter {
     // =========================================================================
     // Property sets for light fixtures
     // =========================================================================
+
+    /// Add a generic property set whose properties may carry a bSDD
+    /// GlobalId in the description (`bSDD:<id>`). Mirrors
+    /// `bimifc_writer::write_property_set` so the GLDF→IFC exporter
+    /// and bimifc converge on one shape; gldf-rs will migrate onto the
+    /// bimifc fn in a later slice.
+    ///
+    /// `props` is `(name, description_opt, value_step_expr)` already
+    /// rendered to STEP value expressions (e.g. `IFCLABEL('IP20')`).
+    /// Returns the Pset EntityRef, or a 0-ref if `props` is empty.
+    pub fn add_property_set_with_ids(
+        &mut self,
+        element: EntityRef,
+        owner_history: EntityRef,
+        pset_name: &str,
+        props: &[(String, Option<String>, String)],
+    ) -> EntityRef {
+        if props.is_empty() {
+            return EntityRef::new(0);
+        }
+
+        let mut prop_refs = Vec::with_capacity(props.len());
+        for (name, desc, value_expr) in props {
+            let desc_field = match desc {
+                Some(d) => format!("'{}'", Self::escape_string(d)),
+                None => "$".to_string(),
+            };
+            let prop = self.add_entity(format!(
+                "IFCPROPERTYSINGLEVALUE('{}',{},{},$)",
+                Self::escape_string(name),
+                desc_field,
+                value_expr
+            ));
+            prop_refs.push(prop);
+        }
+
+        let prop_list: Vec<String> = prop_refs.iter().map(|p| p.to_string()).collect();
+        let guid = self.generate_guid();
+        let pset = self.add_entity(format!(
+            "IFCPROPERTYSET('{}',{},'{}',$,({}))",
+            guid,
+            owner_history,
+            Self::escape_string(pset_name),
+            prop_list.join(",")
+        ));
+
+        let guid2 = self.generate_guid();
+        self.add_entity(format!(
+            "IFCRELDEFINESBYPROPERTIES('{}',{},$,$,({}),{})",
+            guid2, owner_history, element, pset
+        ));
+
+        pset
+    }
 
     /// Add Pset_LightFixtureTypeCommon property set
     pub fn add_light_fixture_common_pset(

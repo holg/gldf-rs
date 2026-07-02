@@ -11,10 +11,23 @@ repository.workspace = true
 name = "gldf-edit"
 path = "src/main.rs"
 
+[lib]
+name = "gldf_rs_tui"
+path = "src/lib.rs"
+
 [dependencies]
 gldf-rs = { workspace = true, features = ["eulumdat"] }
 gldf-rs-editor = { workspace = true }
+# Photometric LDT parser + polar-diagram primitive — feeds the
+# Photometry detail pane's braille polar plot.
+eulumdat = { workspace = true }
+# L3D archive parser — pulls triangles out of the .l3d zip for the
+# iso-3D wireframe.
+l3d_rs = { workspace = true }
+# OBJ parser for the L3D mesh extraction.
+tobj = { workspace = true }
 ratatui = { workspace = true }
+ratatui-explorer = { workspace = true }
 crossterm = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }

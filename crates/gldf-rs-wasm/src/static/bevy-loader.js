@@ -10,6 +10,7 @@ const L3D_STORAGE_KEY = 'gldf_current_l3d';
 const LDT_STORAGE_KEY = 'gldf_current_ldt';
 const EMITTER_CONFIG_KEY = 'gldf_emitter_config';
 const MOUNTING_CONFIG_KEY = 'gldf_mounting_config';
+const HOUSING_COLOR_KEY = 'gldf_housing_color_rgb';
 const GLDF_TIMESTAMP_KEY = 'gldf_timestamp';
 
 // Storage keys for IFC geometry data
@@ -23,8 +24,13 @@ const IFC_TIMESTAMP_KEY = 'ifc_timestamp';
  * @param {string|null} ldtData - LDT file content (optional)
  * @param {string|null} emitterConfig - JSON string of emitter configurations (optional)
  * @param {string|null} mountingConfig - JSON string of mounting configuration (optional)
+ * @param {string|null} housingColorRgb - JSON triple "[r,g,b]" in sRGB 0..=1 (optional)
+ *                                          Applied as a renderer-side override on the
+ *                                          luminaire body. Drives the variant preview —
+ *                                          flip variant 1 (red) / variant 2 (blue) without
+ *                                          touching the L3D bytes.
  */
-function saveL3dForBevy(l3dData, ldtData, emitterConfig, mountingConfig) {
+function saveL3dForBevy(l3dData, ldtData, emitterConfig, mountingConfig, housingColorRgb) {
     console.log('[Bevy] saveL3dForBevy called with:', l3dData?.length, 'bytes L3D');
     try {
         // Convert to base64 for storage (handle large arrays properly)
@@ -62,6 +68,15 @@ function saveL3dForBevy(l3dData, ldtData, emitterConfig, mountingConfig) {
             localStorage.removeItem(MOUNTING_CONFIG_KEY);
         }
 
+        // Store housing-color override (sRGB triple). Drives the
+        // variant preview without re-baking the L3D bytes.
+        if (housingColorRgb) {
+            localStorage.setItem(HOUSING_COLOR_KEY, housingColorRgb);
+            console.log('[Bevy] Housing color stored:', housingColorRgb);
+        } else {
+            localStorage.removeItem(HOUSING_COLOR_KEY);
+        }
+
         // Update timestamp to trigger Bevy reload
         const ts = Date.now().toString();
         localStorage.setItem(GLDF_TIMESTAMP_KEY, ts);
@@ -81,6 +96,7 @@ function clearL3dData() {
     localStorage.removeItem(LDT_STORAGE_KEY);
     localStorage.removeItem(EMITTER_CONFIG_KEY);
     localStorage.removeItem(MOUNTING_CONFIG_KEY);
+    localStorage.removeItem(HOUSING_COLOR_KEY);
     localStorage.removeItem(GLDF_TIMESTAMP_KEY);
     // Also clear IFC data
     localStorage.removeItem(IFC_GEOMETRY_KEY);
@@ -128,6 +144,59 @@ async function loadBevyViewer() {
             const bevy = await import(modulePath);
             console.log('[Bevy] 📦 Module imported, initializing WASM...');
             await bevy.default();
+
+            // Expose the wasm-bindgen camera/joint bridges on `window` so
+            // the Leptos Lisp panel (and DevTools console) can reach them.
+            // The exports live on the dynamically-imported module object;
+            // without this hop they'd be invisible to anything outside
+            // this closure. Snapshot-attach AFTER `bevy.default()` so the
+            // wasm module is initialised; calling these before init would
+            // hit an unreachable in the wasm-bindgen shim.
+            for (const name of [
+                "gldf_bevy_set_camera",
+                "gldf_bevy_get_camera",
+                "gldf_bevy_luminaire_tilt",
+                "gldf_bevy_camera_animate",
+                "gldf_bevy_luminaire_animate",
+                "gldf_bevy_reset_tilts",
+                // Room-tweak setters
+                "gldf_bevy_set_ambient",
+                "gldf_bevy_set_room_size",
+                "gldf_bevy_set_surface_color",
+                "gldf_bevy_set_surface_reflectance",
+                "gldf_bevy_set_surface_emissive",
+                // Room-tweak getters (snapshot read-side)
+                "gldf_bevy_get_ambient",
+                "gldf_bevy_get_room_size",
+                "gldf_bevy_get_surface",
+            ]) {
+                if (typeof bevy[name] === "function") {
+                    window[name] = bevy[name];
+                } else {
+                    console.warn(`[Bevy] ⚠ export ${name} missing from module`);
+                }
+            }
+            console.log('[Bevy] 🔗 camera + joint bridges attached to window');
+
+            // Suppress the browser's native context menu on the Bevy
+            // canvas. CRITICAL: without this, right-mouse-down enters
+            // Bevy's mouse-look mode, but on mouse-up the browser opens
+            // its context menu — Bevy never receives the `mouseup`, so
+            // `MouseButton::Right.pressed()` stays true forever and the
+            // camera keeps rotating with every cursor move (even with
+            // no button held). The Leptos-side `on:contextmenu` handler
+            // doesn't always fire if Bevy's canvas captures events at
+            // a lower level, so we install a window-level listener in
+            // CAPTURE mode — it runs before any element handler and
+            // reliably prevents the menu from opening over the canvas.
+            const suppressContextMenu = (ev) => {
+                if (ev.target && ev.target.id === "bevy-canvas") {
+                    ev.preventDefault();
+                }
+            };
+            window.addEventListener("contextmenu", suppressContextMenu, true);
+            console.log('[Bevy] 🛡 contextmenu suppression installed on #bevy-canvas');
+
             console.log('[Bevy] 📦 WASM initialized, calling run_on_canvas("#bevy-canvas")...');
             bevy.run_on_canvas("#bevy-canvas");
 

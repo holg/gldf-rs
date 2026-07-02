@@ -7,14 +7,15 @@
 use crate::components::edit_util::event_value;
 use crate::components::ScopePicker;
 use crate::i18n;
-use crate::state::{use_gldf, GldfAction, Scope};
+use crate::i18n::ui::t as ui_t;
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use leptos::prelude::*;
 use std::collections::HashSet;
 
 #[component]
 pub fn ApplicationsEditorPage() -> impl IntoView {
     let state = use_gldf();
-    let scope = RwSignal::new(Scope::Product);
+    let scope = use_active_scope();
     let filter = RwSignal::new(String::new());
 
     let on_filter = move |e: web_sys::Event| {
@@ -23,17 +24,21 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
         }
     };
 
+    let title_signal = move || ui_t("gldf.applications.title", &state.with(|s| s.ui_language.clone()));
+    let desc_signal = move || ui_t("gldf.applications.description", &state.with(|s| s.ui_language.clone()));
+
     view! {
         <div class="editor-section applications-editor">
-            <h2>{ "Applications" }</h2>
+            <h2>{ title_signal }</h2>
             <p class="section-description">
-                { "Application areas the luminaire is suitable for. Pick from the XSD-defined list — values outside that list are not schema-valid." }
+                { desc_signal }
             </p>
             <ScopePicker scope=scope />
 
             {move || state.with(|s| {
                 let current = scope.get();
                 let ui_lang = s.ui_language.clone();
+                let tr = |key: &str| ui_t(key, &ui_lang);
                 let product_apps: Vec<String> = s
                     .product
                     .product_definitions
@@ -78,16 +83,16 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
                 let removable = !inheritance_hint;
 
                 let scope_label = match current {
-                    Scope::Product => "Current applications".to_string(),
-                    Scope::Variant(_) if variant_has_explicit => "Variant applications (explicit override)".to_string(),
-                    Scope::Variant(_) => "Inherited from product (no override)".to_string(),
+                    Scope::Product => tr("gldf.applications.current"),
+                    Scope::Variant(_) if variant_has_explicit => tr("gldf.applications.variant_explicit"),
+                    Scope::Variant(_) => tr("gldf.applications.inherited"),
                 };
 
                 view! {
                     {if inheritance_hint && !product_apps.is_empty() {
                         view! {
                             <div class="inheritance-banner" style="padding: 8px; background: var(--bg-secondary); border-radius: 4px; margin-bottom: 8px;">
-                                { format!("This variant has no Applications block of its own — it inherits {} from the product default. Toggling a checkbox below creates an explicit override.", product_apps.len()) }
+                                { tr("gldf.applications.inheritance_banner").replace("{n}", &product_apps.len().to_string()) }
                             </div>
                         }.into_any()
                     } else { ().into_any() }}
@@ -95,7 +100,7 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
                     <div class="applications-list">
                         <h3>{ scope_label }</h3>
                         {if display_list.is_empty() {
-                            view! { <p class="empty-message">{ "No applications selected." }</p> }.into_any()
+                            view! { <p class="empty-message">{ tr("gldf.applications.empty_selection") }</p> }.into_any()
                         } else {
                             view! {
                                 <div class="tags-container" style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -130,7 +135,7 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
                     </div>
 
                     <div class="form-group">
-                        <label for="application-filter">{ "Add applications" }</label>
+                        <label for="application-filter">{ tr("gldf.applications.add") }</label>
                         <input
                             id="application-filter"
                             type="search"

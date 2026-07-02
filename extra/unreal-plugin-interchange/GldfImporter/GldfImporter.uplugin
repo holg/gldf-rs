@@ -11,13 +11,18 @@
   "MarketplaceURL": "",
   "SupportURL": "",
   "EnabledByDefault": true,
-  "CanContainContent": false,
+  "CanContainContent": true,
   "IsBetaVersion": true,
   "IsExperimentalVersion": true,
   "Installed": false,
   "Modules": [
     {
       "Name": "GldfImporter",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "GldfSearch",
       "Type": "Editor",
       "LoadingPhase": "Default"
     }

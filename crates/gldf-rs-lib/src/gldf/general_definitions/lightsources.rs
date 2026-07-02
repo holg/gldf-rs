@@ -239,7 +239,7 @@ pub struct LedMaintenanceFactor {
     pub hours: i32,
 
     /// The value of the maintenance factor.
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub value: f64,
 }
 

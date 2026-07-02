@@ -1,35 +1,55 @@
 //! Emergency lighting editor: DedicatedEmergencyLightingType + DurationTimeAndFlux table.
+//! Scope-aware: edits either product-wide `Emergency` or a variant's override.
 
 use crate::components::edit_util::{event_i32, event_value, optional_string};
-use crate::state::{use_gldf, GldfAction};
+use crate::components::ScopePicker;
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use gldf_rs::validation::xsd_enums::EMERGENCY_LIGHTING_TYPES;
 use leptos::prelude::*;
 
 #[component]
 pub fn EmergencyEditorPage() -> impl IntoView {
     let state = use_gldf();
+    let scope = use_active_scope();
 
     let on_type = move |e: web_sys::Event| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetDedicatedEmergencyLightingType(optional_string(v))));
+        let scp = scope.get();
+        state.update(|s| s.apply(GldfAction::SetDedicatedEmergencyLightingType(scp, optional_string(v))));
     };
-    let on_add_flux = move |_| state.update(|s| s.apply(GldfAction::AddEmergencyFlux));
+    let on_add_flux = move |_| {
+        let scp = scope.get();
+        state.update(|s| s.apply(GldfAction::AddEmergencyFlux(scp)));
+    };
 
     view! {
         <div class="editor-section emergency-editor">
             <h2>{ "Emergency" }</h2>
             <p class="section-description">
-                { "Emergency lighting attributes. Populate when the luminaire is rated for emergency use; leave empty otherwise." }
+                { "Emergency lighting attributes. Populate when the luminaire is rated for emergency use; leave empty otherwise. Variants can override the product-wide settings." }
             </p>
 
+            <ScopePicker scope=scope />
+
             {move || state.with(|s| {
-                let emergency = s
-                    .product
-                    .product_definitions
-                    .product_meta_data
-                    .as_ref()
-                    .and_then(|m| m.descriptive_attributes.as_ref())
-                    .and_then(|a| a.emergency.clone());
+                let cur_scope = scope.get();
+                let emergency = match cur_scope {
+                    Scope::Product => s
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_ref()
+                        .and_then(|m| m.descriptive_attributes.as_ref())
+                        .and_then(|a| a.emergency.clone()),
+                    Scope::Variant(idx) => s
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_ref()
+                        .and_then(|vs| vs.variant.get(idx))
+                        .and_then(|v| v.descriptive_attributes.as_ref())
+                        .and_then(|a| a.emergency.clone()),
+                };
                 let dedicated_type = emergency
                     .as_ref()
                     .and_then(|e| e.dedicated_emergency_lighting_type.clone())
@@ -76,14 +96,17 @@ pub fn EmergencyEditorPage() -> impl IntoView {
                                             let snap_value = flux.value;
                                             let on_hours = move |e: web_sys::Event| {
                                                 let h = event_i32(&e).unwrap_or(0);
-                                                state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { index: idx, hours: h, flux: snap_value }));
+                                                let scp = scope.get();
+                                                state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { scope: scp, index: idx, hours: h, flux: snap_value }));
                                             };
                                             let on_flux = move |e: web_sys::Event| {
                                                 let f = event_i32(&e).unwrap_or(0);
-                                                state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { index: idx, hours: snap_hours, flux: f }));
+                                                let scp = scope.get();
+                                                state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { scope: scp, index: idx, hours: snap_hours, flux: f }));
                                             };
                                             let on_remove = move |_| {
-                                                state.update(|s| s.apply(GldfAction::RemoveEmergencyFlux(idx)));
+                                                let scp = scope.get();
+                                                state.update(|s| s.apply(GldfAction::RemoveEmergencyFlux { scope: scp, index: idx }));
                                             };
                                             view! {
                                                 <tr>

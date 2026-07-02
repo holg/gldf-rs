@@ -14,6 +14,7 @@
 
 use crate::components::pages::link_hint::LinkHint;
 use crate::components::{EditModal, EmitterDraft, EmitterTypeForm, IdRenameChip};
+use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction, LightEmitterKind};
 use gldf_rs::gldf::general_definitions::lightsources::Emitter;
 use leptos::prelude::*;
@@ -32,6 +33,8 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
 
     view! {
         {move || state.with(|s| {
+            let lang = s.ui_language.clone();
+            let tr = |key: &str| ui_t(key, &lang);
             let emitters: Vec<Emitter> = s
                 .product
                 .general_definitions
@@ -95,12 +98,14 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                 view! {
                     <div class="emitters-toolbar" style="display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px 0;">
                         {move || if show_new_form.get() {
+                            let create_title = ui_t("gldf.emitters.create_title", &state.with(|s| s.ui_language.clone()));
+                            let submit_label = ui_t("gldf.emitters.create_submit", &state.with(|s| s.ui_language.clone()));
                             view! {
                                 <div>
-                                    <h4 style="margin: 0 0 8px 0; font-size: 13px;">{ "Create new Emitter slot" }</h4>
+                                    <h4 style="margin: 0 0 8px 0; font-size: 13px;">{ create_title }</h4>
                                     <EmitterTypeForm
                                         show_name_field=true
-                                        submit_label="Create Emitter".to_string()
+                                        submit_label=submit_label
                                         available_photometries=photometry_ids_for_form.clone()
                                         available_fixed_ls=fixed_ls_for_form.clone()
                                         available_multi_channel_ls=mc_for_form.clone()
@@ -111,12 +116,14 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                                 </div>
                             }.into_any()
                         } else {
+                            let new_label = ui_t("gldf.emitters.new_slot", &state.with(|s| s.ui_language.clone()));
                             view! {
                                 <div>
                                     <button
                                         on:click=on_open_new_form
+                                        data-testid="emitter-add"
                                         style="padding: 4px 10px; font-size: 12px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
-                                    >{ "+ New Emitter slot" }</button>
+                                    >{ new_label }</button>
                                 </div>
                             }.into_any()
                         }}
@@ -125,16 +132,19 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
             } else { ().into_any() };
 
             if emitters.is_empty() {
+                let no_emitters = tr("gldf.emitters.no_emitters");
+                let empty_msg = if editable {
+                    tr("gldf.emitters.empty_editable")
+                } else {
+                    tr("gldf.emitters.empty_readonly")
+                };
                 return view! {
                     <>
                         { toolbar }
                         <div class="empty-state">
                             <div class="icon">{ "🔆" }</div>
-                            <h3>{ "No Emitters" }</h3>
-                            <p>{
-                                if editable { "Click + New Emitter slot above. Pick a LightEmitter type and fill its refs to create your first emitter." }
-                                else { "This GLDF file has no emitter definitions" }
-                            }</p>
+                            <h3>{ no_emitters }</h3>
+                            <p>{ empty_msg }</p>
                         </div>
                     </>
                 }.into_any();
@@ -213,6 +223,8 @@ fn EmitterCard(
     sensor_ids: Vec<String>,
 ) -> impl IntoView {
     let state = use_gldf();
+    let lang = state.with(|s| s.ui_language.clone());
+    let tr = move |key: &str| ui_t(key, &lang);
     let info_for_fixed = info.clone();
     let ls_to_spectrum_for_fixed = ls_to_spectrum.clone();
     let emitter_id_for_header = emitter.id.clone();
@@ -252,8 +264,8 @@ fn EmitterCard(
             {if !emitter.fixed_light_emitter.is_empty() {
                 view! {
                     <div class="fixed-emitters" style="margin-bottom: 16px;">
-                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Fixed Light Emitters" }</h4>
-                        {emitter.fixed_light_emitter.iter().enumerate().map(|(_idx, fle)| {
+                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ tr("gldf.emitters.fixed_title") }</h4>
+                        {emitter.fixed_light_emitter.iter().enumerate().map(|(idx, fle)| {
                             let photo_id = fle.photometry_reference.photometry_id.clone();
                             let ls_id_opt = fle.light_source_reference.fixed_light_source_id.clone();
                             let emergency = fle.emergency_behaviour.clone();
@@ -261,6 +273,11 @@ fn EmitterCard(
                             let spectrum_id = ls_id_opt
                                 .as_ref()
                                 .and_then(|id| ls_to_spectrum_for_fixed.get(id).cloned());
+                            let cg_current = fle
+                                .control_gear_reference
+                                .as_ref()
+                                .map(|cgr| cgr.control_gear_id.clone());
+                            let emitter_id_for_cg = emitter.id.clone();
                             view! {
                                 <div style="background: var(--bg-primary); padding: 12px; border-radius: 6px; margin-bottom: 8px;">
                                     <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px;">
@@ -295,6 +312,13 @@ fn EmitterCard(
                                             }}
                                         </div>
                                     </div>
+                                    <ControlGearPicker
+                                        emitter_id=emitter_id_for_cg
+                                        kind=LightEmitterKind::Fixed
+                                        light_emitter_index=idx
+                                        current=cg_current
+                                        editable=editable
+                                    />
                                     {info_lookup.map(|(file_name, len)| view! {
                                         <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color); font-size: 11px; color: var(--text-tertiary);">
                                             { format!("Photometry file: {} ({} bytes) — LdtViewer renders in slice 3", file_name, len) }
@@ -310,7 +334,7 @@ fn EmitterCard(
             {if !emitter.changeable_light_emitter.is_empty() {
                 view! {
                     <div class="changeable-emitters">
-                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Changeable Light Emitters" }</h4>
+                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ tr("gldf.emitters.changeable_title") }</h4>
                         {emitter.changeable_light_emitter.iter().enumerate().map(|(_idx, cle)| {
                             let photo_id = cle.photometry_reference.photometry_id.clone();
                             let emergency = cle.emergency_behaviour.clone();
@@ -345,10 +369,15 @@ fn EmitterCard(
             {if !emitter.multi_channel_light_emitter.is_empty() {
                 view! {
                     <div class="multi-channel-emitters" style="margin-top: 12px;">
-                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Multi-Channel Light Emitters" }</h4>
-                        {emitter.multi_channel_light_emitter.iter().map(|mle| {
+                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ tr("gldf.emitters.multi_channel_title") }</h4>
+                        {emitter.multi_channel_light_emitter.iter().enumerate().map(|(idx, mle)| {
                             let emergency = mle.emergency_behaviour.clone();
                             let ls_id = mle.light_source_reference.multi_channel_light_source_id.clone();
+                            let cg_current = mle
+                                .control_gear_reference
+                                .as_ref()
+                                .map(|cgr| cgr.control_gear_id.clone());
+                            let emitter_id_for_cg = emitter.id.clone();
                             view! {
                                 <div style="background: var(--bg-primary); padding: 12px; border-radius: 6px; margin-bottom: 8px;">
                                     <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px;">
@@ -366,6 +395,13 @@ fn EmitterCard(
                                             <span style="color: var(--accent-purple);">{ ls_id }</span>
                                         </div>
                                     </div>
+                                    <ControlGearPicker
+                                        emitter_id=emitter_id_for_cg
+                                        kind=LightEmitterKind::MultiChannel
+                                        light_emitter_index=idx
+                                        current=cg_current
+                                        editable=editable
+                                    />
                                 </div>
                             }
                         }).collect::<Vec<_>>()}
@@ -376,7 +412,7 @@ fn EmitterCard(
             {if !emitter.sensor_emitter.is_empty() {
                 view! {
                     <div class="sensors" style="margin-top: 12px;">
-                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ "Sensor Emitters" }</h4>
+                        <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ tr("gldf.emitters.sensor_title") }</h4>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                             {emitter.sensor_emitter.iter().map(|s| view! {
                                 <span style="background: var(--bg-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px;">
@@ -425,6 +461,11 @@ fn EmitterEditForm(
     on_done: Arc<dyn Fn() + Send + Sync>,
 ) -> impl IntoView {
     let state = use_gldf();
+    let edit_lang = state.with(|s| s.ui_language.clone());
+    let h_fixed = ui_t("gldf.emitters.fixed_title", &edit_lang);
+    let h_change = ui_t("gldf.emitters.changeable_title", &edit_lang);
+    let h_mc = ui_t("gldf.emitters.multi_channel_title", &edit_lang);
+    let h_sensor = ui_t("gldf.emitters.sensor_title", &edit_lang);
     let emitter_id = emitter.id.clone();
     let emitter_id_for_remove = emitter.id.clone();
     let emitter_id_for_add = emitter.id.clone();
@@ -523,15 +564,16 @@ fn EmitterEditForm(
     view! {
         <div class="emitter-edit-form" style="display: flex; flex-direction: column; gap: 12px;">
             // Fixed children
-            {move || {
+            {let h_fixed = h_fixed.clone(); move || {
                 let kids = fixed_children.get();
                 if kids.is_empty() {
                     return view! { <></> }.into_any();
                 }
                 let remove = remove_fixed.clone();
+                let h_fixed = h_fixed.clone();
                 view! {
                     <div>
-                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ "Fixed Light Emitters" }</h4>
+                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ h_fixed }</h4>
                         {kids.into_iter().enumerate().map(|(idx, fle)| {
                             let photo = fle.photometry_reference.photometry_id.clone();
                             let ls = fle.light_source_reference.fixed_light_source_id.clone();
@@ -556,15 +598,16 @@ fn EmitterEditForm(
             }}
 
             // Changeable children
-            {move || {
+            {let h_change = h_change.clone(); move || {
                 let kids = change_children.get();
                 if kids.is_empty() {
                     return view! { <></> }.into_any();
                 }
                 let remove = remove_change.clone();
+                let h_change = h_change.clone();
                 view! {
                     <div>
-                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ "Changeable Light Emitters" }</h4>
+                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ h_change }</h4>
                         {kids.into_iter().enumerate().map(|(idx, cle)| {
                             let photo = cle.photometry_reference.photometry_id.clone();
                             let remove = remove.clone();
@@ -585,15 +628,16 @@ fn EmitterEditForm(
             }}
 
             // MultiChannel children
-            {move || {
+            {let h_mc = h_mc.clone(); move || {
                 let kids = mc_children.get();
                 if kids.is_empty() {
                     return view! { <></> }.into_any();
                 }
                 let remove = remove_mc.clone();
+                let h_mc = h_mc.clone();
                 view! {
                     <div>
-                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ "Multi-Channel Light Emitters" }</h4>
+                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ h_mc }</h4>
                         {kids.into_iter().enumerate().map(|(idx, mle)| {
                             let ls = mle.light_source_reference.multi_channel_light_source_id.clone();
                             let remove = remove.clone();
@@ -614,15 +658,16 @@ fn EmitterEditForm(
             }}
 
             // Sensor children
-            {move || {
+            {let h_sensor = h_sensor.clone(); move || {
                 let kids = sensor_children.get();
                 if kids.is_empty() {
                     return view! { <></> }.into_any();
                 }
                 let remove = remove_sensor.clone();
+                let h_sensor = h_sensor.clone();
                 view! {
                     <div>
-                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ "Sensor Emitters" }</h4>
+                        <h4 style="margin: 0 0 6px; font-size: 12px; color: var(--text-secondary);">{ h_sensor }</h4>
                         {kids.into_iter().enumerate().map(|(idx, se)| {
                             let sid = se.sensor_reference.sensor_id.clone();
                             let remove = remove.clone();
@@ -748,3 +793,83 @@ fn AddChildForm(
 // `EmitterTypeForm` + `AddChildForm` wrapper above. The reusable form
 // matches the XSD's xs:choice between Fixed / Changeable / MultiChannel /
 // Sensor instead of mashing two paths into one row.)
+
+/// Inline ControlGear picker for a single Fixed- or MultiChannel-
+/// LightEmitter slot inside an Emitter. The picker reads declared
+/// `<ControlGear>` ids live and dispatches `SetEmitterControlGearReference`
+/// to bind/clear. When `editable=false` it renders a compact read-only
+/// row (the bound driver id or a "no driver" placeholder).
+#[component]
+fn ControlGearPicker(
+    emitter_id: String,
+    kind: LightEmitterKind,
+    light_emitter_index: usize,
+    current: Option<String>,
+    editable: bool,
+) -> impl IntoView {
+    let state = use_gldf();
+    let cg_ids = Signal::derive(move || {
+        state.with(|s| {
+            s.product
+                .general_definitions
+                .control_gears
+                .as_ref()
+                .map(|c| c.control_gear.iter().map(|g| g.id.clone()).collect::<Vec<_>>())
+                .unwrap_or_default()
+        })
+    });
+
+    if !editable {
+        let label = current.clone().unwrap_or_else(|| "—".to_string());
+        return view! {
+            <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 11px; color: var(--text-secondary);">
+                <span style="color: var(--text-tertiary);">{ "Control Gear: " }</span>
+                <span style="color: var(--accent-yellow);">{ label }</span>
+            </div>
+        }.into_any();
+    }
+
+    let emitter_id_for_pick = emitter_id.clone();
+    let on_pick = move |e: web_sys::Event| {
+        use wasm_bindgen::JsCast;
+        let Some(target) = e.target() else { return };
+        let Ok(sel) = target.dyn_into::<web_sys::HtmlSelectElement>() else { return };
+        let val = sel.value();
+        let control_gear_id = if val.is_empty() { None } else { Some(val) };
+        let eid = emitter_id_for_pick.clone();
+        state.update(|s| {
+            s.apply(GldfAction::SetEmitterControlGearReference {
+                emitter_id: eid,
+                kind,
+                light_emitter_index,
+                control_gear_id,
+            });
+        });
+    };
+
+    let current_for_show = current.clone();
+    view! {
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 11px;">
+            <span style="color: var(--text-tertiary);">{ "Control Gear: " }</span>
+            <select on:change=on_pick style="font-size: 11px; padding: 1px 4px;">
+                <option value="" selected=current_for_show.is_none()>{ "— none —" }</option>
+                {move || cg_ids.get().into_iter().map(|cid| {
+                    let label = cid.clone();
+                    let selected = current.as_deref() == Some(cid.as_str());
+                    view! { <option value=cid selected=selected>{ label }</option> }
+                }).collect::<Vec<_>>()}
+            </select>
+            {move || {
+                if cg_ids.with(|v| v.is_empty()) {
+                    view! {
+                        <span style="font-size: 10px; color: var(--text-tertiary);">
+                            { "No Control Gear declared — add one on " }
+                            <strong style="color: var(--accent-blue);">{ "⚡ Control Gear" }</strong>
+                            { "." }
+                        </span>
+                    }.into_any()
+                } else { view! { <span /> }.into_any() }
+            }}
+        </div>
+    }.into_any()
+}

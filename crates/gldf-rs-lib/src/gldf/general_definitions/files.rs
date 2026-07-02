@@ -31,7 +31,7 @@ pub struct File {
     pub language: String,
 
     /// The name of the file.
-    #[serde(rename = "$text")]
+    #[serde(rename = "$text", default)]
     pub file_name: String,
 }
 

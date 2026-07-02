@@ -7,7 +7,7 @@
 
 use crate::components::edit_util::{event_f64, event_i32, event_value, optional_string};
 use crate::components::{LocaleFooEditor, ScopePicker};
-use crate::state::{use_gldf, GldfAction, Scope};
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use gldf_rs::gldf::product_definitions::Mechanical;
 use gldf_rs::validation::xsd_enums;
 use leptos::prelude::*;
@@ -21,7 +21,7 @@ const PRODUCT_FORMS: &[&str] = &[
 #[component]
 pub fn MechanicalEditorPage() -> impl IntoView {
     let state = use_gldf();
-    let scope = RwSignal::new(Scope::Product);
+    let scope = use_active_scope();
 
     // Action dispatchers, all bound to the current scope.
     let on_ik = move |e: web_sys::Event| {
@@ -156,13 +156,13 @@ pub fn MechanicalEditorPage() -> impl IntoView {
                         <label>{ "Product Size (mm)" }</label>
                         <div class="size-grid" style="display: flex; gap: 8px;">
                             <label>{ "Length:" }
-                                <input type="number" prop:value=length.to_string() on:change=on_length />
+                                <input type="number" id="size-length" prop:value=length.to_string() on:change=on_length />
                             </label>
                             <label>{ "Width:" }
-                                <input type="number" prop:value=width.to_string() on:change=on_width />
+                                <input type="number" id="size-width" prop:value=width.to_string() on:change=on_width />
                             </label>
                             <label>{ "Height:" }
-                                <input type="number" prop:value=height.to_string() on:change=on_height />
+                                <input type="number" id="size-height" prop:value=height.to_string() on:change=on_height />
                             </label>
                         </div>
                     </div>

@@ -1,0 +1,64 @@
+# Cross-build configuration for cross_build_on_mac.sh
+#
+# The .sh is generic and project-agnostic; everything gldf-rs-specific
+# lives here. Parsed by the script with awk, so keep the subset simple:
+#   - `key = "value"` pairs (one per line)
+#   - string arrays with ONE item per line between `key = [` and `]`
+#   - `[target.<triple>]` sections; `env.KEY = "value"` inside a target
+#     section exports KEY=value for that target's build.
+
+[project]
+name = "gldf-rs"
+# Artifacts to build, as "<cargo package>:<bin name>".
+builds = [
+    "gldf-rs-cli:gldf-cli",
+    "gldf-rs-tui:gldf-edit",
+    "gldf-rs-egui:gldf-batch-egui",
+    "gldf-rs-egui:gldf-viewer-egui",
+]
+# Cargo profile to build with. `release-dist` (workspace Cargo.toml)
+# carries the fat-LTO / codegen-units=1 / strip settings — keep LTO in a
+# profile, NOT in rustflags (RUSTFLAGS `-C lto` conflicts with cargo's
+# `-C embed-bitcode=no` for dependency crates).
+profile = "release-dist"
+# Default RUSTFLAGS for every target (a [target.*] section can override).
+rustflags = ""
+# Built binaries are collected into <dist_dir>/<target-triple>/
+dist_dir = "dist/cross"
+
+# Optional extra cargo args per bin: [build.<bin>] cargo_args = "…".
+# The batch app skips `viewer3d` (three-d): winit 0.28's build.rs cfg's
+# on the HOST OS, so its wayland codegen never runs when cross-compiling
+# mac→linux and the target build fails. The two 3D-viewer bins require
+# that feature and thus stay host-native until three-d bumps winit.
+[build.gldf-batch-egui]
+cargo_args = "--no-default-features --features persistence"
+
+# --- Native Apple targets (no extra toolchain needed on a Mac host) ---
+
+[target.aarch64-apple-darwin]
+
+[target.x86_64-apple-darwin]
+
+# --- Linux (brew cross toolchains; TLS is rustls+ring, no OpenSSL
+#     sysroot needed) ---
+
+[target.x86_64-unknown-linux-gnu]
+cc = "x86_64-unknown-linux-gnu-gcc"
+ar = "x86_64-unknown-linux-gnu-ar"
+linker = "x86_64-unknown-linux-gnu-gcc"
+install_hint = "brew tap messense/macos-cross-toolchains && brew install x86_64-unknown-linux-gnu"
+
+[target.aarch64-unknown-linux-gnu]
+cc = "aarch64-unknown-linux-gnu-gcc"
+ar = "aarch64-unknown-linux-gnu-ar"
+linker = "aarch64-unknown-linux-gnu-gcc"
+install_hint = "brew tap messense/macos-cross-toolchains && brew install aarch64-unknown-linux-gnu"
+
+# --- Windows (mingw) ---
+
+[target.x86_64-pc-windows-gnu]
+cc = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"
+linker = "x86_64-w64-mingw32-gcc"
+install_hint = "brew install mingw-w64"

@@ -576,17 +576,45 @@ pub struct GldfVariantInfo {
     pub ies_len: u32,
 }
 
-/// String-field selector for [`gldf_unreal_variant_string`].
+/// String-field selector for [`gldf_unreal_variant_string`] and
+/// [`gldf_unreal_variant_emitter_string`].
 pub const GLDF_VARIANT_FIELD_ID: u32 = 0;
 pub const GLDF_VARIANT_FIELD_PHOTOMETRY_ID: u32 = 1;
+/// The emitter's L3D LEO partName (EmitterObjectExternalName). Only
+/// meaningful for the per-emitter string getter.
+pub const GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME: u32 = 2;
+/// The variant's human display name (`Variant.Name`, localized → en/first;
+/// falls back to the id if unnamed). For the variant string getter — shown
+/// in the UE variant dropdown.
+pub const GLDF_VARIANT_FIELD_NAME: u32 = 3;
 
-struct VariantEntry {
-    variant_id: String,
+/// One emitter within a variant: its photometry + the L3D LEO `partName`
+/// it drives. A twin-head spotlight has two of these per variant, with
+/// different photometry/lumens and different `external_name` (LEO0/LEO1).
+struct EmitterEntry {
     photometry_id: String,
+    /// L3D LEO partName this emitter lights (EmitterObjectExternalName).
+    external_name: String,
     lumens: Option<i32>,
     watts: Option<f64>,
     cct: Option<i32>,
     ies_bytes: Vec<u8>,
+}
+
+struct VariantEntry {
+    variant_id: String,
+    /// Human display name (Variant.Name resolved to a single string), or the
+    /// id when the GLDF didn't name the variant.
+    name: String,
+    /// All non-emergency emitters for this variant, in reference order.
+    emitters: Vec<EmitterEntry>,
+}
+
+impl VariantEntry {
+    /// The first emitter, for the back-compat single-light getters.
+    fn first_emitter(&self) -> Option<&EmitterEntry> {
+        self.emitters.first()
+    }
 }
 
 struct VariantTable {
@@ -623,32 +651,49 @@ pub unsafe extern "C" fn gldf_unreal_variants_open(
         let buf = exporter.file_buf();
         let gldf = &buf.gldf;
 
-        let variants: Vec<String> = gldf
+        let variants: Vec<(String, String)> = gldf
             .product_definitions
             .variants
             .as_ref()
-            .map(|v| v.variant.iter().map(|x| x.id.clone()).collect())
+            .map(|v| {
+                v.variant
+                    .iter()
+                    .map(|x| (x.id.clone(), resolve_variant_name(x)))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let mut entries = Vec::with_capacity(variants.len());
-        for vid in &variants {
-            // First non-emergency emitter for this variant.
+        for (vid, vname) in &variants {
+            // ALL non-emergency emitters for this variant (build_ies_outputs
+            // already drops emergency-only ones). A multi-head luminaire
+            // yields several, each with its own photometry + LEO partName.
             let outs = crate::photometry::build_ies_outputs_for_variant(buf, vid)?;
-            let Some(first) = outs.into_iter().next() else {
+            if outs.is_empty() {
                 // No usable emitter; skip this variant.
                 continue;
-            };
-            let cct = first
-                .light_source_id
-                .as_ref()
-                .and_then(|id| lookup_cct(gldf, id));
+            }
+            let emitters: Vec<EmitterEntry> = outs
+                .into_iter()
+                .map(|e| {
+                    let cct = e
+                        .light_source_id
+                        .as_ref()
+                        .and_then(|id| lookup_cct(gldf, id));
+                    EmitterEntry {
+                        photometry_id: e.photometry_id,
+                        external_name: e.emitter_external_name,
+                        lumens: e.lumens,
+                        watts: e.watts,
+                        cct,
+                        ies_bytes: e.ies_bytes,
+                    }
+                })
+                .collect();
             entries.push(VariantEntry {
                 variant_id: vid.clone(),
-                photometry_id: first.photometry_id,
-                lumens: first.lumens,
-                watts: first.watts,
-                cct,
-                ies_bytes: first.ies_bytes,
+                name: vname.clone(),
+                emitters,
             });
         }
         Ok(VariantTable { entries })
@@ -692,9 +737,10 @@ pub unsafe extern "C" fn gldf_unreal_variant_info(
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
     let Some(table) = map.get(&handle) else { return 1 };
-    let Some(e) = table.entries.get(idx as usize) else {
+    let Some(v) = table.entries.get(idx as usize) else {
         return 1;
     };
+    let Some(e) = v.first_emitter() else { return 1 };
     if !out.is_null() {
         *out = GldfVariantInfo {
             lumens: e.lumens.unwrap_or(0),
@@ -728,12 +774,18 @@ pub unsafe extern "C" fn gldf_unreal_variant_string(
     let Some(table) = map.get(&handle) else {
         return std::ptr::null_mut();
     };
-    let Some(e) = table.entries.get(idx as usize) else {
+    let Some(v) = table.entries.get(idx as usize) else {
         return std::ptr::null_mut();
     };
     let s = match field {
-        GLDF_VARIANT_FIELD_ID => &e.variant_id,
-        GLDF_VARIANT_FIELD_PHOTOMETRY_ID => &e.photometry_id,
+        GLDF_VARIANT_FIELD_ID => &v.variant_id,
+        GLDF_VARIANT_FIELD_NAME => &v.name,
+        GLDF_VARIANT_FIELD_PHOTOMETRY_ID => {
+            let Some(e) = v.first_emitter() else {
+                return std::ptr::null_mut();
+            };
+            &e.photometry_id
+        }
         _ => return std::ptr::null_mut(),
     };
     match CString::new(s.as_str()) {
@@ -757,7 +809,138 @@ pub unsafe extern "C" fn gldf_unreal_variant_ies(
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
     let Some(table) = map.get(&handle) else { return 1 };
-    let Some(e) = table.entries.get(idx as usize) else {
+    let Some(v) = table.entries.get(idx as usize) else {
+        return 1;
+    };
+    let Some(e) = v.first_emitter() else { return 1 };
+    if !out_ptr.is_null() {
+        *out_ptr = e.ies_bytes.as_ptr();
+    }
+    if !out_len.is_null() {
+        *out_len = e.ies_bytes.len() as u32;
+    }
+    0
+}
+
+// ── Per-emitter getters (multi-head luminaires) ──────────────────────────
+//
+// A variant can drive several emitters (e.g. a twin-head spotlight: LEO0 +
+// LEO1), each with its own photometry, lumens, CCT, and IES. The single
+// getters above expose only the first emitter (back-compat); these expose
+// every emitter, keyed by (variant idx, emitter idx). The consumer matches
+// each emitter's EXTERNAL_NAME to an L3D LEO partName (see
+// `gldf_unreal_leo_at`) to place + drive one light per emitter.
+
+/// Number of emitters for variant `idx`. Returns the count, or -1 on an
+/// invalid handle / variant index.
+///
+/// # Safety
+/// `handle` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_emitter_count(handle: u64, idx: u32) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return -1 };
+    let Some(table) = map.get(&handle) else { return -1 };
+    let Some(v) = table.entries.get(idx as usize) else {
+        return -1;
+    };
+    v.emitters.len() as i32
+}
+
+/// Fill `*out` with the scalar data of emitter `eidx` within variant
+/// `vidx`. Returns 0 on success, non-zero on invalid handle / indices.
+///
+/// # Safety
+/// `handle` must be live; `out` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_emitter_info(
+    handle: u64,
+    vidx: u32,
+    eidx: u32,
+    out: *mut GldfVariantInfo,
+) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return 1 };
+    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(v) = table.entries.get(vidx as usize) else {
+        return 1;
+    };
+    let Some(e) = v.emitters.get(eidx as usize) else {
+        return 1;
+    };
+    if !out.is_null() {
+        *out = GldfVariantInfo {
+            lumens: e.lumens.unwrap_or(0),
+            lumens_present: e.lumens.is_some() as u8,
+            watts: e.watts.unwrap_or(0.0),
+            watts_present: e.watts.is_some() as u8,
+            cct: e.cct.unwrap_or(0),
+            cct_present: e.cct.is_some() as u8,
+            ies_len: e.ies_bytes.len() as u32,
+        };
+    }
+    0
+}
+
+/// String field (`GLDF_VARIANT_FIELD_*`) for emitter `eidx` within variant
+/// `vidx`, as a Rust CString (caller frees via [`gldf_unreal_string_free`]).
+/// Null on invalid handle / indices / field.
+///
+/// # Safety
+/// `handle` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_emitter_string(
+    handle: u64,
+    vidx: u32,
+    eidx: u32,
+    field: u32,
+) -> *mut c_char {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else {
+        return std::ptr::null_mut();
+    };
+    let Some(table) = map.get(&handle) else {
+        return std::ptr::null_mut();
+    };
+    let Some(v) = table.entries.get(vidx as usize) else {
+        return std::ptr::null_mut();
+    };
+    let Some(e) = v.emitters.get(eidx as usize) else {
+        return std::ptr::null_mut();
+    };
+    let s = match field {
+        GLDF_VARIANT_FIELD_PHOTOMETRY_ID => &e.photometry_id,
+        GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME => &e.external_name,
+        // The variant id isn't per-emitter; fall back to the variant getter.
+        _ => return std::ptr::null_mut(),
+    };
+    match CString::new(s.as_str()) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Borrow emitter `eidx`'s IES bytes within variant `vidx`. `*out_ptr`
+/// valid until close(). Returns 0 on success, non-zero on invalid
+/// handle / indices.
+///
+/// # Safety
+/// `handle` must be live; out-pointers may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_emitter_ies(
+    handle: u64,
+    vidx: u32,
+    eidx: u32,
+    out_ptr: *mut *const u8,
+    out_len: *mut u32,
+) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return 1 };
+    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(v) = table.entries.get(vidx as usize) else {
+        return 1;
+    };
+    let Some(e) = v.emitters.get(eidx as usize) else {
         return 1;
     };
     if !out_ptr.is_null() {
@@ -786,6 +969,26 @@ pub unsafe extern "C" fn gldf_unreal_variants_close(handle: u64) {
 
 /// Inline CCT lookup (mirrors exporter::lookup_color_temperature_k, kept
 /// local to avoid widening that fn's visibility).
+/// Resolve a `Variant.Name` (localized) to a single display string for the
+/// UE dropdown: prefer the English locale, else the first locale, else fall
+/// back to the variant id so the entry is never blank.
+fn resolve_variant_name(v: &gldf_rs::gldf::product_definitions::Variant) -> String {
+    if let Some(name) = v.name.as_ref() {
+        let locales = &name.locale;
+        // English first (case-insensitive "en" / "en-US" / …).
+        if let Some(en) = locales
+            .iter()
+            .find(|l| l.language.to_lowercase().starts_with("en") && !l.value.trim().is_empty())
+        {
+            return en.value.trim().to_string();
+        }
+        if let Some(first) = locales.iter().find(|l| !l.value.trim().is_empty()) {
+            return first.value.trim().to_string();
+        }
+    }
+    v.id.clone()
+}
+
 fn lookup_cct(gldf: &GldfProduct, light_source_id: &str) -> Option<i32> {
     let ls = gldf.general_definitions.light_sources.as_ref()?;
     ls.fixed_light_source
@@ -806,16 +1009,64 @@ fn lookup_cct(gldf: &GldfProduct, light_source_id: &str) -> Option<i32> {
 /// `kind`: 0 = Point/none, 1 = Rectangle, 2 = Circle.
 /// For Rectangle, `dim_a`/`dim_b` are width/height in **metres**.
 /// For Circle, `dim_a` is the diameter in metres (`dim_b` unused).
+/// `pos_*` are the emitter center in **centimetres**, in the same
+/// right-handed Z-up frame as the mesh vertices (C++ applies the UE
+/// basis flip on Y). Use them to place the light actor at the emitter,
+/// not at the scene root.
+///
+/// `ax_*` / `ay_*` / `az_*` are the world-space images of the LEO's local
+/// +X / +Y / +Z axes after the accumulated geometry·joint·LEO rotation
+/// (unit vectors, L3D right-handed Z-up frame; C++ applies the UE Y-flip).
+/// L3D LEO convention: rect lies in local XY, emits along local −Z, width
+/// along +X, height along +Y. So emission direction = −(az_*), rect width
+/// axis = (ax_*), height axis = (ay_*). Lets the consumer aim the light
+/// correctly instead of assuming "straight down".
 #[repr(C)]
 pub struct GldfLeoShape {
     pub kind: u8,
     pub dim_a: f32,
     pub dim_b: f32,
+    pub pos_x: f32,
+    pub pos_y: f32,
+    pub pos_z: f32,
+    pub ax_x: f32,
+    pub ax_y: f32,
+    pub ax_z: f32,
+    pub ay_x: f32,
+    pub ay_y: f32,
+    pub ay_z: f32,
+    pub az_x: f32,
+    pub az_y: f32,
+    pub az_z: f32,
 }
 
 pub const GLDF_LEO_POINT: u8 = 0;
 pub const GLDF_LEO_RECTANGLE: u8 = 1;
 pub const GLDF_LEO_CIRCLE: u8 = 2;
+
+impl Default for GldfLeoShape {
+    /// Point at the origin with an identity basis (emission straight down,
+    /// −Z) — the safe fallback when there's no usable LEO.
+    fn default() -> Self {
+        GldfLeoShape {
+            kind: GLDF_LEO_POINT,
+            dim_a: 0.0,
+            dim_b: 0.0,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            ax_x: 1.0,
+            ax_y: 0.0,
+            ax_z: 0.0,
+            ay_x: 0.0,
+            ay_y: 1.0,
+            ay_z: 0.0,
+            az_x: 0.0,
+            az_y: 0.0,
+            az_z: 1.0,
+        }
+    }
+}
 
 /// Query the first LEO shape of the GLDF at `gldf_path`. Always returns 0
 /// and fills `*out` (defaults to Point on any failure — a Point light is
@@ -831,12 +1082,9 @@ pub unsafe extern "C" fn gldf_unreal_first_leo_shape(
     if out.is_null() {
         return 1;
     }
-    // Default to Point so a failure still yields a usable light.
-    *out = GldfLeoShape {
-        kind: GLDF_LEO_POINT,
-        dim_a: 0.0,
-        dim_b: 0.0,
-    };
+    // Default to Point at the origin so a failure still yields a usable
+    // light.
+    *out = GldfLeoShape::default();
 
     let Ok(path) = cstr_to_pathbuf(gldf_path, "gldf_path") else {
         return 1;
@@ -845,24 +1093,113 @@ pub unsafe extern "C" fn gldf_unreal_first_leo_shape(
         return 0; // keep the Point default
     };
 
-    match first_leo_shape(exporter.file_buf()) {
-        LeoShape::Rectangle { width_m, height_m } => {
-            *out = GldfLeoShape {
-                kind: GLDF_LEO_RECTANGLE,
-                dim_a: width_m,
-                dim_b: height_m,
-            };
-        }
-        LeoShape::Circle { diameter_m } => {
-            *out = GldfLeoShape {
-                kind: GLDF_LEO_CIRCLE,
-                dim_a: diameter_m,
-                dim_b: 0.0,
-            };
-        }
-        LeoShape::Point => { /* already defaulted */ }
-    }
+    *out = leo_shape_from_placement(&first_leo_shape(exporter.file_buf()));
     0
+}
+
+/// Fill a `GldfLeoShape` from a parsed [`LeoPlacement`].
+fn leo_shape_from_placement(p: &crate::mesh_payload::LeoPlacement) -> GldfLeoShape {
+    let [pos_x, pos_y, pos_z] = p.position_cm;
+    let [ax_x, ax_y, ax_z] = p.axis_x;
+    let [ay_x, ay_y, ay_z] = p.axis_y;
+    let [az_x, az_y, az_z] = p.axis_z;
+    let (kind, dim_a, dim_b) = match p.shape {
+        LeoShape::Rectangle { width_m, height_m } => (GLDF_LEO_RECTANGLE, width_m, height_m),
+        LeoShape::Circle { diameter_m } => (GLDF_LEO_CIRCLE, diameter_m, 0.0),
+        LeoShape::Point => (GLDF_LEO_POINT, 0.0, 0.0),
+    };
+    GldfLeoShape {
+        kind,
+        dim_a,
+        dim_b,
+        pos_x,
+        pos_y,
+        pos_z,
+        ax_x,
+        ax_y,
+        ax_z,
+        ay_x,
+        ay_y,
+        ay_z,
+        az_x,
+        az_y,
+        az_z,
+    }
+}
+
+/// Number of Light Emitting Objects in the GLDF at `gldf_path`. Returns
+/// the count (>= 0), or -1 on a null/invalid path. A twin-head spotlight
+/// returns 2. Pair with [`gldf_unreal_leo_at`] + [`gldf_unreal_leo_part_name`]
+/// to enumerate them.
+///
+/// # Safety
+/// `gldf_path` is a NUL-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_leo_count(gldf_path: *const c_char) -> i32 {
+    let Ok(path) = cstr_to_pathbuf(gldf_path, "gldf_path") else {
+        return -1;
+    };
+    let Ok(exporter) = Exporter::from_path(&path) else {
+        return -1;
+    };
+    crate::mesh_payload::collect_all_leos(exporter.file_buf()).len() as i32
+}
+
+/// Fill `*out` with LEO `idx`'s shape + world position. Returns 0 on
+/// success; non-zero on null/invalid path, null `out`, or out-of-range
+/// index.
+///
+/// # Safety
+/// `gldf_path` is a NUL-terminated UTF-8 C string; `out` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_leo_at(
+    gldf_path: *const c_char,
+    idx: u32,
+    out: *mut GldfLeoShape,
+) -> i32 {
+    if out.is_null() {
+        return 1;
+    }
+    let Ok(path) = cstr_to_pathbuf(gldf_path, "gldf_path") else {
+        return 1;
+    };
+    let Ok(exporter) = Exporter::from_path(&path) else {
+        return 1;
+    };
+    let leos = crate::mesh_payload::collect_all_leos(exporter.file_buf());
+    let Some(p) = leos.get(idx as usize) else {
+        return 1;
+    };
+    *out = leo_shape_from_placement(p);
+    0
+}
+
+/// LEO `idx`'s `partName` as a Rust CString (caller frees via
+/// [`gldf_unreal_string_free`]). Null on null/invalid path or out-of-range
+/// index. Match this against an emitter's
+/// `GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME` to drive the right light.
+///
+/// # Safety
+/// `gldf_path` is a NUL-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_leo_part_name(
+    gldf_path: *const c_char,
+    idx: u32,
+) -> *mut c_char {
+    let Ok(path) = cstr_to_pathbuf(gldf_path, "gldf_path") else {
+        return std::ptr::null_mut();
+    };
+    let Ok(exporter) = Exporter::from_path(&path) else {
+        return std::ptr::null_mut();
+    };
+    let leos = crate::mesh_payload::collect_all_leos(exporter.file_buf());
+    let Some(p) = leos.get(idx as usize) else {
+        return std::ptr::null_mut();
+    };
+    match CString::new(p.part_name.as_str()) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 // ─── internal helpers ────────────────────────────────────────────────────
@@ -1384,6 +1721,135 @@ mod tests {
         assert_eq!(rc2, 1, "info after close → error");
     }
 
+    #[test]
+    fn slv_tria2_per_emitter_and_leos() {
+        // SLV Tria 2 is a TWIN-head spotlight: each variant drives TWO
+        // emitters (LEO0 + LEO1) with DIFFERENT photometry/lumens, and the
+        // L3D has TWO LEOs at two head positions. This is the regression for
+        // "only one emitter shown": the per-emitter FFI must expose both,
+        // and their external names must match the LEO partNames.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("tests/data/SLV - Tria 2.gldf");
+        if !fixture.exists() {
+            eprintln!("skipping: {} not present", fixture.display());
+            return;
+        }
+        let path_c = CString::new(fixture.to_string_lossy().as_bytes()).unwrap();
+
+        // ── LEOs: expect 2 (the two heads), each named ──────────────────
+        let leo_count = unsafe { gldf_unreal_leo_count(path_c.as_ptr()) };
+        assert_eq!(leo_count, 2, "Tria 2 has two LEOs (two heads)");
+
+        let mut leo_names = Vec::new();
+        let mut leo_positions = Vec::new();
+        for i in 0..leo_count as u32 {
+            let mut shape = GldfLeoShape {
+                kind: 255,
+                dim_a: -1.0,
+                dim_b: -1.0,
+                ..GldfLeoShape::default()
+            };
+            let rc = unsafe { gldf_unreal_leo_at(path_c.as_ptr(), i, &mut shape as *mut _) };
+            assert_eq!(rc, 0, "leo_at({i}) ok");
+            assert_eq!(shape.kind, GLDF_LEO_CIRCLE, "Tria 2 LEOs are circles");
+
+            let np = unsafe { gldf_unreal_leo_part_name(path_c.as_ptr(), i) };
+            assert!(!np.is_null(), "leo {i} has a partName");
+            let name = unsafe { CStr::from_ptr(np) }.to_str().unwrap().to_owned();
+            unsafe { gldf_unreal_string_free(np) };
+            leo_names.push(name);
+            leo_positions.push((shape.pos_x, shape.pos_y, shape.pos_z));
+        }
+        assert!(
+            leo_names.contains(&"LEO0".to_string()) && leo_names.contains(&"LEO1".to_string()),
+            "expected LEO0 + LEO1, got {leo_names:?}"
+        );
+        // The two heads must be at DIFFERENT world positions (else they'd
+        // overlap — the whole point of placing per-emitter).
+        assert_ne!(
+            leo_positions[0], leo_positions[1],
+            "the two heads must be at distinct positions: {leo_positions:?}"
+        );
+
+        // ── Per-variant emitters: expect 2, with distinct photometry ────
+        let mut count: u32 = 0;
+        let mut err: *mut c_char = std::ptr::null_mut();
+        let handle = unsafe {
+            gldf_unreal_variants_open(path_c.as_ptr(), &mut count, &mut err)
+        };
+        assert_ne!(handle, 0, "variant handle; err = {err:?}");
+        assert!(count >= 1);
+
+        // Variant display name comes through (for the UE dropdown) and is
+        // the friendly Name, not the long id.
+        {
+            let np = unsafe { gldf_unreal_variant_string(handle, 0, GLDF_VARIANT_FIELD_NAME) };
+            assert!(!np.is_null(), "variant 0 has a display name");
+            let name = unsafe { CStr::from_ptr(np) }.to_str().unwrap().to_owned();
+            unsafe { gldf_unreal_string_free(np) };
+            assert!(!name.is_empty(), "variant name non-empty");
+            eprintln!("[Tria 2] variant 0 name = {name:?}");
+        }
+
+        // Check variant 0's emitters.
+        let ecount = unsafe { gldf_unreal_variant_emitter_count(handle, 0) };
+        assert_eq!(ecount, 2, "variant 0 drives both heads (2 emitters)");
+
+        let mut emitter_names = Vec::new();
+        let mut emitter_lumens = Vec::new();
+        for e in 0..ecount as u32 {
+            let mut info = GldfVariantInfo {
+                lumens: 0, lumens_present: 0, watts: 0.0, watts_present: 0,
+                cct: 0, cct_present: 0, ies_len: 0,
+            };
+            let rc = unsafe { gldf_unreal_variant_emitter_info(handle, 0, e, &mut info as *mut _) };
+            assert_eq!(rc, 0, "emitter_info(0,{e}) ok");
+            assert!(info.ies_len > 0, "emitter {e} has IES bytes");
+            if info.lumens_present != 0 {
+                emitter_lumens.push(info.lumens);
+            }
+
+            let np = unsafe {
+                gldf_unreal_variant_emitter_string(
+                    handle, 0, e, GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME,
+                )
+            };
+            assert!(!np.is_null(), "emitter {e} has an external name");
+            let name = unsafe { CStr::from_ptr(np) }.to_str().unwrap().to_owned();
+            unsafe { gldf_unreal_string_free(np) };
+            emitter_names.push(name);
+
+            // Per-emitter IES borrow works.
+            let mut ies_ptr: *const u8 = std::ptr::null();
+            let mut ies_len: u32 = 0;
+            let brc = unsafe {
+                gldf_unreal_variant_emitter_ies(handle, 0, e, &mut ies_ptr, &mut ies_len)
+            };
+            assert_eq!(brc, 0);
+            assert!(!ies_ptr.is_null() && ies_len == info.ies_len);
+        }
+
+        // Each emitter maps to a distinct LEO partName...
+        assert!(
+            emitter_names.contains(&"LEO0".to_string())
+                && emitter_names.contains(&"LEO1".to_string()),
+            "emitters should name LEO0 + LEO1, got {emitter_names:?}"
+        );
+        // ...and the two heads carry DIFFERENT flux (1600 narrow vs 7800 wide).
+        if emitter_lumens.len() == 2 {
+            assert_ne!(
+                emitter_lumens[0], emitter_lumens[1],
+                "the two heads have distinct lumens: {emitter_lumens:?}"
+            );
+        }
+        eprintln!(
+            "[Tria 2] LEOs={leo_names:?} emitters={emitter_names:?} lumens={emitter_lumens:?}"
+        );
+
+        unsafe { gldf_unreal_variants_close(handle) };
+    }
+
     // ─── LEO shape (Phase 3b.1) ──────────────────────────────────────────
 
     #[test]
@@ -1408,12 +1874,38 @@ mod tests {
             kind: 255,
             dim_a: -1.0,
             dim_b: -1.0,
+            pos_x: f32::NAN,
+            pos_y: f32::NAN,
+            pos_z: f32::NAN,
+            ..GldfLeoShape::default()
         };
         let rc = unsafe { gldf_unreal_first_leo_shape(path_c.as_ptr(), &mut shape as *mut _) };
         assert_eq!(rc, 0);
         assert_eq!(shape.kind, GLDF_LEO_RECTANGLE, "alurays LEO is a rectangle");
         assert!((shape.dim_a - 3.4).abs() < 1e-4, "width 3.4 m, got {}", shape.dim_a);
         assert!((shape.dim_b - 0.044).abs() < 1e-4, "height 0.044 m, got {}", shape.dim_b);
-        eprintln!("[alurays LEO] rect {} x {} m", shape.dim_a, shape.dim_b);
+        // Position must be filled (not the NAN sentinel) — emitter center
+        // in cm. For a 3.4 m strip the center is offset along the long axis.
+        assert!(shape.pos_x.is_finite() && shape.pos_y.is_finite() && shape.pos_z.is_finite());
+
+        // alurays has NO rotations (LEO + geometry all (0,0,0)), so the basis
+        // is identity: emission = −local-Z = (0,0,−1), i.e. straight down in
+        // the L3D Z-up frame. This is the regression guard for "shines down".
+        assert!(
+            (shape.az_x).abs() < 1e-5
+                && (shape.az_y).abs() < 1e-5
+                && (shape.az_z - 1.0).abs() < 1e-5,
+            "un-rotated LEO local +Z should be world +Z (emission −Z = down); got az=({},{},{})",
+            shape.az_x, shape.az_y, shape.az_z
+        );
+        // Width axis along world +X, height along world +Y.
+        assert!((shape.ax_x - 1.0).abs() < 1e-5, "width axis ≈ +X, got ax_x={}", shape.ax_x);
+        assert!((shape.ay_y - 1.0).abs() < 1e-5, "height axis ≈ +Y, got ay_y={}", shape.ay_y);
+
+        eprintln!(
+            "[alurays LEO] rect {} x {} m @ ({:.1},{:.1},{:.1}) cm, +Z→({:.2},{:.2},{:.2})",
+            shape.dim_a, shape.dim_b, shape.pos_x, shape.pos_y, shape.pos_z,
+            shape.az_x, shape.az_y, shape.az_z
+        );
     }
 }

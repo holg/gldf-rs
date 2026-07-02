@@ -172,3 +172,23 @@ iOSInjectionProject/
 extra/unreal-plugin-interchange/**/Binaries/
 extra/unreal-plugin-interchange/**/Intermediate/
 extra/unreal-plugin-interchange/**/DerivedDataCache/
+
+# Cross-build artifacts (scripts/cross_build_on_mac.sh)
+/dist/cross/
+
+# Downloaded vendor corpora and profiling assets (multi-GB, not source)
+/scripts/ledvance_assets/
+/scripts/ledvance_profile/
+/scripts/dekolight_uld/
+/scripts/dekolight_gldf/
+
+# Unreal plugin build artifacts (ThirdParty libs are built, Content is generated)
+/extra/unreal-plugin-interchange/GldfImporter/ThirdParty/
+/extra/unreal-plugin-interchange/GldfImporter/Content/
+
+# Stray build/debug droppings
+*.bak
+rustc-ice-*.txt
+/index.html.1
+/out.gldf
+.~lock.*#

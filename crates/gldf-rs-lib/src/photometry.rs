@@ -315,18 +315,181 @@ pub fn resolve_variant_photometries(
 /// disambiguates them via per-variant references, so each variant
 /// effectively pins one lamp_set anyway.
 ///
-/// Returns `None` when the bytes don't parse as LDT, or when neither
-/// override is supplied (no work to do — caller should keep the original).
+/// Returns `None` when the bytes don't parse, or when neither override
+/// is supplied (no work to do — caller should keep the original).
+///
+/// **Always emits LDT bytes**, regardless of the source format. This
+/// matches the pre-multi-format behaviour but is a footgun when the
+/// source was TM-33 XML — the consumer ends up with `.xml`-named LDT
+/// bytes. New code should call [`patch_photometry_for_variant`]
+/// instead, which lets the caller choose the output format.
 pub fn patch_ldt_for_variant(
     raw_bytes: &[u8],
     lumens: Option<i32>,
     watts: Option<f64>,
 ) -> Option<Vec<u8>> {
+    let ldt = parse_and_overlay(raw_bytes, lumens, watts)?;
+    Some(ldt.to_ldt().into_bytes())
+}
+
+/// Parse photometric bytes (LDT / IES / TM-33 XML), overlay the
+/// variant's lumens + watts onto `lamp_sets[0]`, and serialise the
+/// result in `format`. The single entry-point that variant downloads
+/// in WASM / CLI should call when they want format-explicit output.
+///
+/// Returns `None` when:
+///   * neither override is supplied (no work to do), OR
+///   * bytes don't parse as any supported format, OR
+///   * ATLA JSON/XML emit fails (unreachable in practice).
+///
+/// The format choice is orthogonal to the source — patching a TM-33
+/// XML to LDT works fine, as does LDT → TM-33 XML, etc.
+pub fn patch_photometry_for_variant(
+    raw_bytes: &[u8],
+    lumens: Option<i32>,
+    watts: Option<f64>,
+    format: PhotometryExportFormat,
+) -> Option<Vec<u8>> {
+    let ldt = parse_and_overlay(raw_bytes, lumens, watts)?;
+    export_photometry(&ldt, format)
+}
+
+#[cfg(test)]
+mod variant_format_tests {
+    use super::*;
+
+    fn load_real_ldt() -> Vec<u8> {
+        // Use the demo LDT fixture so we exercise the lib's parsers
+        // against bytes that actually round-trip in production.
+        // CARGO_MANIFEST_DIR resolves to the lib crate; the fixture
+        // lives at the workspace root under `tests/data/`.
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        let path = std::path::Path::new(&manifest_dir)
+            .join("../../tests/data/test.ldt");
+        std::fs::read(&path).unwrap_or_else(|_| {
+            panic!("LDT fixture not found at {}", path.display())
+        })
+    }
+
+    /// patch_photometry_for_variant emits TM-33 XML when asked, even
+    /// though the source is LDT. This is the round-trip that fixes
+    /// the `wide.xml` filename / EULUMDAT bytes bug — the caller can
+    /// now pick the format independent of the source.
+    #[test]
+    fn patches_ldt_and_emits_tm33_xml() {
+        let raw = load_real_ldt();
+        let bytes = patch_photometry_for_variant(
+            &raw,
+            Some(2200),
+            None,
+            PhotometryExportFormat::AtlaXml,
+        )
+        .expect("conversion succeeds");
+        let s = std::str::from_utf8(&bytes).expect("utf8");
+        assert!(
+            s.contains("<?xml") || s.contains("<LuminaireOpticalData"),
+            "expected XML, got: {}",
+            &s[..s.len().min(120)]
+        );
+    }
+
+    /// patch_photometry_for_variant emits IES when asked. Confirms
+    /// the IES branch of the format chooser actually returns IES
+    /// bytes (rather than LDT, the historical hardcoded format).
+    #[test]
+    fn patches_ldt_and_emits_ies() {
+        let raw = load_real_ldt();
+        let bytes = patch_photometry_for_variant(
+            &raw,
+            Some(2200),
+            None,
+            PhotometryExportFormat::Ies,
+        )
+        .expect("conversion succeeds");
+        let s = std::str::from_utf8(&bytes).expect("utf8");
+        // IES output starts with the `IES:LM-63-…` magic header.
+        // Accept LM-63-2002 / LM-63-2019 / legacy IESNA: variants
+        // — all of them carry the `IES` token at offset 0.
+        assert!(
+            s.starts_with("IES"),
+            "expected IES output, got: {}",
+            &s[..s.len().min(80)]
+        );
+    }
+
+    /// convert_raw_photometry honours the format choice even without
+    /// any overlay — the no-overrides path used when a variant has
+    /// no per-emitter flux/watts but the user still wants format
+    /// conversion (e.g. TM-33 → LDT).
+    #[test]
+    fn convert_raw_photometry_format_choice() {
+        let raw = load_real_ldt();
+        let ies = convert_raw_photometry(&raw, PhotometryExportFormat::Ies)
+            .expect("ies conversion");
+        let ies_str = std::str::from_utf8(&ies).unwrap();
+        assert!(
+            ies_str.starts_with("IES"),
+            "expected IES output, got: {}",
+            &ies_str[..ies_str.len().min(80)]
+        );
+    }
+}
+
+/// Parse photometric bytes (LDT / IES / TM-33 XML) and emit them in
+/// `format` without applying any variant overlay. The "convert only"
+/// counterpart to [`patch_photometry_for_variant`] — useful when the
+/// caller wants the raw photometry in a different format than the
+/// source (e.g. variant has no flux/watts overrides but the GLDF was
+/// merged into TM-33 so the user wants LDT back).
+///
+/// Returns `None` when the bytes don't parse as any supported format.
+pub fn convert_raw_photometry(
+    raw_bytes: &[u8],
+    format: PhotometryExportFormat,
+) -> Option<Vec<u8>> {
+    let s = std::str::from_utf8(raw_bytes).ok()?;
+    let trimmed = s.trim_start_matches('\u{feff}').trim_start();
+    let ldt = if trimmed.starts_with('<') {
+        let doc = eulumdat::atla::xml::parse(s).ok()?;
+        let ldt: Eulumdat = (&doc).into();
+        ldt
+    } else if let Ok(ldt) = Eulumdat::parse(s) {
+        ldt
+    } else {
+        eulumdat::IesParser::parse(s).ok()?
+    };
+    export_photometry(&ldt, format)
+}
+
+/// Shared parse + overlay step used by both
+/// [`patch_ldt_for_variant`] and [`patch_photometry_for_variant`].
+///
+/// Accepts LDT (most common), IES (eulumdat::IesParser falls back to
+/// Eulumdat shape) and TM-33 XML (the file may be the shared
+/// ldc/iesxml carrier produced by tm33_to_gldf — see that fn for the
+/// single-file dual-reference scheme).
+///
+/// Returns `None` when neither override is set or the bytes don't
+/// parse — both are no-op signals the caller propagates.
+fn parse_and_overlay(
+    raw_bytes: &[u8],
+    lumens: Option<i32>,
+    watts: Option<f64>,
+) -> Option<Eulumdat> {
     if lumens.is_none() && watts.is_none() {
         return None;
     }
     let s = std::str::from_utf8(raw_bytes).ok()?;
-    let mut ldt = Eulumdat::parse(s).ok()?;
+    let trimmed = s.trim_start_matches('\u{feff}').trim_start();
+    let mut ldt = if trimmed.starts_with('<') {
+        let doc = eulumdat::atla::xml::parse(s).ok()?;
+        let ldt: Eulumdat = (&doc).into();
+        ldt
+    } else if let Ok(ldt) = Eulumdat::parse(s) {
+        ldt
+    } else {
+        eulumdat::IesParser::parse(s).ok()?
+    };
     if let Some(set) = ldt.lamp_sets.first_mut() {
         if let Some(w) = watts {
             set.wattage_with_ballast = w;
@@ -335,5 +498,5 @@ pub fn patch_ldt_for_variant(
             set.total_luminous_flux = lm as f64;
         }
     }
-    Some(ldt.to_ldt().into_bytes())
+    Some(ldt)
 }

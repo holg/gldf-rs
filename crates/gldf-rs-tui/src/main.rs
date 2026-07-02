@@ -5,9 +5,14 @@
 //! the WASM editor lands in follow-up cuts on top of this scaffold.
 
 mod app;
+mod edit_modal;
 mod event;
+mod file_picker;
 mod fs_lang_store;
+mod l3d_view;
+mod polar_view;
 mod ui;
+mod wizard;
 
 use anyhow::{Context, Result};
 use app::App;

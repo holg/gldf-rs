@@ -11,12 +11,30 @@ repository.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-gldf-rs = { workspace = true, features = ["eulumdat"] }
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
+# DIALux ULD → GLDF conversion for the batch pipeline. Path-dep into the
+# local light-other-rs workspace (its gldf-rs / eulumdat / l3d_rs deps
+# point back at the same local paths, so the crate graph unifies).
+# Optional — native frontends (CLI, egui) turn it on; flip to a
+# published version before any crates.io release.
+light-convert = { path = "../../../light-other-rs/crates/light-convert", default-features = false, optional = true }
+
+[dev-dependencies]
+# Used by the housing-color/L3D-MTL integration test to round-trip the
+# embedded archive bytes and inspect the modified material.
+l3d_rs = { workspace = true }
+zip = { workspace = true }
+# Turn on the `xsd` feature for tests only, so the script oracle can
+# validate scripted products against rc-3 (same uppsala validator the
+# browser banner uses) without bloating non-test editor builds.
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d", "xsd"] }
 
 [features]
 default = []
+# Accept DIALux .uld files as batch inputs (converted via light-convert).
+uld = ["dep:light-convert"]

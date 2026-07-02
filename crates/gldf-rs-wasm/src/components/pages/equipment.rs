@@ -84,15 +84,17 @@ fn EquipmentCard(equipment: Equipment, editable: bool) -> impl IntoView {
         }
     };
 
-    let ls_label = equipment.light_source_reference.as_ref().map(|lsr| {
-        if let Some(id) = lsr.fixed_light_source_id.as_ref() {
-            format!("Fixed: {}", id)
-        } else if let Some(id) = lsr.changeable_light_source_id.as_ref() {
-            format!("Changeable: {}", id)
-        } else {
-            "(unbound)".to_string()
-        }
-    }).unwrap_or_else(|| "(no LightSource)".to_string());
+    let ls_label = equipment
+        .light_source_reference
+        .as_ref()
+        .map(|lsr| {
+            if lsr.changeable_light_source_id.is_empty() {
+                "(unbound)".to_string()
+            } else {
+                format!("LightSource: {}", lsr.changeable_light_source_id)
+            }
+        })
+        .unwrap_or_else(|| "(no LightSource)".to_string());
     let cg_label = equipment
         .control_gear_reference
         .as_ref()
@@ -147,16 +149,16 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let id = equipment.id.clone();
 
+    // Equipment LightSourceReference only carries one attribute
+    // (@changeableLightSourceId) per the rc-3 XSD; the kind selector
+    // stays for action-signature compatibility but no longer affects
+    // serialization.
     let (init_ls_id, init_kind) = match equipment.light_source_reference.as_ref() {
-        Some(lsr) if lsr.fixed_light_source_id.is_some() => (
-            lsr.fixed_light_source_id.clone().unwrap_or_default(),
-            "fixed".to_string(),
-        ),
-        Some(lsr) if lsr.changeable_light_source_id.is_some() => (
-            lsr.changeable_light_source_id.clone().unwrap_or_default(),
+        Some(lsr) if !lsr.changeable_light_source_id.is_empty() => (
+            lsr.changeable_light_source_id.clone(),
             "changeable".to_string(),
         ),
-        _ => (String::new(), "fixed".to_string()),
+        _ => (String::new(), "changeable".to_string()),
     };
     let init_cg = equipment
         .control_gear_reference

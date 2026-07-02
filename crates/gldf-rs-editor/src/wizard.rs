@@ -28,7 +28,10 @@ pub enum WizardLightSourceKind {
 ///
 /// Serializes via `serde` so CLI / Python consumers can ship a wizard run
 /// as a JSON file (`gldf-cli wizard --draft draft.json -o out.gldf`).
+/// Every field is `#[serde(default)]` so a draft (or a batch template,
+/// see [`crate::batch`]) only needs to spell out the fields it overrides.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct WizardDraft {
     pub header_author: String,
     pub header_manufacturer: String,
@@ -63,6 +66,54 @@ pub struct WizardDraft {
     /// Standby power in watts as a string (matches the WASM widget's raw
     /// text input). Empty / unparseable → no value written.
     pub driver_standby_power: String,
+    /// Mounting step (optional). When `mounting_type` is empty no
+    /// `<Mountings>` block is written. Otherwise the reducer creates a
+    /// `Variant.Mountings` record with the matching branch:
+    ///   - "ceiling/recessed" → `<Ceiling><Recessed recessedDepth=…/></Ceiling>`
+    ///   - "ceiling/surface"  → `<Ceiling><SurfaceMounted/></Ceiling>`
+    ///   - "ceiling/pendant"  → `<Ceiling><Pendant pendantLength=…/></Ceiling>`
+    ///   - "wall"             → `<Wall mountingHeight=…/>` (+ optional Recessed)
+    ///   - "ground/pole_top"  → `<Ground><PoleTop poleHeight=…/></Ground>`
+    ///   - "ground/free_standing" → `<Ground><FreeStanding/></Ground>`
+    ///   - "working_plane"    → `<WorkingPlane><FreeStanding/></WorkingPlane>`
+    ///
+    /// Drives the Bevy 3D viewer's `MountingConfig` placement so a
+    /// freshly-built downlight visually sinks into the ceiling cavity
+    /// instead of floating below it.
+    pub mounting_type: String,
+    /// Recessed depth in mm (used for ceiling/recessed and wall+recessed).
+    /// Stored as a string to mirror the WASM widget's raw input. Empty /
+    /// unparseable → no Recessed sub-block is written.
+    pub mounting_recessed_depth_mm: String,
+    /// Pendant length in mm (ceiling/pendant). Same parsing as above.
+    pub mounting_pendant_length_mm: String,
+    /// Mounting height in mm (wall). Same parsing as above. Empty for
+    /// other branches.
+    pub mounting_height_mm: String,
+    /// Pole height in mm (ground/pole_top / ground/pole_integrated).
+    pub mounting_pole_height_mm: String,
+    /// Sensor step (optional). When `sensor_bytes` is `Some`, the wizard
+    /// dispatches `AddSensorFile` which embeds the bytes as a
+    /// `sensor/sensxml` or `sensor/sensldt` `<File>` AND mints a fresh
+    /// `<Sensor>` entry pointing at it. The Files page's drop sniffer
+    /// can't tell a sensor sheet from a photometric LDT just from the
+    /// extension, so plumbing this through the wizard lets the user
+    /// declare intent up front rather than retype-after-drop.
+    pub sensor_bytes: Option<Vec<u8>>,
+    pub sensor_filename: String,
+    /// Emergency step (optional). When `emergency_bytes` is `Some`, the
+    /// wizard dispatches `AddPhotometryFile` for the emergency LDT/IES so
+    /// the GLDF carries TWO `<Photometry>` entries: the normal-mode beam
+    /// (from the Photometry step) AND a dimmer emergency-mode beam keyed
+    /// to a battery-pack driver. Vendors typically declare only the
+    /// normal photometry plus an `EmergencyBehaviour` tag and leave
+    /// consumers guessing the emergency beam shape — this step makes the
+    /// emergency Photometry a first-class entry so the LightSource card
+    /// can render both thumbnails side by side. The wizard does NOT bind
+    /// this to an emitter — the demo / user creates an `EmergencyOnly`
+    /// emitter that references this photometry id later.
+    pub emergency_bytes: Option<Vec<u8>>,
+    pub emergency_filename: String,
 }
 
 /// Steps the wizard walks through. Used to drive both the Leptos step
@@ -71,9 +122,12 @@ pub struct WizardDraft {
 pub enum WizardStep {
     Header,
     Photometry,
+    Sensor,
+    Emergency,
     LightSource,
     Emitter,
     Geometry,
+    Mounting,
     Driver,
     Variant,
     Review,
@@ -83,9 +137,12 @@ impl WizardStep {
     pub const ALL: &'static [Self] = &[
         Self::Header,
         Self::Photometry,
+        Self::Sensor,
+        Self::Emergency,
         Self::LightSource,
         Self::Emitter,
         Self::Geometry,
+        Self::Mounting,
         Self::Driver,
         Self::Variant,
         Self::Review,
@@ -95,9 +152,12 @@ impl WizardStep {
         match self {
             Self::Header => "Header",
             Self::Photometry => "Photometry",
+            Self::Sensor => "Sensor",
+            Self::Emergency => "Emergency",
             Self::LightSource => "Light source",
             Self::Emitter => "Emitter",
             Self::Geometry => "Geometry",
+            Self::Mounting => "Mounting",
             Self::Driver => "Driver",
             Self::Variant => "Variant",
             Self::Review => "Review & Finish",
@@ -112,12 +172,15 @@ impl WizardStep {
         match self {
             Self::Header => 1,
             Self::Photometry => 2,
-            Self::LightSource => 3,
-            Self::Emitter => 4,
-            Self::Geometry => 5,
-            Self::Driver => 6,
-            Self::Variant => 7,
-            Self::Review => 8,
+            Self::Sensor => 3,
+            Self::Emergency => 4,
+            Self::LightSource => 5,
+            Self::Emitter => 6,
+            Self::Geometry => 7,
+            Self::Mounting => 8,
+            Self::Driver => 9,
+            Self::Variant => 10,
+            Self::Review => 11,
         }
     }
 
@@ -139,6 +202,12 @@ impl WizardStep {
             Self::Photometry => {
                 "Drop a .ldt (EULUMDAT) or .ies (IESNA LM-63) file. The wizard will create the matching <File> and <Photometry> entries when you click Create at the end."
             }
+            Self::Sensor => {
+                "Optional. Drop a sensor data sheet (.sensxml or .sensldt) if the luminaire ships with a motion / presence / daylight detector. The wizard registers it as a <File contentType=\"sensor/sensldt\"> AND mints a <Sensor> entry pointing at it — no retype-after-drop needed. Skip if the luminaire has no sensor."
+            }
+            Self::Emergency => {
+                "Optional. Drop the EMERGENCY-mode photometry (.ldt / .ies) if the luminaire has battery-pack EmergencyOnly / Combined behaviour. The wizard adds a second <Photometry> entry so the LightSource card shows both normal and emergency beam thumbnails. Vendors usually ship only the normal beam — declaring the emergency beam as a first-class photometry is what the gldf.icu demo shows off here. Skip if the luminaire is normal-only."
+            }
             Self::LightSource => {
                 "The lamp itself. Fixed = baked into the fixture. Changeable = user-replaceable bulb. MultiChannel = tunable-white / RGB."
             }
@@ -147,6 +216,9 @@ impl WizardStep {
             }
             Self::Geometry => {
                 "The 3D shell of the variant. Drop an .l3d file to bind the emitter into a 3D model, or skip — the wizard then writes a bare EmitterReference. Either way the GLDF will have a valid Variant.Geometry on Finish."
+            }
+            Self::Mounting => {
+                "How the luminaire installs. Pick a primitive (Ceiling recessed/surface/pendant, Wall, Ground, Working plane) and the wizard writes a <Variant.Mountings> block. Drives the Bevy 3D viewer's placement (a recessed downlight visibly sinks into the ceiling cavity). Skip — no Mountings block is written and the viewer falls back to its default scene placement."
             }
             Self::Driver => {
                 "Optional driver / ballast for the luminaire. Tick \"include\" to declare a ControlGear with dimmable + standby-power metadata, an Equipment that bundles it with the LightSource, and a ControlGearReference on the emitter's first slot. Skip and the sidebar Control Gear / Equipment pages still let you add one later."
@@ -244,6 +316,23 @@ impl WizardLightSourceKind {
 /// auto-generated photometry/lightsource ids the prior steps just
 /// created).
 pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
+    // Stamp the XSD-required Header fields (UniqueGldfId,
+    // GldfCreationTimeCode) and ProductMetaData (UniqueProductId)
+    // once at wizard time. This is the right place because (a) a
+    // wizard-created GLDF has never been validated by anyone, and
+    // (b) generating the UUID here keeps the lib's serializer
+    // round-trip stable — once stamped, the value is part of the model.
+    state.product.header.ensure_xsd_required();
+    {
+        use gldf_rs::gldf::product_definitions::ProductMetaData;
+        let pmd = state
+            .product
+            .product_definitions
+            .product_meta_data
+            .get_or_insert_with(ProductMetaData::default);
+        pmd.ensure_xsd_required();
+    }
+
     // Header
     let author = draft.header_author.trim();
     if !author.is_empty() {
@@ -267,6 +356,50 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
         state.apply(GldfAction::AddPhotometryFile {
             bytes: bytes.clone(),
             filename: draft.photometry_filename.clone(),
+        });
+    }
+    // Capture the main photometry's auto-generated id NOW — the
+    // Emergency step below adds a second <Photometry>, so "last" is only
+    // the main beam at this point. The Emitter step falls back to this
+    // id when the draft's photometry_id is blank (the common case: the
+    // UI pickers can't know an id that doesn't exist until Finish).
+    let main_photometry_id = if draft.photometry_bytes.is_some() {
+        state
+            .product
+            .general_definitions
+            .photometries
+            .as_ref()
+            .and_then(|p| p.photometry.last())
+            .map(|p| p.id.clone())
+    } else {
+        None
+    };
+
+    // Sensor — optional. When the user dropped a sensor data sheet,
+    // dispatch AddSensorFile which embeds the bytes as a sensor/sens*
+    // <File> AND mints a fresh <Sensor> entry pointing at it. This
+    // means the demo (and any consumer driving the wizard) doesn't
+    // need a follow-up retype dispatch on the Files page — the
+    // content_type is correct from the start.
+    if let Some(bytes) = &draft.sensor_bytes {
+        state.apply(GldfAction::AddSensorFile {
+            bytes: bytes.clone(),
+            filename: draft.sensor_filename.clone(),
+        });
+    }
+
+    // Emergency photometry — optional. Same dispatch as the main
+    // Photometry step (`AddPhotometryFile`) but tagged with a hint
+    // filename so the downstream rename pass can map the auto id
+    // (e.g. `photometryFile_2`) to `ph_emergency`. The wizard does NOT
+    // bind it to any emitter — declaring the emergency beam as a
+    // first-class Photometry is the point of this step; consumers /
+    // demos wire an EmergencyOnly emitter to the resulting id
+    // separately.
+    if let Some(bytes) = &draft.emergency_bytes {
+        state.apply(GldfAction::AddPhotometryFile {
+            bytes: bytes.clone(),
+            filename: draft.emergency_filename.clone(),
         });
     }
 
@@ -319,19 +452,60 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
         }
     }
 
-    // Emitter (atomic with first LightEmitter child)
+    // Emitter (atomic with first LightEmitter child). Blank reference
+    // ids in the draft resolve to the ids the prior steps just
+    // auto-generated — that's the whole point of dispatching in
+    // XSD-conformant order (see the fn doc). Leaving them blank used to
+    // write empty IDREFs, which the rc-3 XSD rejects
+    // (KeyRef 'FixedEmitter-Photometry' / '-FixedLightSource').
     if let Some(emitter) = &draft.emitter_draft {
         let child_name_opt = if emitter.child_name.trim().is_empty() {
             None
         } else {
             Some(emitter.child_name.clone())
         };
+        let last_ls_id = |kind: WizardLightSourceKind| -> Option<String> {
+            let ls = state.product.general_definitions.light_sources.as_ref()?;
+            match kind {
+                WizardLightSourceKind::Fixed => {
+                    ls.fixed_light_source.last().map(|l| l.id.clone())
+                }
+                WizardLightSourceKind::Changeable => {
+                    ls.changeable_light_source.last().map(|l| l.id.clone())
+                }
+                WizardLightSourceKind::MultiChannel => {
+                    ls.multi_channel_light_source.last().map(|l| l.id.clone())
+                }
+            }
+        };
+        let mut photometry_id = emitter.photometry_id.clone();
+        if photometry_id.trim().is_empty() {
+            if let Some(id) = &main_photometry_id {
+                photometry_id = id.clone();
+            }
+        }
+        let mut fixed_light_source_id = emitter.fixed_light_source_id.clone();
+        if fixed_light_source_id.trim().is_empty()
+            && matches!(draft.ls_kind, WizardLightSourceKind::Fixed)
+        {
+            if let Some(id) = last_ls_id(WizardLightSourceKind::Fixed) {
+                fixed_light_source_id = id;
+            }
+        }
+        let mut multi_channel_light_source_id = emitter.multi_channel_light_source_id.clone();
+        if multi_channel_light_source_id.trim().is_empty()
+            && matches!(draft.ls_kind, WizardLightSourceKind::MultiChannel)
+        {
+            if let Some(id) = last_ls_id(WizardLightSourceKind::MultiChannel) {
+                multi_channel_light_source_id = id;
+            }
+        }
         state.apply(GldfAction::AddEmitterWithChild {
             child_name: child_name_opt,
             kind: emitter.kind,
-            photometry_id: emitter.photometry_id.clone(),
-            fixed_light_source_id: emitter.fixed_light_source_id.clone(),
-            multi_channel_light_source_id: emitter.multi_channel_light_source_id.clone(),
+            photometry_id,
+            fixed_light_source_id,
+            multi_channel_light_source_id,
             sensor_id: emitter.sensor_id.clone(),
         });
     }
@@ -432,6 +606,20 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
                 });
             }
             (None, None) => {}
+        }
+    }
+
+    // Mountings — optional. When the user picked a primitive, mint a
+    // `Variant.Mountings` block using the same struct shape the variant
+    // editor's `VariantMountingsEditor` builds. The choices are encoded
+    // as `mounting_type` slash-strings (see WizardDraft docs) to keep
+    // the parameter surface flat.
+    if let Some(variant_idx) = variant_idx {
+        if let Some(payload) = build_mountings_from_draft(draft) {
+            state.apply(GldfAction::SetVariantMountings {
+                index: variant_idx,
+                payload: Some(Box::new(payload)),
+            });
         }
     }
 
@@ -564,4 +752,104 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
             });
         }
     }
+}
+
+/// Translate the wizard's flat mounting fields into the typed `Mountings`
+/// payload that `SetVariantMountings` expects. Returns `None` when the
+/// user skipped the step (empty `mounting_type`) so the reducer can
+/// no-op instead of writing an empty block.
+///
+/// The encoding mirrors what the WASM editor's `VariantMountingsEditor`
+/// produces, so a value chosen in the wizard would land in the editor's
+/// same widgets on subsequent open. The "ceiling/surface" /
+/// "ceiling/recessed" / "ceiling/pendant" tri-state is encoded as a
+/// slash-string in `mounting_type`; ground gets pole_top / free_standing
+/// the same way. This keeps the wizard's draft parameter count low (one
+/// string + four ints), which matters for the TUI's keyboard-driven
+/// form and the CLI's JSON draft.
+fn build_mountings_from_draft(draft: &WizardDraft) -> Option<gldf_rs::gldf::product_definitions::Mountings> {
+    use gldf_rs::gldf::product_definitions::{
+        Ceiling, FreeStanding, Ground, Mountings, Pendant, PoleTop, Recessed, SurfaceMounted, Wall,
+        WorkingPlane,
+    };
+
+    let mt = draft.mounting_type.trim();
+    if mt.is_empty() {
+        return None;
+    }
+
+    let depth = draft.mounting_recessed_depth_mm.trim().parse::<i32>().ok();
+    let pendant_len = draft.mounting_pendant_length_mm.trim().parse::<i32>().ok();
+    let mount_h = draft.mounting_height_mm.trim().parse::<i32>().ok();
+    let pole_h = draft.mounting_pole_height_mm.trim().parse::<i32>().ok();
+
+    let mut m = Mountings::default();
+    match mt {
+        "ceiling/recessed" => {
+            m.ceiling = Some(Ceiling {
+                recessed: Some(Recessed {
+                    recessed_depth: depth.unwrap_or(0),
+                    ..Default::default()
+                }),
+                surface_mounted: None,
+                pendant: None,
+            });
+        }
+        "ceiling/surface" => {
+            m.ceiling = Some(Ceiling {
+                recessed: None,
+                surface_mounted: Some(SurfaceMounted {}),
+                pendant: None,
+            });
+        }
+        "ceiling/pendant" => {
+            m.ceiling = Some(Ceiling {
+                recessed: None,
+                surface_mounted: None,
+                pendant: Some(Pendant {
+                    pendant_length: pendant_len.unwrap_or(0),
+                }),
+            });
+        }
+        "wall" => {
+            let mut w = Wall::default();
+            w.mounting_height = mount_h.unwrap_or(2000);
+            if let Some(d) = depth {
+                w.recessed = Some(Recessed {
+                    recessed_depth: d,
+                    ..Default::default()
+                });
+            }
+            m.wall = Some(w);
+        }
+        "ground/pole_top" => {
+            let pt = PoleTop {
+                pole_height: Some(pole_h.unwrap_or(4000)),
+                pole_height_element: None,
+            };
+            m.ground = Some(Ground {
+                pole_top: Some(pt),
+                pole_integrated: None,
+                free_standing: None,
+                surface_mounted: None,
+                recessed: None,
+            });
+        }
+        "ground/free_standing" => {
+            m.ground = Some(Ground {
+                pole_top: None,
+                pole_integrated: None,
+                free_standing: Some(FreeStanding {}),
+                surface_mounted: None,
+                recessed: None,
+            });
+        }
+        "working_plane" => {
+            m.working_plane = Some(WorkingPlane {
+                free_standing: Some(FreeStanding {}),
+            });
+        }
+        _ => return None,
+    }
+    Some(m)
 }

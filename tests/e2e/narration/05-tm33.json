@@ -1,0 +1,11 @@
+{
+  "chapter": "TM-33 round-trip & bootstrap",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "cues": [
+    {
+      "cue": "Act 23 — Export TM-33",
+      "text": "TM-33 export: each light source bundles its photometry and spectrum into one XML file."
+    }
+  ]
+}

@@ -35,6 +35,15 @@ fn full_wizard_run_roundtrips_through_gldf_bytes() {
         driver_name: String::new(),
         driver_dimmable: false,
         driver_standby_power: String::new(),
+        mounting_type: String::new(),
+        mounting_recessed_depth_mm: String::new(),
+        mounting_pendant_length_mm: String::new(),
+        mounting_height_mm: String::new(),
+        mounting_pole_height_mm: String::new(),
+    sensor_bytes: None,
+    sensor_filename: String::new(),
+        emergency_bytes: None,
+        emergency_filename: String::new(),
     };
 
     // 1. Run the wizard against a fresh state — same code the CLI /
@@ -128,6 +137,15 @@ fn wizard_with_geometry_lands_l3d_in_embedded_files() {
         driver_name: String::new(),
         driver_dimmable: false,
         driver_standby_power: String::new(),
+        mounting_type: String::new(),
+        mounting_recessed_depth_mm: String::new(),
+        mounting_pendant_length_mm: String::new(),
+        mounting_height_mm: String::new(),
+        mounting_pole_height_mm: String::new(),
+    sensor_bytes: None,
+    sensor_filename: String::new(),
+        emergency_bytes: None,
+        emergency_filename: String::new(),
     };
 
     let mut state = GldfState::default();
@@ -304,6 +322,15 @@ fn wizard_with_geometry_binds_variant_geometry_even_without_emitter() {
         driver_name: String::new(),
         driver_dimmable: false,
         driver_standby_power: String::new(),
+        mounting_type: String::new(),
+        mounting_recessed_depth_mm: String::new(),
+        mounting_pendant_length_mm: String::new(),
+        mounting_height_mm: String::new(),
+        mounting_pole_height_mm: String::new(),
+    sensor_bytes: None,
+    sensor_filename: String::new(),
+        emergency_bytes: None,
+        emergency_filename: String::new(),
     };
 
     let mut state = GldfState::default();
@@ -388,6 +415,15 @@ fn wizard_with_geometry_but_no_emitter_still_lands_l3d() {
         driver_name: String::new(),
         driver_dimmable: false,
         driver_standby_power: String::new(),
+        mounting_type: String::new(),
+        mounting_recessed_depth_mm: String::new(),
+        mounting_pendant_length_mm: String::new(),
+        mounting_height_mm: String::new(),
+        mounting_pole_height_mm: String::new(),
+    sensor_bytes: None,
+    sensor_filename: String::new(),
+        emergency_bytes: None,
+        emergency_filename: String::new(),
     };
 
     let mut state = GldfState::default();
@@ -416,5 +452,217 @@ fn wizard_with_geometry_but_no_emitter_still_lands_l3d() {
             .map(|f| (&f.id, &f.content_type))
             .collect::<Vec<_>>(),
         state.embedded_files.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn wizard_writes_ceiling_recessed_mountings() {
+    // Smoke test for the Mountings wizard step: a draft with
+    // `mounting_type = "ceiling/recessed"` should produce a variant
+    // with `<Mountings><Ceiling><Recessed recessedDepth=50/>` after
+    // apply_wizard runs. This drives the Bevy 3D viewer's recessed
+    // placement end-to-end (the visible payoff of the slice).
+    let draft = WizardDraft {
+        header_author: "Mounting test".to_string(),
+        header_manufacturer: "Acme".to_string(),
+        header_created_with: "test".to_string(),
+        header_default_language: "en".to_string(),
+        ls_kind: WizardLightSourceKind::Fixed,
+        ls_name: "LED".to_string(),
+        variant_name: "Recessed downlight".to_string(),
+        mounting_type: "ceiling/recessed".to_string(),
+        mounting_recessed_depth_mm: "50".to_string(),
+        ..WizardDraft::default()
+    };
+
+    let mut state = GldfState::default();
+    apply_wizard(&mut state, &draft);
+    assert!(state.last_error.is_none(), "{:?}", state.last_error);
+
+    let variants = state.product.product_definitions.variants.as_ref();
+    let variants = variants.expect("wizard creates the required Variant");
+    let v = &variants.variant[0];
+    let m = v.mountings.as_ref().expect("Mountings block written");
+    let ceiling = m.ceiling.as_ref().expect("Ceiling branch written");
+    let recessed = ceiling.recessed.as_ref().expect("Recessed sub-block written");
+    assert_eq!(recessed.recessed_depth, 50);
+    assert!(ceiling.surface_mounted.is_none());
+    assert!(ceiling.pendant.is_none());
+    assert!(m.wall.is_none());
+    assert!(m.ground.is_none());
+    assert!(m.working_plane.is_none());
+}
+
+#[test]
+fn wizard_skips_mountings_when_type_empty() {
+    let draft = WizardDraft {
+        header_author: "Skip test".to_string(),
+        header_manufacturer: "Acme".to_string(),
+        header_created_with: "test".to_string(),
+        header_default_language: "en".to_string(),
+        ls_kind: WizardLightSourceKind::Fixed,
+        ls_name: "LED".to_string(),
+        variant_name: "Standard".to_string(),
+        // Empty mounting_type → no Mountings block on the variant.
+        mounting_type: String::new(),
+        ..WizardDraft::default()
+    };
+
+    let mut state = GldfState::default();
+    apply_wizard(&mut state, &draft);
+    let v = &state
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
+    assert!(v.mountings.is_none(), "skipped step writes no Mountings");
+}
+
+#[test]
+fn wizard_writes_ground_pole_top_mountings() {
+    let draft = WizardDraft {
+        header_author: "Pole test".to_string(),
+        header_manufacturer: "Acme".to_string(),
+        header_created_with: "test".to_string(),
+        header_default_language: "en".to_string(),
+        ls_kind: WizardLightSourceKind::Fixed,
+        ls_name: "LED".to_string(),
+        variant_name: "Streetlight".to_string(),
+        mounting_type: "ground/pole_top".to_string(),
+        mounting_pole_height_mm: "6500".to_string(),
+        ..WizardDraft::default()
+    };
+
+    let mut state = GldfState::default();
+    apply_wizard(&mut state, &draft);
+    let v = &state
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
+    let m = v.mountings.as_ref().expect("Mountings block written");
+    let ground = m.ground.as_ref().expect("Ground branch written");
+    let pole = ground.pole_top.as_ref().expect("PoleTop sub-block");
+    // The wizard prefers the @poleHeight attribute form (XSD-current);
+    // the legacy <poleHeight> element form stays None.
+    assert_eq!(pole.pole_height, Some(6500));
+    assert!(pole.pole_height_element.is_none());
+}
+
+#[test]
+fn wizard_writes_sensor_file_with_correct_content_type() {
+    // Smoke test for the Sensor wizard step: dropping sensor.ldt bytes
+    // via the wizard should land them as a sensor/sensldt File AND
+    // mint a fresh <Sensor> entry pointing at it — no follow-up
+    // UpdateFile dispatch on the Files page should be needed.
+    let bytes: Vec<u8> = b"vendor-sensor-data".to_vec();
+    let draft = WizardDraft {
+        header_author: "Sensor wiz".to_string(),
+        header_manufacturer: "Acme".to_string(),
+        header_created_with: "test".to_string(),
+        header_default_language: "en".to_string(),
+        ls_kind: WizardLightSourceKind::Fixed,
+        ls_name: "LED".to_string(),
+        variant_name: "Standard".to_string(),
+        sensor_bytes: Some(bytes.clone()),
+        sensor_filename: "sensor.ldt".to_string(),
+        ..WizardDraft::default()
+    };
+    let mut state = GldfState::default();
+    apply_wizard(&mut state, &draft);
+    assert!(state.last_error.is_none(), "{:?}", state.last_error);
+    let sensors = state.product.general_definitions.sensors.as_ref();
+    let sensors = sensors.expect("Sensors block written");
+    assert_eq!(sensors.sensor.len(), 1);
+    let sensor = &sensors.sensor[0];
+    let file_id = &sensor.sensor_file_reference.as_ref().unwrap().file_id;
+    // The File should be sensor/sensldt out of the gate — NOT
+    // ldc/eulumdat with a follow-up retype dispatch.
+    let file = state
+        .product
+        .general_definitions
+        .files
+        .file
+        .iter()
+        .find(|f| &f.id == file_id)
+        .expect("File written");
+    assert_eq!(file.content_type, "sensor/sensldt");
+    assert_eq!(file.file_name, "sensor.ldt");
+    // The bytes should be in embedded_files for export.
+    assert_eq!(state.embedded_files.get(file_id), Some(&bytes));
+    // The wizard should NOT have minted a stray <Photometry> for the
+    // sensor file — the Photometry slot stays empty when the
+    // photometry step itself was skipped.
+    let phot_count = state
+        .product
+        .general_definitions
+        .photometries
+        .as_ref()
+        .map(|p| p.photometry.len())
+        .unwrap_or(0);
+    assert_eq!(phot_count, 0, "sensor file must not mint <Photometry>");
+}
+
+#[test]
+fn wizard_writes_emergency_photometry_alongside_normal() {
+    // The Emergency wizard step is essentially "drop a second photometry
+    // file": apply_wizard dispatches AddPhotometryFile for the emergency
+    // bytes so the GLDF declares TWO <Photometry> entries. The wizard
+    // does NOT bind the emergency entry to any emitter — the user /
+    // demo wires an EmergencyOnly emitter to the resulting id later.
+    let normal_bytes: Vec<u8> = b"normal-photometry-data".to_vec();
+    let emergency_bytes: Vec<u8> = b"emergency-photometry-data".to_vec();
+    let draft = WizardDraft {
+        header_author: "Emergency wiz".to_string(),
+        header_manufacturer: "Acme".to_string(),
+        header_created_with: "test".to_string(),
+        header_default_language: "en".to_string(),
+        ls_kind: WizardLightSourceKind::Fixed,
+        ls_name: "LED".to_string(),
+        variant_name: "Standard".to_string(),
+        photometry_bytes: Some(normal_bytes.clone()),
+        photometry_filename: "middle.ldt".to_string(),
+        emergency_bytes: Some(emergency_bytes.clone()),
+        emergency_filename: "emergency.ldt".to_string(),
+        ..WizardDraft::default()
+    };
+    let mut state = GldfState::default();
+    apply_wizard(&mut state, &draft);
+    assert!(state.last_error.is_none(), "{:?}", state.last_error);
+
+    // Two <Photometry> entries: photometryFile_1 (normal) +
+    // photometryFile_2 (emergency).
+    let photometries = state
+        .product
+        .general_definitions
+        .photometries
+        .as_ref()
+        .expect("Photometries block written");
+    assert_eq!(photometries.photometry.len(), 2);
+
+    // Two <File> entries — both ldc/eulumdat (the normal sniffer's
+    // verdict for .ldt). The Emergency step intentionally uses
+    // AddPhotometryFile (not a separate sensor-flavoured dispatch) so
+    // the resulting File is shape-identical to the normal one — the
+    // user / demo renames the auto id to `ph_emergency` later.
+    let files = &state.product.general_definitions.files.file;
+    let phot_files: Vec<_> = files
+        .iter()
+        .filter(|f| f.content_type == "ldc/eulumdat")
+        .collect();
+    assert_eq!(phot_files.len(), 2);
+
+    // Embedded bytes preserved for export.
+    assert_eq!(
+        state.embedded_files.get(&phot_files[0].id),
+        Some(&normal_bytes)
+    );
+    assert_eq!(
+        state.embedded_files.get(&phot_files[1].id),
+        Some(&emergency_bytes)
     );
 }

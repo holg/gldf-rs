@@ -40,6 +40,54 @@ pub fn use_gldf() -> GldfContext {
     expect_context::<GldfContext>()
 }
 
+/// Active edit scope (Product vs Variant(n)), shared across every
+/// scope-aware page via Leptos context. Provided once by the app
+/// shell at startup; pages call [`use_active_scope`] to read+write
+/// it. Owning this at the shell level (not per-page) means switching
+/// from Marketing to Pictures keeps your "I'm editing Variant 1"
+/// choice — previously each page held its own signal and silently
+/// reset to `Product` on every dispatch.
+pub type ActiveScope = RwSignal<Scope>;
+
+/// Provide the active-scope signal in the Leptos context. Called once
+/// by the app shell next to `provide_gldf_state`.
+///
+/// Also exposes a `window.gldf_set_active_variant(idx)` global so external
+/// drivers (the Lisp REPL's `SceneCommand::SetActiveVariant`, Playwright
+/// `page.evaluate`, DevTools console) can flip the scope without going
+/// through the chip click. Negative or oversized indices fall back to
+/// `Scope::Product`.
+pub fn provide_active_scope() -> ActiveScope {
+    let signal: ActiveScope = RwSignal::new(Scope::Product);
+    provide_context(signal);
+
+    if let Some(window) = web_sys::window() {
+        let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |idx: f64| {
+            if idx.is_finite() && idx >= 0.0 {
+                signal.set(Scope::Variant(idx as usize));
+            } else {
+                signal.set(Scope::Product);
+            }
+        }) as Box<dyn Fn(f64)>);
+        let _ = js_sys::Reflect::set(
+            &window,
+            &wasm_bindgen::JsValue::from_str("gldf_set_active_variant"),
+            cb.as_ref(),
+        );
+        cb.forget();
+    }
+
+    signal
+}
+
+/// Look up the active-scope signal. Every scope-aware editor page
+/// (Marketing, Pictures, Hyperlinks, Labels, Applications, Electrical,
+/// Mechanical, Emergency, BevyViewer) calls this instead of
+/// constructing its own signal.
+pub fn use_active_scope() -> ActiveScope {
+    expect_context::<ActiveScope>()
+}
+
 /// `localStorage` key used by [`BrowserLangStore`]. Distinct from
 /// `gldf.display_language` (which the LanguageBanner uses for the
 /// document's own locales).

@@ -7,7 +7,8 @@
 
 use crate::components::edit_util::{event_checked, event_f64, event_value, optional_string};
 use crate::components::ScopePicker;
-use crate::state::{use_gldf, GldfAction, Scope};
+use crate::i18n::ui::t as ui_t;
+use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
 use gldf_rs::gldf::product_definitions::Electrical;
 use gldf_rs::validation::xsd_enums;
 use leptos::prelude::*;
@@ -15,7 +16,7 @@ use leptos::prelude::*;
 #[component]
 pub fn ElectricalEditorPage() -> impl IntoView {
     let state = use_gldf();
-    let scope = RwSignal::new(Scope::Product);
+    let scope = use_active_scope();
 
     let on_safety = move |e: web_sys::Event| {
         let v = event_value(&e).unwrap_or_default();
@@ -57,13 +58,17 @@ pub fn ElectricalEditorPage() -> impl IntoView {
         }
     }
 
+    let title_signal = move || ui_t("gldf.electrical.title", &state.with(|s| s.ui_language.clone()));
+
     view! {
         <div class="editor-section electrical-editor">
-            <h2>{ "Electrical Attributes" }</h2>
+            <h2>{ title_signal }</h2>
             <ScopePicker scope=scope />
 
             {move || state.with(|s| {
                 let current = scope.get();
+                let lang = s.ui_language.clone();
+                let tr = |key: &str| ui_t(key, &lang);
                 let product_e: Option<Electrical> = s
                     .product
                     .product_definitions
@@ -101,43 +106,50 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                 let inherited_sc = inherited.as_ref().and_then(|e| e.switching_capacity.clone()).unwrap_or_default();
 
                 let pf_placeholder = if inherited_pf.is_empty() {
-                    "e.g., 0.95".to_string()
+                    tr("gldf.electrical.power_factor_placeholder")
                 } else {
-                    format!("inherits: {}", inherited_pf)
+                    tr("gldf.electrical.inherits_fmt").replace("{value}", &inherited_pf)
                 };
                 let sc_placeholder = if inherited_sc.is_empty() {
-                    "e.g., 50000 cycles".to_string()
+                    tr("gldf.electrical.switching_capacity_placeholder")
                 } else {
-                    format!("inherits: {}", inherited_sc)
+                    tr("gldf.electrical.inherits_fmt").replace("{value}", &inherited_sc)
                 };
+                let not_in_xsd_suffix = tr("gldf.electrical.not_in_xsd");
                 let safety_legacy = if !safety_class.is_empty()
                     && !xsd_enums::is_canonical(xsd_enums::ELECTRICAL_SAFETY_CLASSES, &safety_class)
                 {
+                    let label = format!("⚠ {} ({})", safety_class, not_in_xsd_suffix);
                     Some(view! {
                         <option value=safety_class.clone() selected=true>
-                            { format!("⚠ {} (not in XSD enum)", safety_class) }
+                            { label }
                         </option>
                     })
                 } else { None };
                 let ip_legacy = if !ip_code.is_empty()
                     && !xsd_enums::is_canonical(xsd_enums::IP_CODES, &ip_code)
                 {
+                    let label = format!("⚠ {} ({})", ip_code, not_in_xsd_suffix);
                     Some(view! {
                         <option value=ip_code.clone() selected=true>
-                            { format!("⚠ {} (not in XSD enum)", ip_code) }
+                            { label }
                         </option>
                     })
                 } else { None };
 
+                let select_placeholder = tr("gldf.common.select");
+                let inherits_class_fmt = tr("gldf.electrical.inherits_class_fmt");
+                let inherits_fmt = tr("gldf.electrical.inherits_fmt");
+
                 view! {
                     <div class="form-group">
-                        <label for="safety-class">{ "Electrical Safety Class" }</label>
+                        <label for="safety-class">{ tr("gldf.electrical.safety_class") }</label>
                         <select id="safety-class" on:change=on_safety>
                             <option value="" selected=safety_class.is_empty()>
                                 { if inherited_safety.is_empty() {
-                                    "-- Select --".to_string()
+                                    select_placeholder.clone()
                                 } else {
-                                    format!("inherits: Class {}", inherited_safety)
+                                    inherits_class_fmt.clone().replace("{value}", &inherited_safety)
                                 } }
                             </option>
                             {xsd_enums::ELECTRICAL_SAFETY_CLASSES.iter().map(|v| {
@@ -146,17 +158,17 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                             }).collect::<Vec<_>>()}
                             { safety_legacy }
                         </select>
-                        <small class="form-help">{ "IEC 61140 electrical safety classification" }</small>
+                        <small class="form-help">{ tr("gldf.electrical.safety_class_help") }</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="ip-code">{ "IP Code (Ingress Protection)" }</label>
+                        <label for="ip-code">{ tr("gldf.electrical.ip_code") }</label>
                         <select id="ip-code" on:change=on_ip>
                             <option value="" selected=ip_code.is_empty()>
                                 { if inherited_ip.is_empty() {
-                                    "-- Select --".to_string()
+                                    select_placeholder.clone()
                                 } else {
-                                    format!("inherits: {}", inherited_ip)
+                                    inherits_fmt.clone().replace("{value}", &inherited_ip)
                                 } }
                             </option>
                             {xsd_enums::IP_CODES.iter().map(|v| {
@@ -165,11 +177,11 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                             }).collect::<Vec<_>>()}
                             { ip_legacy }
                         </select>
-                        <small class="form-help">{ "IEC 60529 ingress protection (IP20–IP69K)" }</small>
+                        <small class="form-help">{ tr("gldf.electrical.ip_code_help") }</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="power-factor">{ "Power Factor" }</label>
+                        <label for="power-factor">{ tr("gldf.electrical.power_factor") }</label>
                         <input
                             type="number"
                             id="power-factor"
@@ -180,7 +192,7 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                             min="0"
                             max="1"
                         />
-                        <small class="form-help">{ "Ratio of real power to apparent power (0-1)" }</small>
+                        <small class="form-help">{ tr("gldf.electrical.power_factor_help") }</small>
                     </div>
 
                     <div class="form-group checkbox-group">
@@ -190,19 +202,19 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                                 prop:checked=constant_light.unwrap_or(false)
                                 on:change=on_clo
                             />
-                            { " Constant Light Output (CLO)" }
+                            { format!(" {}", tr("gldf.electrical.clo")) }
                         </label>
-                        <small class="form-help">{ "Luminaire maintains constant lumen output over lifetime" }</small>
+                        <small class="form-help">{ tr("gldf.electrical.clo_help") }</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="light-distribution">{ "Light Distribution" }</label>
+                        <label for="light-distribution">{ tr("gldf.electrical.light_distribution") }</label>
                         <select id="light-distribution" on:change=on_dist>
                             <option value="" selected=light_dist.is_empty()>
                                 { if inherited_dist.is_empty() {
-                                    "— Select —".to_string()
+                                    select_placeholder.clone()
                                 } else {
-                                    format!("inherits: {}", inherited_dist)
+                                    inherits_fmt.clone().replace("{value}", &inherited_dist)
                                 } }
                             </option>
                             {xsd_enums::LIGHT_DISTRIBUTIONS.iter().map(|v| {
@@ -211,12 +223,12 @@ pub fn ElectricalEditorPage() -> impl IntoView {
                             }).collect::<Vec<_>>()}
                         </select>
                         <small class="hint">
-                            { "Values are XSD-defined; the saved GLDF carries the canonical English string." }
+                            { tr("gldf.electrical.distribution_hint") }
                         </small>
                     </div>
 
                     <div class="form-group">
-                        <label for="switching-capacity">{ "Switching Capacity" }</label>
+                        <label for="switching-capacity">{ tr("gldf.electrical.switching_capacity") }</label>
                         <input
                             type="text"
                             id="switching-capacity"

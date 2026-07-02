@@ -21,7 +21,8 @@ use gldf_rs_wasm::components::{
     IdentityEditorPage, IfcViewerPage, LabelsEditorPage, LabelsReadPage, LightSourcesPage, LinkagePage,
     LinkageTarget, MarketingEditorPage, MechanicalEditorPage, MechanicalReadPage, NewGldfWizard,
     OverviewPage, PhotometryEditorPage, PhotometryReadPage, PicturesEditorPage, PicturesReadPage,
-    PluginsPage, RawDataPage, SpdViewer, StatisticsPage, VariantEditorPage, VariantsPage,
+    PluginsPage, RawDataPage, SensorsEditorPage, SensorsReadPage, SpdViewer, StatisticsPage,
+    VariantEditorPage, VariantsPage,
 };
 use std::sync::Arc;
 use gldf_rs_wasm::exports;
@@ -80,6 +81,7 @@ pub enum NavItem {
     Marketing,
     ControlGear,
     Equipment,
+    Sensors,
 }
 
 impl NavItem {
@@ -116,6 +118,7 @@ impl NavItem {
             NavItem::Marketing => "nav-marketing",
             NavItem::ControlGear => "nav-control-gear",
             NavItem::Equipment => "nav-equipment",
+            NavItem::Sensors => "nav-sensors",
         }
     }
 }
@@ -135,6 +138,17 @@ pub struct ShellState {
     pub is_dragging: RwSignal<bool>,
     pub ui_language: RwSignal<String>,
     pub show_help: RwSignal<bool>,
+    /// Whether the floating Lisp REPL overlay is visible. Toggled from
+    /// the toolbar's `λ` button; rendered at the app root by `App`.
+    pub show_lisp: RwSignal<bool>,
+    /// Whether the Export GLDF options dialog is visible. Toggled
+    /// by the toolbar's "Export GLDF" button. Owns the three opt-in
+    /// flags (DIALux compat / inline spectrum / TM-33 merge); the
+    /// overlay reads them and drives `export_gldf_with_options`.
+    pub show_export_options: RwSignal<bool>,
+    pub export_opt_dialux: RwSignal<bool>,
+    pub export_opt_inline_spec: RwSignal<bool>,
+    pub export_opt_tm33: RwSignal<bool>,
 }
 
 impl ShellState {
@@ -145,6 +159,11 @@ impl ShellState {
             is_dragging: RwSignal::new(false),
             ui_language: RwSignal::new("en".to_string()),
             show_help: RwSignal::new(false),
+            show_lisp: RwSignal::new(false),
+            show_export_options: RwSignal::new(false),
+            export_opt_dialux: RwSignal::new(false),
+            export_opt_inline_spec: RwSignal::new(false),
+            export_opt_tm33: RwSignal::new(false),
         }
     }
 }
@@ -257,6 +276,31 @@ fn App() -> impl IntoView {
         probe.forget();
     }
     let shell = ShellState::new();
+    // Seed the shell signal from the reducer's resolved UI language so
+    // both sources of truth agree at first paint. The reducer reads
+    // localStorage via BrowserLangStore; without this seed the shell
+    // hard-codes `"en"` while the reducer reflects whatever the user
+    // last picked — which is why language switching only flipped the
+    // sidebar/headers (driven by shell) while colors etc. (driven by
+    // state.ui_language) stayed stuck on the persisted value.
+    let initial_lang = state.with_untracked(|s| s.ui_language.clone());
+    shell.ui_language.set(initial_lang);
+    // Expose `window.gldf_nav_3d()` so the λ Lisp REPL's build-then-
+    // animate demo can switch to the 3D Design view at the end of its
+    // run (which mounts the Bevy canvas on demand), then play the
+    // camera/tilt choreography. Mirrors `gldf_set_active_variant`.
+    if let Some(window) = web_sys::window() {
+        let nav = shell.nav;
+        let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
+            nav.set(NavItem::BevyViewer);
+        }) as Box<dyn Fn()>);
+        let _ = js_sys::Reflect::set(
+            &window,
+            &wasm_bindgen::JsValue::from_str("gldf_nav_3d"),
+            cb.as_ref(),
+        );
+        cb.forget();
+    }
     provide_context(shell);
     // Shared scope signal — see `provide_active_scope`'s docs for why
     // this is shell-level instead of per-page.
@@ -336,6 +380,13 @@ fn App() -> impl IntoView {
             <Show when=move || shell.show_help.get() fallback=|| ().into_view()>
                 <HelpOverlay />
             </Show>
+            <Show when=move || shell.show_export_options.get() fallback=|| ().into_view()>
+                <ExportOptionsOverlay />
+            </Show>
+            <gldf_rs_wasm::components::LispPanel
+                open=shell.show_lisp
+                is_3d_view=Signal::derive(move || shell.nav.get() == NavItem::BevyViewer)
+            />
         </div>
     }
 }
@@ -442,6 +493,7 @@ fn Sidebar() -> impl IntoView {
                     <NavItemViewStaticLabel item=NavItem::Spectra icon="🌈" label="Spectra" badge=None has_file=Signal::derive(has_file) />
                     <NavItemViewStaticLabel item=NavItem::ControlGear icon="⚡" label="Control Gear" badge=None has_file=Signal::derive(has_file) />
                     <NavItemViewStaticLabel item=NavItem::Equipment icon="🔌" label="Equipment" badge=None has_file=Signal::derive(has_file) />
+                    <NavItemView item=NavItem::Sensors icon="📡" label_key="gldf.nav.sensors" badge=None has_file=Signal::derive(has_file) />
                 </ul>
             </div>
 
@@ -640,6 +692,14 @@ fn BevyCanvasShell() -> impl IntoView {
             <canvas
                 id="bevy-canvas"
                 style="width: 100%; height: 100%; display: block;"
+                // Suppress the browser's right-click context menu over
+                // the canvas. Without this, right-mouse-down enters
+                // Bevy's mouse-look mode, but the subsequent mouse-up
+                // is swallowed by the native context menu — Bevy never
+                // sees the release, so `MouseButton::Right.pressed()`
+                // stays true forever and the camera keeps following
+                // every mouse move.
+                on:contextmenu=move |ev| ev.prevent_default()
             ></canvas>
             <BevyKeyboardHelp />
         </div>
@@ -770,10 +830,13 @@ fn Toolbar() -> impl IntoView {
             log::error!("Export JSON: {}", e);
         }
     };
+    // Toolbar "Export GLDF" no longer exports immediately. It opens
+    // the export-options overlay, which has three opt-in checkboxes
+    // (default unchecked = current behaviour preserved) and a single
+    // confirm button. The actual download fires from the overlay's
+    // own click handler.
     let on_export_gldf = move |_| {
-        if let Err(e) = exports::export_gldf(state) {
-            log::error!("Export GLDF: {}", e);
-        }
+        shell.show_export_options.set(true);
     };
     let on_export_ifc = move |_| {
         if let Err(e) = exports::export_ifc(state) {
@@ -787,7 +850,18 @@ fn Toolbar() -> impl IntoView {
             Ok(s) => s,
             Err(_) => return,
         };
-        shell.ui_language.set(select.value());
+        let lang = select.value();
+        // Drive both sources of truth:
+        //   - shell.ui_language: feeds the sidebar + banner labels.
+        //   - GldfState.ui_language: feeds pages that read from the reducer
+        //     (Marketing housing colors, BevyViewer, anything calling
+        //     `state.with(|s| s.ui_language.clone())`).
+        // Dispatching SetUiLanguage also writes to localStorage via the
+        // reducer's `lang_store.store(..)` hook — without this, the next
+        // page reload reverts to the stored value because the shell signal
+        // was the only thing being updated.
+        shell.ui_language.set(lang.clone());
+        state.update(|s| s.apply(GldfAction::SetUiLanguage(lang)));
     };
 
     let on_clear = move |_| {
@@ -847,6 +921,12 @@ fn Toolbar() -> impl IntoView {
                 <button class="btn btn-outline" data-testid="toolbar-clear" on:click=on_clear title=move || t("gldf.toolbar.clear_tooltip")>
                     { move || t("gldf.toolbar.clear") }
                 </button>
+                <button
+                    class="btn btn-outline"
+                    data-testid="toolbar-lisp"
+                    on:click=move |_| { let s = shell.show_lisp; s.update(|v| *v = !*v); }
+                    title="Lisp REPL (acadlisp + gldf-rs)"
+                >{ "λ" }</button>
                 <button class="btn btn-outline" on:click=on_help title=move || t("gldf.toolbar.help_tooltip")>
                     { move || t("gldf.toolbar.help") }
                 </button>
@@ -950,6 +1030,10 @@ fn ContentBody() -> impl IntoView {
                     NavItem::Marketing => view! { <MarketingEditorPage /> }.into_any(),
                     NavItem::ControlGear => view! { <ControlGearPage editable=edit /> }.into_any(),
                     NavItem::Equipment => view! { <EquipmentPage editable=edit /> }.into_any(),
+                    NavItem::Sensors => {
+                        if edit { view! { <SensorsEditorPage /> }.into_any() }
+                        else { view! { <SensorsReadPage /> }.into_any() }
+                    }
                     // Safety-net for future NavItem additions; all current variants are wired above.
                     #[allow(unreachable_patterns)]
                     other => view! { <PlaceholderPage item=other /> }.into_any(),
@@ -1063,6 +1147,23 @@ fn Welcome() -> impl IntoView {
         });
     };
 
+    // Same handler as Toolbar's language picker: drive both
+    // `shell.ui_language` (which feeds the welcome page's `t()` calls
+    // for instant flip) AND the reducer's `SetUiLanguage` so the new
+    // value gets persisted to localStorage via BrowserLangStore. Without
+    // dispatching SetUiLanguage the choice would survive only until
+    // refresh.
+    let on_welcome_lang_change = move |e: web_sys::Event| {
+        let Some(target) = e.target() else { return };
+        let select: HtmlSelectElement = match target.dyn_into() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let lang = select.value();
+        shell.ui_language.set(lang.clone());
+        state.update(|s| s.apply(GldfAction::SetUiLanguage(lang)));
+    };
+
     view! {
         <div
             class=class
@@ -1071,6 +1172,27 @@ fn Welcome() -> impl IntoView {
             on:dragenter=on_drag_enter
             on:dragleave=on_drag_leave
         >
+            // Language picker pinned top-right, so a user landing on the
+            // welcome page can pick their UI language BEFORE loading any
+            // file. The toolbar picker is hidden until a file is loaded;
+            // surfacing the same control here so the choice is reachable
+            // pre-file. Reuses the same `.ui-language-toolbar-select`
+            // class for consistency.
+            <div style="position: absolute; top: 16px; right: 16px;">
+                <select
+                    class="ui-language-toolbar-select"
+                    title=move || t("gldf.toolbar.ui_lang_tooltip")
+                    prop:value=move || shell.ui_language.get()
+                    on:change=on_welcome_lang_change
+                    data-testid="welcome-ui-lang"
+                >
+                    {SUPPORTED_UI_LANGUAGES.iter().map(|l| {
+                        let code = (*l).to_string();
+                        let label = ui_language_native_name(l).unwrap_or(l).to_string();
+                        view! { <option value=code.clone()>{ format!("🖥 {}", label) }</option> }
+                    }).collect::<Vec<_>>()}
+                </select>
+            </div>
             <div class="welcome-icon">{ "💡" }</div>
             <h1 class="welcome-title">{ move || t("gldf.app.title") }</h1>
             <p class="welcome-subtitle">{ move || t("gldf.welcome.subtitle") }</p>
@@ -1088,9 +1210,20 @@ fn Welcome() -> impl IntoView {
                 >
                     { "+ Create new GLDF" }
                 </button>
+                <button
+                    class="btn btn-primary"
+                    data-testid="welcome-open-lisp"
+                    title="Build a GLDF from a Lisp script + a file-drop — no forms"
+                    on:click=move |_| shell.show_lisp.set(true)
+                >
+                    { "λ Script (Lisp)" }
+                </button>
                 <label for="file-upload" class="btn btn-primary">
                     { move || t("gldf.welcome.open_file") }
                 </label>
+                <button class="btn btn-secondary" on:click=move |_| load_demo("prolumia_demo.gldf")>
+                    { move || t("gldf.welcome.load_prolumia_demo") }
+                </button>
                 <button class="btn btn-secondary" on:click=move |_| load_demo("slv_tria_2.gldf")>
                     { move || t("gldf.welcome.load_slv_tria_2") }
                 </button>
@@ -1134,7 +1267,171 @@ fn Welcome() -> impl IntoView {
 /// want users to verify they're loading. Cheaper than a full build.rs
 /// + git-rev pipeline for now; replace when the build stamp matters enough
 /// to be automatic.
-const BUILD_STAMP: &str = "2026-06-02 bevy-ldt+emitter-config";
+const BUILD_STAMP: &str = "2026-06-17 leo-lvk-graphical-picker";
+
+// --- Export-options overlay ---
+
+/// Three-checkbox modal that opens when the toolbar's "Export GLDF"
+/// button is clicked. Defaults are all-off so pressing Enter / clicking
+/// Export gives byte-for-byte the same output as the pre-overlay code
+/// path. The three flags compose to one [`gldf_rs::editable::ExportOptions`]
+/// passed to [`exports::export_gldf_with_options`].
+///
+/// Inline-spectrum and TM-33 merge are wired here but the lib-side
+/// transforms are stubs (slice 2/3). Flipping them today just sets
+/// the field; nothing happens on the lib side yet.
+#[component]
+fn ExportOptionsOverlay() -> impl IntoView {
+    let shell = expect_context::<ShellState>();
+    let state = expect_context::<GldfContext>();
+    let t = move |key: &str| ui_t(key, &shell.ui_language.get());
+
+    let close = move || shell.show_export_options.set(false);
+    let on_cancel = move |_| close();
+
+    // Inline-spectrum and TM-33 merge are mutually exclusive
+    // semantically: TM-33 merge consumes the spectrum's external
+    // SPD file entirely, so an inline-spectrum pass after it is a
+    // no-op. Modelling them as XOR in the UI keeps the user from
+    // ticking both and wondering why one silently wins. The DIALux
+    // flag stays independent — it composes with either.
+    Effect::new(move |_| {
+        if shell.export_opt_inline_spec.get() && shell.export_opt_tm33.get_untracked() {
+            shell.export_opt_tm33.set(false);
+        }
+    });
+    Effect::new(move |_| {
+        if shell.export_opt_tm33.get() && shell.export_opt_inline_spec.get_untracked() {
+            shell.export_opt_inline_spec.set(false);
+        }
+    });
+
+    let do_export = move || {
+        let opts = gldf_rs::editable::ExportOptions {
+            dialux_compat: shell.export_opt_dialux.get(),
+            inline_spectrum: shell.export_opt_inline_spec.get(),
+            merge_into_tm33: shell.export_opt_tm33.get(),
+        };
+        if let Err(e) = exports::export_gldf_with_options(state, opts) {
+            log::error!("Export GLDF: {}", e);
+        }
+        close();
+    };
+    let on_export = move |_| do_export();
+    let on_keydown = move |e: web_sys::KeyboardEvent| {
+        if e.key() == "Enter" {
+            do_export();
+        } else if e.key() == "Escape" {
+            close();
+        }
+    };
+
+    // Mirror HelpOverlay's outer click-to-dismiss pattern; the inner
+    // box stops propagation so checkbox/button clicks don't dismiss.
+    view! {
+        <div
+            style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center;"
+            on:click=move |_| close()
+            on:keydown=on_keydown
+            tabindex="-1"
+        >
+            <div
+                style="background: var(--bg-card); color: var(--text-primary); padding: 24px; border-radius: 8px; width: 520px; max-width: calc(100vw - 48px); max-height: 80vh; overflow-y: auto; box-sizing: border-box; border: 1px solid var(--border-color);"
+                on:click=move |e| e.stop_propagation()
+                data-testid="export-options-modal"
+            >
+                <h2 style="margin: 0 0 8px; color: var(--text-primary);">{ move || t("gldf.export.title") }</h2>
+                <p style="color: var(--text-secondary); margin: 0 0 16px;">
+                    { move || t("gldf.export.subtitle") }
+                </p>
+                <div style="display: block; margin: 0 0 16px;">
+                    <ExportOptionRow
+                        testid="export-opt-dialux"
+                        signal=shell.export_opt_dialux
+                        label_key="gldf.export.dialux.label"
+                        hint_key="gldf.export.dialux.hint"
+                    />
+                    <ExportOptionRow
+                        testid="export-opt-inline-spec"
+                        signal=shell.export_opt_inline_spec
+                        label_key="gldf.export.inline_spec.label"
+                        hint_key="gldf.export.inline_spec.hint"
+                    />
+                    <ExportOptionRow
+                        testid="export-opt-tm33"
+                        signal=shell.export_opt_tm33
+                        label_key="gldf.export.tm33.label"
+                        hint_key="gldf.export.tm33.hint"
+                    />
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button class="btn btn-outline" on:click=on_cancel>
+                        { move || t("gldf.export.cancel") }
+                    </button>
+                    <button
+                        class="btn btn-success"
+                        data-testid="export-options-confirm"
+                        on:click=on_export
+                        autofocus
+                    >
+                        { move || t("gldf.export.confirm") }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// One row inside [`ExportOptionsOverlay`]. Outer `<label>` is a
+/// block so the modal flows top-to-bottom; the checkbox + title sit
+/// on one line via inline-flex, and the hint wraps freely below.
+/// Avoids the earlier `flex` + `<br/>` combo that pushed text off
+/// the side of the modal.
+#[component]
+fn ExportOptionRow(
+    testid: &'static str,
+    signal: RwSignal<bool>,
+    label_key: &'static str,
+    hint_key: &'static str,
+) -> impl IntoView {
+    let shell = expect_context::<ShellState>();
+    let t = move |key: &str| ui_t(key, &shell.ui_language.get());
+    let label_key = label_key.to_string();
+    let hint_key = hint_key.to_string();
+    let label_key_for_view = label_key.clone();
+    let hint_key_for_view = hint_key.clone();
+    // Each row is `display: block`. The checkbox+title sit on one
+    // line via plain inline flow (NO inner flex — flex children
+    // refuse to shrink below their intrinsic content width and the
+    // strong overflows the modal on narrow titles, see screencap of
+    // the earlier broken layout). The hint sits below as a normal
+    // block, indented to align with the title.
+    view! {
+        <label style="display: block; padding: 10px 0; cursor: pointer; border-top: 1px solid var(--border-subtle);">
+            <input
+                type="checkbox"
+                data-testid=testid
+                style="margin: 0 8px 0 0; vertical-align: middle;"
+                prop:checked=move || signal.get()
+                on:change=move |e| signal.set(checkbox_value(&e))
+            />
+            <strong style="vertical-align: middle; color: var(--text-primary);">
+                { move || t(&label_key_for_view) }
+            </strong>
+            <small style="display: block; color: var(--text-secondary); margin: 4px 0 0 26px; line-height: 1.4;">
+                { move || t(&hint_key_for_view) }
+            </small>
+        </label>
+    }
+}
+
+fn checkbox_value(e: &web_sys::Event) -> bool {
+    use wasm_bindgen::JsCast;
+    e.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|el| el.checked())
+        .unwrap_or(false)
+}
 
 // --- Help overlay ---
 
@@ -1185,7 +1482,26 @@ fn load_browser_file(file: web_sys::File, state: GldfContext) {
 }
 
 async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
-    let resp = reqwest_wasm::get(path).await.map_err(|e| e.to_string())?;
+    // reqwest_wasm's URL parser rejects bare relative paths ("builder
+    // error: relative URL without a base") — it doesn't auto-resolve
+    // against `window.location` the way `window.fetch()` does. We
+    // resolve manually so deployed builds at https://gldf.icu/ AND
+    // file:// offline single-HTML bundles AND the local 8052 dev
+    // server all work uniformly.
+    let url = if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("file://") {
+        path.to_string()
+    } else if let Some(base) = web_sys::window().and_then(|w| w.location().href().ok()) {
+        // `window.location.href` is always absolute. URL-join via
+        // `web_sys::Url::new_with_base` so we get RFC-3986 resolution
+        // instead of brittle string concat.
+        match web_sys::Url::new_with_base(path, &base) {
+            Ok(u) => u.href(),
+            Err(_) => path.to_string(),
+        }
+    } else {
+        path.to_string()
+    };
+    let resp = reqwest_wasm::get(&url).await.map_err(|e| e.to_string())?;
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
     Ok(bytes.to_vec())
 }
@@ -1283,6 +1599,7 @@ fn nav_item_label_key(item: NavItem) -> Option<&'static str> {
         NavItem::LightSources => "gldf.nav.light_sources",
         NavItem::Emitters => "gldf.nav.emitters",
         NavItem::Variants => "gldf.nav.variants",
+        NavItem::Sensors => "gldf.nav.sensors",
         NavItem::Builder
         | NavItem::Linkage
         | NavItem::Spectra
@@ -1313,6 +1630,7 @@ fn static_nav_label(item: NavItem) -> &'static str {
         NavItem::Marketing => "Marketing",
         NavItem::ControlGear => "Control Gear",
         NavItem::Equipment => "Equipment",
+        NavItem::Sensors => "Sensors",
         NavItem::BevyViewer => "3D variants",
         _ => "",
     }

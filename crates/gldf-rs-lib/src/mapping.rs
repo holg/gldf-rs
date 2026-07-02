@@ -62,8 +62,10 @@ pub struct MountingInfo {
     pub mounting_type: Option<MountingType>,
     /// Recessed depth in mm (for ceiling/wall recessed)
     pub recessed_depth_mm: Option<i32>,
-    /// Pendant length in mm (for ceiling pendant)
-    pub pendant_length_mm: Option<f64>,
+    /// Pendant length in mm (for ceiling pendant). `i32` for symmetry
+    /// with `recessed_depth_mm` and to match the XSD which types
+    /// `pendantLength` as `xs:int`.
+    pub pendant_length_mm: Option<i32>,
     /// Mounting height in mm (for wall mounted)
     pub mounting_height_mm: Option<i32>,
     /// Pole height in mm (for ground pole-top/pole-integrated)

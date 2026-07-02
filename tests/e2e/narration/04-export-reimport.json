@@ -1,0 +1,20 @@
+{
+  "chapter": "Export, validate & re-import",
+  "voice": "en-US-AriaNeural",
+  "intro_pad_seconds": 0.8,
+  "_comment": "Cue 1 ~1.2s, cue 2 ~0.8s, cue 3 ~5s SRT BUT the actual video runs another ~137s through the re-import pane walkthrough. Cue 3 narration should fill ~50–60s of speech; the rest stays silent over the read-only walk.",
+  "cues": [
+    {
+      "cue": "Act 21 — Export GLDF",
+      "text": "Export."
+    },
+    {
+      "cue": "Act 21b — XSD validate",
+      "text": "Validate."
+    },
+    {
+      "cue": "Act 22 — Re-import walkthrough",
+      "text": "Validation passes — the uppsala XSD validator runs the full release candidate three schema against the exported file, in the browser, and reports zero errors. This is the headline feature: a GLDF that is valid from the moment you click create. To prove the round-trip, we re-import the file we just exported and walk every pane in read-only mode. Everything the editor created is recovered byte-for-byte — header, electrical, mechanical, applications, photometry, light sources, emitters, variants, the geometry, the control gear, the equipment. The four variants in the 3D viewer all look identical to what we built before export. This is what catalog consumers see when they ingest the file: a complete, schema-valid, ready-to-use product record."
+    }
+  ]
+}

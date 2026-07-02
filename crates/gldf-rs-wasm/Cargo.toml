@@ -28,9 +28,13 @@ default = []
 
 [dependencies]
 # Core library - enable eulumdat for LDT/IES and l3d for geometry export
-gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
+gldf-rs = { workspace = true, features = ["eulumdat", "l3d", "xsd"] }
 # Editor API — shared reducer + actions with the TUI / CLI / Python frontends.
 gldf-rs-editor = { workspace = true }
+# Lisp scripting engine (acadlisp + gldf-rs glue). Drives the floating
+# REPL overlay in the WASM editor.
+gldf-rs-lisp = { workspace = true }
+acadlisp = { path = "../../../acadlisp" }
 
 # Error handling
 anyhow.workspace = true
@@ -39,6 +43,7 @@ anyhow.workspace = true
 base64.workspace = true
 eulumdat.workspace = true
 eulumdat-i18n.workspace = true
+gldf-rs-i18n.workspace = true
 gloo = { workspace = true, features = ["futures"] }
 
 # WASM
