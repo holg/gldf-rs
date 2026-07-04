@@ -113,17 +113,17 @@ mod tests {
 pub fn HeaderEditorPage() -> impl IntoView {
     let state = use_gldf();
 
-    let on_author = move |e: web_sys::Event| {
+    let on_author = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             state.update(|s| s.apply(GldfAction::SetAuthor(v)));
         }
     };
-    let on_manufacturer = move |e: web_sys::Event| {
+    let on_manufacturer = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             state.update(|s| s.apply(GldfAction::SetManufacturer(v)));
         }
     };
-    let on_creation = move |e: web_sys::Event| {
+    let on_creation = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             // <input type="datetime-local"> emits `YYYY-MM-DDTHH:MM`
             // — seconds are omitted. The GLDF XSD types
@@ -139,17 +139,17 @@ pub fn HeaderEditorPage() -> impl IntoView {
             state.update(|s| s.apply(GldfAction::SetCreationTimeCode(normalized)));
         }
     };
-    let on_app = move |e: web_sys::Event| {
+    let on_app = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             state.update(|s| s.apply(GldfAction::SetCreatedWithApplication(v)));
         }
     };
-    let on_lang = move |e: web_sys::Event| {
+    let on_lang = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             state.update(|s| s.apply(GldfAction::SetDefaultLanguage(optional_string(v))));
         }
     };
-    let on_format = move |e: web_sys::Event| {
+    let on_format = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             state.update(|s| s.apply(GldfAction::SetFormatVersion(v)));
         }

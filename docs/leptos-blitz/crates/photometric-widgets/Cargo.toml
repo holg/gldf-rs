@@ -1,0 +1,28 @@
+[package]
+name = "photometric-widgets"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Polar/photometric diagram widgets for Blitz (anyrender), built on eulumdat + gldf-rs"
+
+[features]
+default = []
+blitz = ["dep:blitz-dom", "dep:blitz-traits"]
+gldf = ["dep:gldf-rs", "dep:anyhow"]
+
+[dependencies]
+eulumdat = "0.7"
+anyrender = "0.11"
+peniko = "0.6"
+blitz-dom = { workspace = true, optional = true, features = ["custom-widget"] }
+blitz-traits = { workspace = true, optional = true }
+gldf-rs = { version = "0.4", optional = true, default-features = false }
+anyhow = { version = "1", optional = true }
+
+[dev-dependencies]
+anyrender_vello_cpu = "0.14"
+png = "0.18"
+
+[[example]]
+name = "render_png"

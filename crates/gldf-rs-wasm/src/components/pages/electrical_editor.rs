@@ -18,31 +18,31 @@ pub fn ElectricalEditorPage() -> impl IntoView {
     let state = use_gldf();
     let scope = use_active_scope();
 
-    let on_safety = move |e: web_sys::Event| {
+    let on_safety = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetElectricalSafetyClass(scope.get(), optional_string(v)));
         });
     };
-    let on_ip = move |e: web_sys::Event| {
+    let on_ip = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetIngressProtectionIPCode(scope.get(), optional_string(v)));
         });
     };
-    let on_pf = move |e: web_sys::Event| {
+    let on_pf = move |e: crate::components::edit_util::EditEvent| {
         let v = event_f64(&e).filter(|&x| x > 0.0);
         state.update(|s| s.apply(GldfAction::SetPowerFactor(scope.get(), v)));
     };
-    let on_clo = move |e: web_sys::Event| {
+    let on_clo = move |e: crate::components::edit_util::EditEvent| {
         let v = event_checked(&e).unwrap_or(false);
         state.update(|s| s.apply(GldfAction::SetConstantLightOutput(scope.get(), Some(v))));
     };
-    let on_dist = move |e: web_sys::Event| {
+    let on_dist = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| s.apply(GldfAction::SetLightDistribution(scope.get(), optional_string(v))));
     };
-    let on_sc = move |e: web_sys::Event| {
+    let on_sc = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| s.apply(GldfAction::SetSwitchingCapacity(scope.get(), optional_string(v))));
     };

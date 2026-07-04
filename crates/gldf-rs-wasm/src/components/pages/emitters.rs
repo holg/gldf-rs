@@ -830,7 +830,7 @@ fn ControlGearPicker(
     }
 
     let emitter_id_for_pick = emitter_id.clone();
-    let on_pick = move |e: web_sys::Event| {
+    let on_pick = move |e: crate::components::edit_util::EditEvent| {
         use wasm_bindgen::JsCast;
         let Some(target) = e.target() else { return };
         let Ok(sel) = target.dyn_into::<web_sys::HtmlSelectElement>() else { return };

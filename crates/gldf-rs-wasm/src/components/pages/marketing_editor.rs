@@ -262,7 +262,7 @@ fn HousingColorRow(
     let on_pick_ral = {
         let dispatch = dispatch.clone();
         let ui_language = ui_language.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let raw = event_value(&e).unwrap_or_default();
             let n: i32 = raw.parse().unwrap_or(0);
             s_ral.set(n);
@@ -285,7 +285,7 @@ fn HousingColorRow(
     };
     let on_lang = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             s_lang.set(event_value(&e).unwrap_or_default());
             dispatch();
         }
@@ -299,7 +299,7 @@ fn HousingColorRow(
     // number is left alone.
     let on_value = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let typed = event_value(&e).unwrap_or_default();
             s_value.set(typed.clone());
             if let Some(entry) = gldf_rs::ral::by_name(&typed) {
@@ -487,7 +487,7 @@ fn MarketRow(
     };
     let on_lang = {
         let on_change = on_change.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             s_lang.set(v);
             on_change();
@@ -495,7 +495,7 @@ fn MarketRow(
     };
     let on_value = {
         let on_change = on_change.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             s_value.set(v);
             on_change();
@@ -587,7 +587,7 @@ fn StringListRow(
 
     let on_input = {
         let update_arc = update_arc.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             s_value.set(v.clone());
             let scp = scope.get();

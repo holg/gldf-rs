@@ -16,12 +16,12 @@ pub fn PicturesEditorPage() -> impl IntoView {
     let pending_file_id = RwSignal::new(String::new());
     let pending_image_type = RwSignal::new("Product Picture".to_string());
 
-    let on_file_change = move |e: web_sys::Event| {
+    let on_file_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             pending_file_id.set(v);
         }
     };
-    let on_type_change = move |e: web_sys::Event| {
+    let on_type_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             pending_image_type.set(v);
         }
@@ -93,7 +93,7 @@ pub fn PicturesEditorPage() -> impl IntoView {
                                     let file_id = img.file_id.clone();
                                     let file_id_for_action = file_id.clone();
                                     let current_type = img.image_type.clone();
-                                    let on_type = move |e: web_sys::Event| {
+                                    let on_type = move |e: crate::components::edit_util::EditEvent| {
                                         let Some(v) = event_value(&e) else { return };
                                         let fid = file_id_for_action.clone();
                                         let scp = scope.get();

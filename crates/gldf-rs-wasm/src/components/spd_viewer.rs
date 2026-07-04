@@ -296,7 +296,7 @@ fn render_panel_body(
     });
 
     // Slider input — parses the value and writes it into the signal.
-    let on_height_input = move |e: web_sys::Event| {
+    let on_height_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: web_sys::HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,

@@ -461,7 +461,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
 
         let on_emitter = {
             let leo = leo_for_em.clone();
-            move |e: web_sys::Event| {
+            move |e: crate::components::edit_util::EditEvent| {
                 let v = event_target_value(&e);
                 if !v.is_empty() {
                     bind_emitter(leo.clone(), v);

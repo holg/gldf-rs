@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = ["crates/leptos-blitz", "crates/photometric-widgets", "examples/counter"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Holger Trahe <trahe@mac.com>"]
+repository = "https://github.com/holg/leptos-blitz"
+
+[workspace.dependencies]
+# ---------------------------------------------------------------------------
+# Blitz (0.3.0-alpha.6 as of 2026-07). Pin a git rev before the Wuhan trip so
+# the alpha churn doesn't break you mid-flight. Update the rev consciously.
+# ---------------------------------------------------------------------------
+blitz-dom = { version = "=0.3.0-alpha.6", default-features = false, features = ["incremental"] }
+blitz-traits = { version = "=0.3.0-alpha.6", default-features = false }
+blitz-shell = { version = "=0.3.0-alpha.6", default-features = false }
+blitz-paint = { version = "=0.3.0-alpha.6", default-features = false }
+anyrender_vello = { version = "0.12" }
+
+# ---------------------------------------------------------------------------
+# Leptos: the spike REQUIRES a patched tachys (see docs/PATCH_PLAN.md).
+# Fork leptos-rs/leptos, create branch `blitz-renderer`, apply the patch plan,
+# then point these at your fork:
+# ---------------------------------------------------------------------------
+# leptos = { git = "https://github.com/holg/leptos", branch = "blitz-renderer", default-features = false }
+# tachys = { git = "https://github.com/holg/leptos", branch = "blitz-renderer", default-features = false }
+reactive_graph = { version = "0.2" }
+any_spawner = { version = "0.3", features = ["tokio"] }
+
+winit = "0.30"
+tokio = { version = "1", features = ["rt", "macros"] }
+rustc-hash = "2"
+
+leptos-blitz = { path = "crates/leptos-blitz" }
+
+[profile.dev]
+# stylo is unusable at opt-level 0; this is what blitz itself does
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

@@ -12,7 +12,7 @@ pub fn EmergencyEditorPage() -> impl IntoView {
     let state = use_gldf();
     let scope = use_active_scope();
 
-    let on_type = move |e: web_sys::Event| {
+    let on_type = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         let scp = scope.get();
         state.update(|s| s.apply(GldfAction::SetDedicatedEmergencyLightingType(scp, optional_string(v))));
@@ -94,12 +94,12 @@ pub fn EmergencyEditorPage() -> impl IntoView {
                                         {entries.into_iter().enumerate().map(|(idx, flux)| {
                                             let snap_hours = flux.hours;
                                             let snap_value = flux.value;
-                                            let on_hours = move |e: web_sys::Event| {
+                                            let on_hours = move |e: crate::components::edit_util::EditEvent| {
                                                 let h = event_i32(&e).unwrap_or(0);
                                                 let scp = scope.get();
                                                 state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { scope: scp, index: idx, hours: h, flux: snap_value }));
                                             };
-                                            let on_flux = move |e: web_sys::Event| {
+                                            let on_flux = move |e: crate::components::edit_util::EditEvent| {
                                                 let f = event_i32(&e).unwrap_or(0);
                                                 let scp = scope.get();
                                                 state.update(|s| s.apply(GldfAction::UpdateEmergencyFlux { scope: scp, index: idx, hours: snap_hours, flux: f }));

@@ -24,31 +24,31 @@ pub fn MechanicalEditorPage() -> impl IntoView {
     let scope = use_active_scope();
 
     // Action dispatchers, all bound to the current scope.
-    let on_ik = move |e: web_sys::Event| {
+    let on_ik = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetMechanicalIKRating(scope.get(), optional_string(v)));
         });
     };
-    let on_form = move |e: web_sys::Event| {
+    let on_form = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetMechanicalProductForm(scope.get(), optional_string(v)));
         });
     };
-    let on_length = move |e: web_sys::Event| {
+    let on_length = move |e: crate::components::edit_util::EditEvent| {
         let v = event_i32(&e);
         state.update(|s| s.apply(GldfAction::SetMechanicalLength(scope.get(), v)));
     };
-    let on_width = move |e: web_sys::Event| {
+    let on_width = move |e: crate::components::edit_util::EditEvent| {
         let v = event_i32(&e);
         state.update(|s| s.apply(GldfAction::SetMechanicalWidth(scope.get(), v)));
     };
-    let on_height = move |e: web_sys::Event| {
+    let on_height = move |e: crate::components::edit_util::EditEvent| {
         let v = event_i32(&e);
         state.update(|s| s.apply(GldfAction::SetMechanicalHeight(scope.get(), v)));
     };
-    let on_weight = move |e: web_sys::Event| {
+    let on_weight = move |e: crate::components::edit_util::EditEvent| {
         let v = event_f64(&e);
         state.update(|s| s.apply(GldfAction::SetMechanicalWeight(scope.get(), v)));
     };

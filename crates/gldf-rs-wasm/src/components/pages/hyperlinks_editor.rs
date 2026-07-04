@@ -78,7 +78,7 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
     let snap = link.clone();
     let on_href = {
         let snap = snap.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let Some(v) = event_value(&e) else { return };
             let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
@@ -94,7 +94,7 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
     };
     let on_lang = {
         let snap = snap.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
@@ -110,7 +110,7 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
     };
     let on_region = {
         let snap = snap.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
@@ -126,7 +126,7 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
     };
     let on_country = {
         let snap = snap.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {
@@ -142,7 +142,7 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
     };
     let on_label = {
         let snap = snap.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let Some(v) = event_value(&e) else { return };
             let scp = scope.get();
             state.update(|s| s.apply(GldfAction::UpdateHyperlink {

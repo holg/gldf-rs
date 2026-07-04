@@ -137,7 +137,7 @@ fn LabelsPanel() -> impl IntoView {
                                     let canonical_str = canonical.to_string();
                                     let is_selected = selected.contains(&canonical_str);
                                     let target = canonical_str.clone();
-                                    let on_change = move |_e: web_sys::Event| {
+                                    let on_change = move |_e: crate::components::edit_util::EditEvent| {
                                         state.update(|s| {
                                             let scope_now = scope.get();
                                             let cur: Vec<String> = match scope_now {
@@ -209,7 +209,7 @@ fn ApprovalMarksPanel() -> impl IntoView {
 fn ApprovalMarkRow(idx: usize, value: String, scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         let scp = scope.get();
         state.update(|s| s.apply(GldfAction::UpdateApprovalMark { scope: scp, index: idx, value: v }));

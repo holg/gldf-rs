@@ -14,7 +14,7 @@ pub fn ScopePicker(
 ) -> impl IntoView {
     let state = use_gldf();
 
-    let on_select = move |e: web_sys::Event| {
+    let on_select = move |e: crate::components::edit_util::EditEvent| {
         let Some(v) = event_value(&e) else { return };
         let new_scope = if v == "product" {
             Scope::Product

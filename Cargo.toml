@@ -154,10 +154,11 @@ rfd = "0.15"
 gloo = "0.11"
 gloo-file = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
-# Pinned to match cargo-leptos 0.3.6's bundled wasm-bindgen-cli (0.2.114).
-# Bumping requires `cargo install -f wasm-bindgen-cli --version <new>`
-# on the dev box; pin upgrades wait until that's coordinated.
-wasm-bindgen = "=0.2.114"
+# Pinned so the whole graph (incl. blitz-shell's web-sys 0.3.98 for the
+# native leptos-blitz port) unifies on ONE wasm-bindgen. trunk downloads
+# a matching wasm-bindgen CLI automatically; if any tool needs a manual
+# CLI: `cargo install -f wasm-bindgen-cli --version 0.2.121`.
+wasm-bindgen = "=0.2.121"
 wasm-bindgen-futures = "0.4"
 wasm-bindgen-test = "0.3"
 web-sys = "0.3"

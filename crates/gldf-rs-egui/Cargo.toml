@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
-description = "Cross-platform GLDF viewer using egui - works on Windows, macOS, Linux"
+description = "Cross-platform GLDF editor using egui (incl. batch conversion) - works on Windows, macOS, Linux"
 
 [lib]
 name = "gldf_egui"
@@ -14,21 +14,18 @@ path = "src/lib.rs"
 crate-type = ["rlib"]
 
 [[bin]]
-name = "gldf-viewer-egui"
-path = "src/main.rs"
-required-features = ["viewer3d"]
-
-[[bin]]
 name = "gldf-l3d-viewer"
 path = "src/l3d_viewer_main.rs"
 required-features = ["viewer3d"]
 
-# Batch converter — deliberately does NOT require `viewer3d`, so it can
-# be built (and cross-compiled) without three-d. winit 0.28 (via
-# three-d) has a host-cfg'd build.rs that breaks mac→linux cross builds.
+# Full GLDF editor over the shared reducer, including the batch-convert
+# page (the former standalone gldf-batch-egui binary lives on as that
+# page). Deliberately does NOT require `viewer3d`, so it can be
+# cross-compiled without three-d — winit 0.28 (via three-d) has a
+# host-cfg'd build.rs that breaks mac→linux cross builds.
 [[bin]]
-name = "gldf-batch-egui"
-path = "src/batch_main.rs"
+name = "gldf-editor-egui"
+path = "src/editor_main.rs"
 
 [features]
 default = ["persistence", "viewer3d"]
@@ -45,6 +42,9 @@ gldf-rs = { workspace = true, features = ["http"] }
 
 # Shared editor/batch engine (template + LDT→GLDF/IFC pipeline)
 gldf-rs-editor = { workspace = true, features = ["uld"] }
+
+# UI translations (same gldf.* keys as the WASM/TUI frontends)
+gldf-rs-i18n = { workspace = true }
 
 # UI framework
 eframe.workspace = true

@@ -408,7 +408,7 @@ fn VariantCard(
                                     gldf_rs::PhotometryExportFormat::Ldt,
                                 );
                                 let pid_for_change = pid_for_dl.clone();
-                                let on_format = move |e: web_sys::Event| {
+                                let on_format = move |e: crate::components::edit_util::EditEvent| {
                                     use wasm_bindgen::JsCast;
                                     let _ = &pid_for_change;
                                     if let Some(target) = e.target() {

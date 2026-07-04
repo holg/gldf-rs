@@ -153,7 +153,7 @@ fn SensorRow(
         }
     };
 
-    let on_file_change = move |e: web_sys::Event| {
+    let on_file_change = move |e: crate::components::edit_util::EditEvent| {
         let v = crate::components::edit_util::event_value(&e).unwrap_or_default();
         let file_id = if v.is_empty() { None } else { Some(v) };
         state.update(|s| s.apply(GldfAction::SetSensorFileId { index: idx, file_id }));
@@ -286,7 +286,7 @@ fn EnumGrid(
     let make_handler = move |value: &'static str| {
         let current_now = current_for_change.clone();
         let on_change = on_change.clone();
-        move |_e: web_sys::Event| {
+        move |_e: crate::components::edit_util::EditEvent| {
             let target = value.to_string();
             let mut next = current_now.clone();
             if let Some(pos) = next.iter().position(|v| v == &target) {

@@ -67,7 +67,7 @@ pub fn EmitterTypeForm(
     let mc_for_select = available_multi_channel_ls.clone();
     let sensors_for_select = available_sensors.clone();
 
-    let on_kind_change = move |e: web_sys::Event| {
+    let on_kind_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let select: HtmlSelectElement = match target.dyn_into() {
             Ok(s) => s,
@@ -83,7 +83,7 @@ pub fn EmitterTypeForm(
         s_kind.set(new_kind);
     };
 
-    let on_name_input = move |e: web_sys::Event| {
+    let on_name_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let input: HtmlInputElement = match t.dyn_into() {
             Ok(i) => i,
@@ -93,7 +93,7 @@ pub fn EmitterTypeForm(
     };
 
     let make_select_handler = |sig: RwSignal<String>| {
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let Some(target) = e.target() else { return };
             let select: HtmlSelectElement = match target.dyn_into() {
                 Ok(s) => s,

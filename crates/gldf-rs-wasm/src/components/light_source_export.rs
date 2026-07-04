@@ -28,7 +28,7 @@ pub fn LightSourceExportMenu(
     let state = use_gldf();
     let ls_id = light_source_id.clone();
 
-    let on_pick = move |e: web_sys::Event| {
+    let on_pick = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let select: HtmlSelectElement = match target.dyn_into() {
             Ok(s) => s,

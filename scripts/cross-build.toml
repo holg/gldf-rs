@@ -13,8 +13,7 @@ name = "gldf-rs"
 builds = [
     "gldf-rs-cli:gldf-cli",
     "gldf-rs-tui:gldf-edit",
-    "gldf-rs-egui:gldf-batch-egui",
-    "gldf-rs-egui:gldf-viewer-egui",
+    "gldf-rs-egui:gldf-editor-egui",
 ]
 # Cargo profile to build with. `release-dist` (workspace Cargo.toml)
 # carries the fat-LTO / codegen-units=1 / strip settings — keep LTO in a
@@ -27,11 +26,12 @@ rustflags = ""
 dist_dir = "dist/cross"
 
 # Optional extra cargo args per bin: [build.<bin>] cargo_args = "…".
-# The batch app skips `viewer3d` (three-d): winit 0.28's build.rs cfg's
-# on the HOST OS, so its wayland codegen never runs when cross-compiling
-# mac→linux and the target build fails. The two 3D-viewer bins require
-# that feature and thus stay host-native until three-d bumps winit.
-[build.gldf-batch-egui]
+# The editor (incl. its batch page) skips `viewer3d` (three-d): winit
+# 0.28's build.rs cfg's on the HOST OS, so its wayland codegen never
+# runs when cross-compiling mac→linux and the target build fails. The
+# 3D-viewer bin requires that feature and thus stays host-native until
+# three-d bumps winit.
+[build.gldf-editor-egui]
 cargo_args = "--no-default-features --features persistence"
 
 # --- Native Apple targets (no extra toolchain needed on a Mac host) ---

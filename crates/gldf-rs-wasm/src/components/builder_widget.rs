@@ -23,7 +23,7 @@ pub fn BuilderWidget() -> impl IntoView {
     let state = use_gldf();
 
     // ---- Photometry drop ----
-    let on_photometry_change = move |e: web_sys::Event| {
+    let on_photometry_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,
@@ -65,7 +65,7 @@ pub fn BuilderWidget() -> impl IntoView {
         }
     });
 
-    let on_light_source_change = move |e: web_sys::Event| {
+    let on_light_source_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let select: HtmlSelectElement = match target.dyn_into() {
             Ok(s) => s,
@@ -74,7 +74,7 @@ pub fn BuilderWidget() -> impl IntoView {
         light_source_id.set(select.value());
     };
 
-    let on_spectrum_change = move |e: web_sys::Event| {
+    let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,
@@ -107,7 +107,7 @@ pub fn BuilderWidget() -> impl IntoView {
 
     // ---- Variant input ----
     let variant_name = RwSignal::new(String::new());
-    let on_variant_input = move |e: web_sys::Event| {
+    let on_variant_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,

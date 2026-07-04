@@ -67,7 +67,7 @@ pub fn LocaleFooEditor(
 
     let on_compact_event = {
         let on_change_compact = on_change_compact.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             if let Some(text) = read_input_value(&e) {
                 on_change_compact(text);
             }
@@ -150,7 +150,7 @@ fn ExpandedRows(
             let on_change_value = on_change.clone();
             let on_change_remove = on_change.clone();
 
-            let on_lang = move |e: web_sys::Event| {
+            let on_lang = move |e: crate::components::edit_util::EditEvent| {
                 let Some(target) = e.target() else { return };
                 let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else { return };
                 let new_lang = input.value();
@@ -161,7 +161,7 @@ fn ExpandedRows(
                 current.set(v.clone());
                 on_change_lang.run(v);
             };
-            let on_value = move |e: web_sys::Event| {
+            let on_value = move |e: crate::components::edit_util::EditEvent| {
                 let Some(text) = read_input_value(&e) else { return };
                 let mut v = current.get();
                 if let Some(l) = v.locale.get_mut(idx) {

@@ -356,42 +356,42 @@ fn PhotometryRow(
     };
 
     // String-on-change → action dispatch. One per field.
-    let on_cie = move |e: web_sys::Event| {
+    let on_cie = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| s.apply(GldfAction::SetPhotometryCieFluxCode { index: idx, value: optional_string(v) }));
     };
-    let on_lor = move |e: web_sys::Event| {
+    let on_lor = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryLightOutputRatio { index: idx, value: event_f64(&e) }));
     };
-    let on_eff = move |e: web_sys::Event| {
+    let on_eff = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryLuminousEfficacy { index: idx, value: event_f64(&e) }));
     };
-    let on_dff = move |e: web_sys::Event| {
+    let on_dff = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryDownwardFluxFraction { index: idx, value: event_f64(&e) }));
     };
-    let on_dlor = move |e: web_sys::Event| {
+    let on_dlor = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryDownwardLOR { index: idx, value: event_f64(&e) }));
     };
-    let on_ulor = move |e: web_sys::Event| {
+    let on_ulor = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryUpwardLOR { index: idx, value: event_f64(&e) }));
     };
-    let on_cutoff = move |e: web_sys::Event| {
+    let on_cutoff = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryCutOffAngle { index: idx, value: event_f64(&e) }));
     };
-    let on_luminance = move |e: web_sys::Event| {
+    let on_luminance = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryLuminaireLuminance { index: idx, value: event_i32(&e) }));
     };
-    let on_ugr_x = move |e: web_sys::Event| {
+    let on_ugr_x = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryUgrX { index: idx, value: event_f64(&e) }));
     };
-    let on_ugr_y = move |e: web_sys::Event| {
+    let on_ugr_y = move |e: crate::components::edit_util::EditEvent| {
         state.update(|s| s.apply(GldfAction::SetPhotometryUgrY { index: idx, value: event_f64(&e) }));
     };
-    let on_code = move |e: web_sys::Event| {
+    let on_code = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| s.apply(GldfAction::SetPhotometryPhotometricCode { index: idx, value: optional_string(v) }));
     };
-    let on_bug = move |e: web_sys::Event| {
+    let on_bug = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| s.apply(GldfAction::SetPhotometryBugRating { index: idx, value: optional_string(v) }));
     };

@@ -1,10 +1,13 @@
-//! Batch-conversion desktop app: a folder of `.ldt` / `.ies` photometries
-//! plus one JSON template → one GLDF (and optionally IFC) per input.
+//! Batch-conversion panel: a folder of `.ldt` / `.ies` (and `.uld`)
+//! photometries plus one JSON template → one GLDF (and optionally IFC)
+//! per input.
 //!
 //! Thin egui shell over `gldf_rs_editor::batch` — template parsing,
 //! placeholder substitution, conversion, and output writing all live in
 //! the lib (shared with `gldf-cli batch`); this file only owns the
-//! widgets and the worker-thread plumbing.
+//! widgets and the worker-thread plumbing. Hosted as the editor app's
+//! "Batch convert" page (it used to be a standalone `gldf-batch-egui`
+//! binary; one app is enough).
 
 use crate::template_editor::{TemplateEditor, TemplateEditorEvent};
 use eframe::egui;
@@ -42,7 +45,7 @@ struct RunHandle {
     cancel: Arc<AtomicBool>,
 }
 
-pub struct BatchApp {
+pub struct BatchPanel {
     template_path: Option<PathBuf>,
     /// Parse feedback shown next to the template picker: Ok(summary) /
     /// Err(message). `None` until a template is picked.
@@ -56,7 +59,7 @@ pub struct BatchApp {
     template_editor: Option<TemplateEditor>,
 }
 
-impl Default for BatchApp {
+impl Default for BatchPanel {
     fn default() -> Self {
         Self {
             template_path: None,
@@ -72,11 +75,7 @@ impl Default for BatchApp {
     }
 }
 
-impl BatchApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        Self::default()
-    }
-
+impl BatchPanel {
     fn set_template(&mut self, path: PathBuf) {
         self.template_status = Some(match load_template(&path) {
             Ok(BatchTemplate::Wizard(_)) => Ok("wizard template".to_string()),
@@ -109,19 +108,15 @@ impl BatchApp {
         }
     }
 
-    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
-        let dropped: Vec<PathBuf> = ctx.input(|i| {
-            i.raw
-                .dropped_files
-                .iter()
-                .filter_map(|f| f.path.clone())
-                .collect()
-        });
-        if dropped.is_empty() || self.run.is_some() {
+    /// Entry point for files dropped while the batch page is active:
+    /// a `.json` becomes the template, everything else feeds the input
+    /// list (directories are walked for photometries).
+    pub fn add_dropped(&mut self, paths: Vec<PathBuf>) {
+        if self.run.is_some() {
             return;
         }
         let mut inputs = Vec::new();
-        for path in dropped {
+        for path in paths {
             if path
                 .extension()
                 .and_then(|e| e.to_str())
@@ -143,7 +138,7 @@ impl BatchApp {
             return Some("already running".to_string());
         }
         if self.rows.is_empty() {
-            return Some("add .ldt / .ies files first".to_string());
+            return Some("add .ldt / .ies / .uld files first".to_string());
         }
         if self.template_path.is_none() {
             return Some("pick a template JSON first".to_string());
@@ -272,6 +267,43 @@ impl BatchApp {
         }
     }
 
+    /// Render the whole panel into the host page. The host owns window
+    /// chrome; this draws config, the results table, and the run bar.
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        self.pump_worker();
+
+        // Template editor floats as its own window above the app.
+        if let Some(editor) = &mut self.template_editor {
+            let (keep_open, event) = editor.show(ui.ctx());
+            if let TemplateEditorEvent::Saved(path) = event {
+                self.set_template(path);
+            }
+            if !keep_open {
+                self.template_editor = None;
+            }
+        }
+
+        ui.weak(
+            "Photometry files (.ldt / .ies / .uld) + JSON template in, GLDF / IFC out. \
+             Drops land here while this page is open.",
+        );
+        ui.add_space(6.0);
+        self.config_panel(ui);
+        ui.add_space(6.0);
+        self.run_bar(ui);
+        ui.add_space(6.0);
+        ui.separator();
+
+        if self.rows.is_empty() {
+            ui.add_space(20.0);
+            ui.vertical_centered(|ui| {
+                ui.weak("Drop .ldt / .ies / .uld files or folders here");
+            });
+        } else {
+            self.results_table(ui);
+        }
+    }
+
     fn config_panel(&mut self, ui: &mut egui::Ui) {
         let running = self.run.is_some();
         ui.add_enabled_ui(!running, |ui| {
@@ -342,10 +374,7 @@ impl BatchApp {
                             self.rows.clear();
                             self.summary = None;
                         }
-                        ui.weak(format!(
-                            "{} file(s) — or drop .ldt / .ies / folders anywhere",
-                            self.rows.len()
-                        ));
+                        ui.weak(format!("{} file(s)", self.rows.len()));
                     });
                     ui.end_row();
 
@@ -370,6 +399,51 @@ impl BatchApp {
                     });
                     ui.end_row();
                 });
+        });
+    }
+
+    fn run_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if self.run.is_some() {
+                if ui.button("Cancel").clicked() {
+                    if let Some(run) = &self.run {
+                        run.cancel.store(true, Ordering::Relaxed);
+                    }
+                }
+                let done = self
+                    .rows
+                    .iter()
+                    .filter(|r| matches!(r.status, RowStatus::Done(_) | RowStatus::Failed(_)))
+                    .count();
+                let total = self.rows.len().max(1);
+                ui.add(
+                    egui::ProgressBar::new(done as f32 / total as f32)
+                        .text(format!("{}/{}", done, self.rows.len()))
+                        .desired_width(280.0),
+                );
+            } else {
+                let blocker = self.can_run();
+                let button = ui.add_enabled(blocker.is_none(), egui::Button::new("Run batch"));
+                if let Some(reason) = &blocker {
+                    button.on_disabled_hover_text(reason.clone());
+                } else if button.clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.start_run(&ctx);
+                }
+                if let Some(out_dir) = self.out_dir.clone() {
+                    let any_done = self
+                        .rows
+                        .iter()
+                        .any(|r| matches!(r.status, RowStatus::Done(_)));
+                    if any_done && ui.button("Open output folder").clicked() {
+                        let _ = open_in_file_manager(&out_dir);
+                    }
+                }
+            }
+            if let Some(summary) = &self.summary {
+                ui.separator();
+                ui.label(summary.clone());
+            }
         });
     }
 
@@ -452,92 +526,6 @@ impl BatchApp {
                     });
                 });
             });
-    }
-}
-
-impl eframe::App for BatchApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.pump_worker();
-        self.handle_dropped_files(ctx);
-
-        if let Some(editor) = &mut self.template_editor {
-            let (keep_open, event) = editor.show(ctx);
-            if let TemplateEditorEvent::Saved(path) = event {
-                self.set_template(path);
-            }
-            if !keep_open {
-                self.template_editor = None;
-            }
-        }
-
-        egui::TopBottomPanel::top("batch-top").show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.heading("GLDF Batch Converter");
-            ui.weak("Photometry files (.ldt / .ies) + JSON template → GLDF / IFC");
-            ui.add_space(6.0);
-            self.config_panel(ui);
-            ui.add_space(6.0);
-        });
-
-        egui::TopBottomPanel::bottom("batch-bottom").show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if self.run.is_some() {
-                    if ui.button("Cancel").clicked() {
-                        if let Some(run) = &self.run {
-                            run.cancel.store(true, Ordering::Relaxed);
-                        }
-                    }
-                    let done = self
-                        .rows
-                        .iter()
-                        .filter(|r| {
-                            matches!(r.status, RowStatus::Done(_) | RowStatus::Failed(_))
-                        })
-                        .count();
-                    let total = self.rows.len().max(1);
-                    ui.add(
-                        egui::ProgressBar::new(done as f32 / total as f32)
-                            .text(format!("{}/{}", done, self.rows.len()))
-                            .desired_width(280.0),
-                    );
-                } else {
-                    let blocker = self.can_run();
-                    let button = ui.add_enabled(blocker.is_none(), egui::Button::new("▶ Run"));
-                    if let Some(reason) = &blocker {
-                        button.on_disabled_hover_text(reason.clone());
-                    } else if button.clicked() {
-                        self.start_run(ctx);
-                    }
-                    if let Some(out_dir) = self.out_dir.clone() {
-                        let any_done = self
-                            .rows
-                            .iter()
-                            .any(|r| matches!(r.status, RowStatus::Done(_)));
-                        if any_done && ui.button("Open output folder").clicked() {
-                            let _ = open_in_file_manager(&out_dir);
-                        }
-                    }
-                }
-                if let Some(summary) = &self.summary {
-                    ui.separator();
-                    ui.label(summary.clone());
-                }
-            });
-            ui.add_space(6.0);
-        });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if self.rows.is_empty() {
-                ui.centered_and_justified(|ui| {
-                    ui.weak("Drop .ldt / .ies files or folders here");
-                });
-            } else {
-                egui::ScrollArea::horizontal().show(ui, |ui| {
-                    self.results_table(ui);
-                });
-            }
-        });
     }
 }
 

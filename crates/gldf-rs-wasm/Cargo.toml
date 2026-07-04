@@ -62,14 +62,18 @@ zip.workspace = true
 # feature picks the client-side-rendering target; we don't run an
 # SSR server for gldf.icu.
 leptos = { workspace = true, features = ["csr"] }
-leptos_meta = { workspace = true }
-leptos_router = { workspace = true }
 console_log = "1"
 log = "0.4"
 console_error_panic_hook.workspace = true
 
 # ULD file conversion (ULD -> GLDF) — parked, see [features] note above.
 # uld-rs = { workspace = true, optional = true }
+
+# meta/router are browser-shell concerns (app.rs); the native shell in
+# ../leptos-blitz routes with a plain signal instead.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+leptos_meta = { workspace = true }
+leptos_router = { workspace = true }
 
 [dependencies.web-sys]
 workspace = true

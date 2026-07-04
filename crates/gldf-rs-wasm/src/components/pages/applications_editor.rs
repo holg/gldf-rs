@@ -18,7 +18,7 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
     let scope = use_active_scope();
     let filter = RwSignal::new(String::new());
 
-    let on_filter = move |e: web_sys::Event| {
+    let on_filter = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             filter.set(v);
         }
@@ -159,7 +159,7 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
                                     "padding-left: {}px; display: flex; align-items: baseline; gap: 8px; padding-top: 2px; padding-bottom: 2px;",
                                     depth * 16
                                 );
-                                let on_change = move |_e: web_sys::Event| {
+                                let on_change = move |_e: crate::components::edit_util::EditEvent| {
                                     state.update(|s| {
                                         // Re-check current selection at click time —
                                         // applications may have changed since render.

@@ -304,7 +304,7 @@ fn VariantEditForm(idx: usize, variant: Variant) -> impl IntoView {
     let on_tender = Callback::new(move |v: LocaleFoo| {
         state.update(|s| s.apply(GldfAction::SetVariantTenderText(idx, v)));
     });
-    let on_gtin = move |e: web_sys::Event| {
+    let on_gtin = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetVariantGTIN {
@@ -313,7 +313,7 @@ fn VariantEditForm(idx: usize, variant: Variant) -> impl IntoView {
             })
         });
     };
-    let on_sort = move |e: web_sys::Event| {
+    let on_sort = move |e: crate::components::edit_util::EditEvent| {
         let v = event_i32(&e);
         state.update(|s| {
             s.apply(GldfAction::SetVariantSortOrder {
@@ -322,7 +322,7 @@ fn VariantEditForm(idx: usize, variant: Variant) -> impl IntoView {
             })
         });
     };
-    let on_symbol = move |e: web_sys::Event| {
+    let on_symbol = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
             s.apply(GldfAction::SetVariantSymbol {
@@ -602,7 +602,7 @@ fn BareEmitterList(
         .collect();
 
     let bound_for_add = bound.clone();
-    let on_add = move |e: web_sys::Event| {
+    let on_add = move |e: crate::components::edit_util::EditEvent| {
         let Some(v) = event_value(&e) else { return };
         if v.is_empty() {
             return;
@@ -683,7 +683,7 @@ fn SimpleGeometryPicker(
     let cur_emitter = current.as_ref().map(|s| s.emitter_id.clone()).unwrap_or_default();
 
     let cur_emitter_for_geom = cur_emitter.clone();
-    let on_geom = move |e: web_sys::Event| {
+    let on_geom = move |e: crate::components::edit_util::EditEvent| {
         let Some(v) = event_value(&e) else { return };
         let emitter_id = cur_emitter_for_geom.clone();
         state.update(|s| {
@@ -695,7 +695,7 @@ fn SimpleGeometryPicker(
         });
     };
     let cur_geom_for_emitter = cur_geom.clone();
-    let on_emitter = move |e: web_sys::Event| {
+    let on_emitter = move |e: crate::components::edit_util::EditEvent| {
         let Some(v) = event_value(&e) else { return };
         let geometry_id = cur_geom_for_emitter.clone();
         state.update(|s| {
@@ -769,7 +769,7 @@ fn ModelGeometryEditor(
         .unwrap_or_default();
 
     let bindings_for_geom = bindings_init.clone();
-    let on_geom = move |e: web_sys::Event| {
+    let on_geom = move |e: crate::components::edit_util::EditEvent| {
         let Some(v) = event_value(&e) else { return };
         let bindings = bindings_for_geom.clone();
         state.update(|s| {
@@ -854,7 +854,7 @@ fn ModelGeometryEditor(
                         let target = b.target_model_type.clone().unwrap_or_else(|| "—".to_string());
                         let geom_id_for_select = geometry_id.clone();
                         let bindings_for_select = bindings_init.clone();
-                        let on_pick = move |e: web_sys::Event| {
+                        let on_pick = move |e: crate::components::edit_util::EditEvent| {
                             let Some(v) = event_value(&e) else { return };
                             let mut next = bindings_for_select.clone();
                             if let Some(slot) = next.get_mut(binding_idx) {
@@ -1201,7 +1201,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_ceiling_mode = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v: u8 = event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0);
             ceiling_mode.set(v);
             dispatch();
@@ -1209,7 +1209,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_ground_mode = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             let v: u8 = event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0);
             ground_mode.set(v);
             dispatch();
@@ -1217,7 +1217,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_ceiling_depth = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             ceiling_recessed_depth.set(
                 event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );
@@ -1226,7 +1226,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_ceiling_pendant = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             ceiling_pendant_length.set(
                 event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );
@@ -1235,7 +1235,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_wall_height = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             wall_mounting_height.set(
                 event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );
@@ -1244,7 +1244,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_wall_depth = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             wall_recessed_depth.set(
                 event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );
@@ -1253,7 +1253,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     };
     let set_ground_height = {
         let dispatch = dispatch.clone();
-        move |e: web_sys::Event| {
+        move |e: crate::components::edit_util::EditEvent| {
             ground_pole_height.set(
                 event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
             );

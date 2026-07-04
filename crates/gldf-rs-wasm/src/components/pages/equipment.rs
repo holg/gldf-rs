@@ -212,7 +212,7 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
         })
     });
 
-    let on_kind = move |e: web_sys::Event| {
+    let on_kind = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
                 s_kind.set(sel.value());
@@ -220,12 +220,12 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
             }
         }
     };
-    let on_ls = move |e: web_sys::Event| {
+    let on_ls = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             s_ls.set(v);
         }
     };
-    let on_cg = move |e: web_sys::Event| {
+    let on_cg = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             s_cg.set(v);
         }
@@ -335,7 +335,7 @@ fn light_source_id_kind(kind: &LightEmitterKind) -> Option<LightEmitterKind> {
 
 #[component]
 fn TextField(label: &'static str, value: RwSignal<String>) -> impl IntoView {
-    let on_input = move |e: web_sys::Event| {
+    let on_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             value.set(v);
         }

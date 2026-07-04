@@ -50,7 +50,7 @@ pub fn IdRenameChip(
         }
         is_editing.set(false);
     };
-    let on_input = move |e: web_sys::Event| {
+    let on_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,

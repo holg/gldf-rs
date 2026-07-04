@@ -71,7 +71,7 @@ pub fn IfcViewerPage() -> impl IntoView {
         external.get().unwrap_or_else(|| default_source.get())
     });
 
-    let on_file = move |e: web_sys::Event| {
+    let on_file = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,

@@ -723,28 +723,28 @@ fn ChannelRow(
         is_editing.set(false);
     };
 
-    let on_name_input = move |e: web_sys::Event| {
+    let on_name_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
                 s_name.set(input.value());
             }
         }
     };
-    let on_spectrum_change = move |e: web_sys::Event| {
+    let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
                 s_spectrum.set(sel.value());
             }
         }
     };
-    let on_photo_change = move |e: web_sys::Event| {
+    let on_photo_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
                 s_photo.set(sel.value());
             }
         }
     };
-    let on_flux_input = move |e: web_sys::Event| {
+    let on_flux_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
                 s_flux.set(input.value());
@@ -951,28 +951,28 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
         s_flux.set(String::from("0"));
     };
 
-    let on_name_input = move |e: web_sys::Event| {
+    let on_name_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
                 s_name.set(input.value());
             }
         }
     };
-    let on_spectrum_change = move |e: web_sys::Event| {
+    let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
                 s_spectrum.set(sel.value());
             }
         }
     };
-    let on_photo_change = move |e: web_sys::Event| {
+    let on_photo_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
                 s_photo.set(sel.value());
             }
         }
     };
-    let on_flux_input = move |e: web_sys::Event| {
+    let on_flux_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
                 s_flux.set(input.value());
@@ -1445,7 +1445,7 @@ fn TextRow(
     value: RwSignal<String>,
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
-    let on_input = move |e: web_sys::Event| {
+    let on_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,
@@ -1469,7 +1469,7 @@ fn TextRow(
 
 #[component]
 fn BoolRow(label: &'static str, value: RwSignal<bool>) -> impl IntoView {
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,
@@ -1631,7 +1631,7 @@ fn PhotometryPicker(light_source_id: String, current: Option<String>) -> impl In
     });
 
     let ls_id_for_pick = light_source_id.clone();
-    let on_pick = move |e: web_sys::Event| {
+    let on_pick = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let select: HtmlSelectElement = match target.dyn_into() {
             Ok(s) => s,
@@ -1706,7 +1706,7 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
     });
 
     let ls_id_for_pick = light_source_id.clone();
-    let on_pick = move |e: web_sys::Event| {
+    let on_pick = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let select: HtmlSelectElement = match target.dyn_into() {
             Ok(s) => s,
@@ -1856,7 +1856,7 @@ fn FixedLightSourcePhotometryUsage(light_source_id: String) -> impl IntoView {
                         let ids = photometry_ids.get();
                         rows.into_iter().map(|(emitter_id, idx, current)| {
                             let emitter_id_for_pick = emitter_id.clone();
-                            let on_pick = move |e: web_sys::Event| {
+                            let on_pick = move |e: crate::components::edit_util::EditEvent| {
                                 let Some(target) = e.target() else { return };
                                 let select: HtmlSelectElement = match target.dyn_into() {
                                     Ok(s) => s,

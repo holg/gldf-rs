@@ -229,7 +229,7 @@ fn TextField(
     value: RwSignal<String>,
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
-    let on_input = move |e: web_sys::Event| {
+    let on_input = move |e: crate::components::edit_util::EditEvent| {
         if let Some(v) = event_value(&e) {
             value.set(v);
         }
@@ -248,7 +248,7 @@ fn CheckboxField(
     value: RwSignal<bool>,
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         if let Some(target) = e.target() {
             use wasm_bindgen::JsCast;
             if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {

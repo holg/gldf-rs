@@ -291,28 +291,28 @@ fn StepChip(idx: usize, label: String, current: RwSignal<usize>) -> impl IntoVie
 
 #[component]
 fn HeaderStep(w: WizardState) -> impl IntoView {
-    let on_author = move |e: web_sys::Event| {
+    let on_author = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.header_author.set(i.value());
             }
         }
     };
-    let on_manuf = move |e: web_sys::Event| {
+    let on_manuf = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.header_manufacturer.set(i.value());
             }
         }
     };
-    let on_created_with = move |e: web_sys::Event| {
+    let on_created_with = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.header_created_with.set(i.value());
             }
         }
     };
-    let on_lang = move |e: web_sys::Event| {
+    let on_lang = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.header_default_language.set(i.value());
@@ -373,7 +373,7 @@ fn PhotometryStep(w: WizardState) -> impl IntoView {
         });
     };
 
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let input: HtmlInputElement = match t.dyn_into() {
             Ok(i) => i,
@@ -452,7 +452,7 @@ fn SensorStep(w: WizardState) -> impl IntoView {
             }
         });
     };
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let input: HtmlInputElement = match t.dyn_into() {
             Ok(i) => i,
@@ -532,7 +532,7 @@ fn EmergencyStep(w: WizardState) -> impl IntoView {
             }
         });
     };
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let input: HtmlInputElement = match t.dyn_into() {
             Ok(i) => i,
@@ -592,7 +592,7 @@ fn EmergencyStep(w: WizardState) -> impl IntoView {
 
 #[component]
 fn LightSourceStep(w: WizardState) -> impl IntoView {
-    let on_kind = move |e: web_sys::Event| {
+    let on_kind = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let sel: HtmlSelectElement = match t.dyn_into() {
             Ok(s) => s,
@@ -606,21 +606,21 @@ fn LightSourceStep(w: WizardState) -> impl IntoView {
         };
         w.ls_kind.set(kind);
     };
-    let on_name = move |e: web_sys::Event| {
+    let on_name = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.ls_name.set(i.value());
             }
         }
     };
-    let on_manuf = move |e: web_sys::Event| {
+    let on_manuf = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.ls_manufacturer.set(i.value());
             }
         }
     };
-    let on_power = move |e: web_sys::Event| {
+    let on_power = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.ls_rated_power.set(i.value());
@@ -740,7 +740,7 @@ fn GeometryStep(w: WizardState) -> impl IntoView {
         });
     };
 
-    let on_change = move |e: web_sys::Event| {
+    let on_change = move |e: crate::components::edit_util::EditEvent| {
         let Some(t) = e.target() else { return };
         let input: HtmlInputElement = match t.dyn_into() {
             Ok(i) => i,
@@ -817,35 +817,35 @@ fn GeometryStep(w: WizardState) -> impl IntoView {
 // of the Mountings end-to-end flow).
 #[component]
 fn MountingStep(w: WizardState) -> impl IntoView {
-    let on_type = move |e: web_sys::Event| {
+    let on_type = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(s) = t.dyn_into::<web_sys::HtmlSelectElement>() {
                 w.mounting_type.set(s.value());
             }
         }
     };
-    let on_depth = move |e: web_sys::Event| {
+    let on_depth = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.mounting_recessed_depth_mm.set(i.value());
             }
         }
     };
-    let on_pendant = move |e: web_sys::Event| {
+    let on_pendant = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.mounting_pendant_length_mm.set(i.value());
             }
         }
     };
-    let on_wall_h = move |e: web_sys::Event| {
+    let on_wall_h = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.mounting_height_mm.set(i.value());
             }
         }
     };
-    let on_pole_h = move |e: web_sys::Event| {
+    let on_pole_h = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.mounting_pole_height_mm.set(i.value());
@@ -958,28 +958,28 @@ fn DriverStep(w: WizardState) -> impl IntoView {
     // care about driver metadata just click Next; users who do tick the
     // box, fill the three fields, and the lib's apply_wizard mints the
     // ControlGear + Equipment + ControlGearReference on Finish.
-    let on_enabled = move |e: web_sys::Event| {
+    let on_enabled = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.driver_enabled.set(i.checked());
             }
         }
     };
-    let on_name = move |e: web_sys::Event| {
+    let on_name = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.driver_name.set(i.value());
             }
         }
     };
-    let on_dimmable = move |e: web_sys::Event| {
+    let on_dimmable = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.driver_dimmable.set(i.checked());
             }
         }
     };
-    let on_standby = move |e: web_sys::Event| {
+    let on_standby = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.driver_standby_power.set(i.value());
@@ -1046,7 +1046,7 @@ fn DriverStep(w: WizardState) -> impl IntoView {
 
 #[component]
 fn VariantStep(w: WizardState) -> impl IntoView {
-    let on_name = move |e: web_sys::Event| {
+    let on_name = move |e: crate::components::edit_util::EditEvent| {
         if let Some(t) = e.target() {
             if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
                 w.variant_name.set(i.value());

@@ -1,0 +1,25 @@
+[package]
+name = "leptos-blitz"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Native (non-webview) renderer for Leptos based on Blitz"
+
+[features]
+default = []
+# Enables the code that compiles against the patched leptos fork.
+# Requires the [patch] section in the workspace Cargo.toml to be active.
+tachys-patched = []
+
+[dependencies]
+blitz-dom.workspace = true
+blitz-traits.workspace = true
+blitz-shell.workspace = true
+anyrender_vello.workspace = true
+rustc-hash.workspace = true
+markup5ever = "0.35"
+# Activated with tachys-patched:
+# tachys.workspace = true
+# reactive_graph.workspace = true
+# any_spawner.workspace = true

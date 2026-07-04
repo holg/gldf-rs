@@ -1,0 +1,9 @@
+[package]
+name = "counter"
+version = "0.0.1"
+edition.workspace = true
+publish = false
+
+[dependencies]
+leptos-blitz = { workspace = true, features = ["tachys-patched"] }
+# leptos.workspace = true   # <- from the fork, once patched

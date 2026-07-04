@@ -22,7 +22,7 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
     let state = use_gldf();
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
 
-    let on_add_file = move |e: web_sys::Event| {
+    let on_add_file = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,
@@ -199,7 +199,7 @@ fn FileRow(
             </td>
             <td>
                 {move || if editable && is_editing.get() {
-                    let on_change = move |e: web_sys::Event| {
+                    let on_change = move |e: crate::components::edit_util::EditEvent| {
                         if let Some(v) = event_value(&e) {
                             s_ct.set(v);
                         }
@@ -347,7 +347,7 @@ fn ActionCellButtons(
 
 #[component]
 fn TextField(value: RwSignal<String>) -> impl IntoView {
-    let on_input = move |e: web_sys::Event| {
+    let on_input = move |e: crate::components::edit_util::EditEvent| {
         let Some(target) = e.target() else { return };
         let input: HtmlInputElement = match target.dyn_into() {
             Ok(i) => i,

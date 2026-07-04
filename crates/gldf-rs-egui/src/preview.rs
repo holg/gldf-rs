@@ -1,6 +1,8 @@
-//! File viewer for embedded files with proper LDT/IES and L3D support
+//! Embedded-file preview renderers (photometry polar diagram, images,
+//! L3D, text/hex, URL fetch). Shared by the editor's Files /
+//! Photometries pages; formerly part of the retired gldf-viewer-egui
+//! app's file viewer.
 
-use crate::app::GldfViewerApp;
 use eframe::egui;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -60,153 +62,8 @@ pub fn fetch_all_urls(urls: Vec<String>) {
     }
 }
 
-pub fn render_file_viewer(ui: &mut egui::Ui, app: &mut GldfViewerApp) {
-    ui.heading("File Viewer");
-    ui.add_space(8.0);
-
-    // Clone the files to avoid borrow issues
-    let embedded_files: Vec<_> = app
-        .embedded_files()
-        .iter()
-        .filter(|f| {
-            let name = f.name.as_deref().unwrap_or("");
-            !name.ends_with("product.xml") && !name.ends_with("meta-signature.xml")
-        })
-        .cloned()
-        .collect();
-
-    if embedded_files.is_empty() {
-        empty_state(
-            ui,
-            "👁",
-            "No Embedded Files",
-            "Load a GLDF file to view embedded files",
-        );
-        return;
-    }
-
-    ui.label(format!("{} embedded files", embedded_files.len()));
-    ui.add_space(8.0);
-    ui.separator();
-    ui.add_space(8.0);
-
-    let mut new_selection: Option<String> = None;
-    let current_selection = app.selected_file_id.clone();
-
-    ui.columns(2, |columns| {
-        // Left column: file list
-        columns[0].heading("Files");
-        columns[0].add_space(8.0);
-
-        egui::ScrollArea::vertical()
-            .id_salt("file_list_scroll")
-            .show(&mut columns[0], |ui| {
-                for file in &embedded_files {
-                    let full_path = file.name.as_deref().unwrap_or("Unknown");
-                    let display_name = full_path.rsplit('/').next().unwrap_or(full_path);
-                    let is_selected = current_selection.as_deref() == Some(full_path);
-                    let icon = get_file_icon(display_name);
-                    let has_content = file
-                        .content
-                        .as_ref()
-                        .map(|c| !c.is_empty())
-                        .unwrap_or(false);
-
-                    let label_text = if has_content {
-                        format!("{} {}", icon, display_name)
-                    } else {
-                        format!("{} {} (URL)", icon, display_name)
-                    };
-
-                    if ui.selectable_label(is_selected, label_text).clicked() {
-                        new_selection = Some(full_path.to_string());
-                    }
-                }
-            });
-
-        // Right column: preview
-        columns[1].heading("Preview");
-        columns[1].add_space(8.0);
-
-        if let Some(ref selected_id) = current_selection {
-            if let Some(file) = embedded_files
-                .iter()
-                .find(|f| f.name.as_deref() == Some(selected_id.as_str()))
-            {
-                render_file_preview(&mut columns[1], file);
-            } else {
-                columns[1].label("File not found");
-            }
-        } else {
-            columns[1].vertical_centered(|ui| {
-                ui.add_space(40.0);
-                ui.label(egui::RichText::new("👈").size(32.0));
-                ui.label("Select a file from the list");
-            });
-        }
-    });
-
-    if let Some(sel) = new_selection {
-        app.selected_file_id = Some(sel);
-    }
-}
-
-fn render_file_preview(ui: &mut egui::Ui, file: &gldf_rs::BufFile) {
-    let full_path = file.name.as_deref().unwrap_or("Unknown");
-    let display_name = full_path.rsplit('/').next().unwrap_or(full_path);
-    let name_lower = display_name.to_lowercase();
-
-    ui.label(egui::RichText::new(display_name).strong());
-    ui.label(
-        egui::RichText::new(format!("Path: {}", full_path))
-            .small()
-            .weak(),
-    );
-    ui.add_space(4.0);
-
-    if let Some(ref content) = file.content {
-        if content.is_empty() {
-            ui.label(egui::RichText::new("File is empty").weak());
-            return;
-        }
-
-        ui.label(
-            egui::RichText::new(format!("{} bytes", content.len()))
-                .weak()
-                .small(),
-        );
-        ui.add_space(8.0);
-
-        if name_lower.ends_with(".jpg")
-            || name_lower.ends_with(".jpeg")
-            || name_lower.ends_with(".png")
-        {
-            render_image_preview(ui, content, full_path);
-        } else if name_lower.ends_with(".ldt") || name_lower.ends_with(".ies") {
-            render_photometry_preview(ui, content, full_path);
-        } else if name_lower.ends_with(".l3d") {
-            render_l3d_preview(ui, content, full_path);
-        } else if name_lower.ends_with(".xml") {
-            ui.label(egui::RichText::new("XML File").color(egui::Color32::from_rgb(66, 133, 244)));
-            ui.add_space(8.0);
-            render_text_preview(ui, content);
-        } else if name_lower.ends_with(".txt") || name_lower.ends_with(".json") {
-            render_text_preview(ui, content);
-        } else if name_lower.ends_with(".pdf") {
-            render_pdf_preview(ui, content, full_path);
-        } else {
-            ui.label("Binary file");
-            ui.add_space(8.0);
-            render_hex_preview(ui, content);
-        }
-    } else {
-        // URL reference - try to fetch
-        render_url_file(ui, full_path, &name_lower);
-    }
-}
-
 /// Render photometry (LDT/IES) files using eulumdat
-fn render_photometry_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
+pub(crate) fn render_photometry_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
     use eulumdat::{
         diagram::{PolarDiagram, SvgTheme},
         Eulumdat, IesParser,
@@ -344,7 +201,7 @@ fn svg_to_png(svg_str: &str, width: u32, height: u32) -> Result<Vec<u8>, String>
 }
 
 /// Render L3D 3D model preview
-fn render_l3d_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
+pub(crate) fn render_l3d_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
     // `path` only feeds the viewer3d button's window title below.
     #[cfg(not(feature = "viewer3d"))]
     let _ = path;
@@ -410,7 +267,7 @@ fn render_l3d_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
 }
 
 /// Render PDF preview with option to open in system viewer
-fn render_pdf_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
+pub(crate) fn render_pdf_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
     ui.label(egui::RichText::new("📕 PDF Document").color(egui::Color32::from_rgb(220, 53, 69)));
     ui.add_space(8.0);
 
@@ -485,7 +342,7 @@ fn open_in_system_viewer(content: &[u8], filename: &str, extension: &str) {
 }
 
 /// Render URL-referenced file (fetch from URL)
-fn render_url_file(ui: &mut egui::Ui, path: &str, name_lower: &str) {
+pub(crate) fn render_url_file(ui: &mut egui::Ui, path: &str, name_lower: &str) {
     ui.label(
         egui::RichText::new("🌐 External URL Reference")
             .color(egui::Color32::from_rgb(230, 126, 34)),
@@ -587,7 +444,7 @@ fn fetch_url_blocking(url: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Read error: {}", e))
 }
 
-fn render_image_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
+pub(crate) fn render_image_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
     let uri = format!("bytes://gldf/{}", path.replace('/', "_"));
     ui.ctx().include_bytes(uri.clone(), content.to_vec());
     ui.add(
@@ -597,7 +454,7 @@ fn render_image_preview(ui: &mut egui::Ui, content: &[u8], path: &str) {
     );
 }
 
-fn render_text_preview(ui: &mut egui::Ui, content: &[u8]) {
+pub(crate) fn render_text_preview(ui: &mut egui::Ui, content: &[u8]) {
     let text = String::from_utf8_lossy(content);
     let display_text = if text.len() > 30000 {
         format!(
@@ -623,7 +480,7 @@ fn render_text_preview(ui: &mut egui::Ui, content: &[u8]) {
         });
 }
 
-fn render_hex_preview(ui: &mut egui::Ui, content: &[u8]) {
+pub(crate) fn render_hex_preview(ui: &mut egui::Ui, content: &[u8]) {
     ui.label(egui::RichText::new("Hex preview (first 512 bytes):").small());
     let hex: String = content
         .iter()
@@ -648,32 +505,4 @@ fn render_hex_preview(ui: &mut egui::Ui, content: &[u8]) {
                     .desired_rows(10),
             );
         });
-}
-
-fn get_file_icon(name: &str) -> &'static str {
-    let name_lower = name.to_lowercase();
-    if name_lower.ends_with(".jpg") || name_lower.ends_with(".jpeg") || name_lower.ends_with(".png")
-    {
-        "🖼"
-    } else if name_lower.ends_with(".ldt") || name_lower.ends_with(".ies") {
-        "☀️"
-    } else if name_lower.ends_with(".l3d") {
-        "🧊"
-    } else if name_lower.ends_with(".xml") {
-        "📝"
-    } else if name_lower.ends_with(".pdf") {
-        "📕"
-    } else {
-        "📄"
-    }
-}
-
-fn empty_state(ui: &mut egui::Ui, icon: &str, title: &str, message: &str) {
-    ui.vertical_centered(|ui| {
-        ui.add_space(80.0);
-        ui.label(egui::RichText::new(icon).size(48.0));
-        ui.add_space(16.0);
-        ui.heading(title);
-        ui.label(egui::RichText::new(message).weak());
-    });
 }
