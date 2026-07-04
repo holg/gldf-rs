@@ -56,7 +56,61 @@ pub fn SvgEmbed(
 ) -> impl IntoView {
     // `inner_html` routes through the renderer on both targets (web DOM
     // innerHTML / blitz HTML-fragment parsing), so no NodeRef needed.
-    view! { <div inner_html=move || svg.get() style=style></div> }
+    view! { <div inner_html=move || fit_svg(&svg.get()) style=style></div> }
+}
+
+/// Give the root `<svg>` a concrete pixel `width`/`height`. The eulumdat-rs
+/// renderers emit `<svg viewBox="0 0 W H">` with NO `width`/`height`,
+/// relying on the browser's "replaced element with intrinsic ratio"
+/// behaviour to scale it to the box. Blitz's inline-SVG layout instead
+/// sizes the replaced element from the `width`/`height` *attributes*
+/// (parsed as `f32` — so `"100%"` is ignored) or the usvg intrinsic size,
+/// and without a definite pixel size in the flex/block flow the element
+/// collapses to 0×0 and paints nothing.
+///
+/// So we copy the viewBox's W/H into pixel `width`/`height` attributes.
+/// Combined with a `max-width:100%` in the wrapper style the diagram then
+/// lays out at its authored size on blitz and still fits its container in
+/// the browser (where explicit width/height + CSS max-width is the normal
+/// responsive-SVG pattern). No-op if the SVG already carries width/height.
+fn fit_svg(svg: &str) -> String {
+    let Some(pos) = svg.find("<svg") else {
+        return svg.to_string();
+    };
+    let Some(gt) = svg[pos..].find('>').map(|i| pos + i) else {
+        return svg.to_string();
+    };
+    let open_tag = &svg[pos..gt];
+    if open_tag.contains(" width=") || open_tag.contains(" height=") {
+        return svg.to_string();
+    }
+    // Pull W/H from the viewBox ("minx miny w h").
+    let dims = open_tag
+        .find("viewBox=\"")
+        .map(|i| &open_tag[i + "viewBox=\"".len()..])
+        .and_then(|rest| rest.split('"').next())
+        .and_then(|vb| {
+            let mut it = vb.split_whitespace().skip(2);
+            Some((it.next()?.to_string(), it.next()?.to_string()))
+        });
+    let Some((w, h)) = dims else {
+        return svg.to_string();
+    };
+    let mut out = String::with_capacity(svg.len() + 96);
+    out.push_str(&svg[..pos + 4]); // through "<svg"
+    // Definite pixel `width`/`height` (attribute AND CSS): blitz's
+    // replaced-element measure zeroes out an SVG measured under a
+    // min-content constraint unless a definite size is present. NOTE: do
+    // NOT use percentage `max-width/max-height` here — under a min-content
+    // basis a `%` max resolves to 0 and re-collapses the box. The wrapper
+    // div owns clipping/scaling instead.
+    out.push_str(&format!(
+        " width=\"{w}\" height=\"{h}\" \
+         style=\"width:{w}px;height:{h}px\" \
+         preserveAspectRatio=\"xMidYMid meet\""
+    ));
+    out.push_str(&svg[pos + 4..]);
+    out
 }
 
 /// Top-level Spectra page. Reads the editor state and renders one
