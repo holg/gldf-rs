@@ -5,8 +5,11 @@
 //! live in `docs/leptos_migration.md` (untracked). The bin entry is `main.rs`.
 
 pub mod components;
+#[cfg(target_arch = "wasm32")]
 pub mod draw_l3d;
+#[cfg(target_arch = "wasm32")]
 pub mod exports;
 pub mod i18n;
 pub mod state;
+#[cfg(target_arch = "wasm32")]
 pub mod utils;

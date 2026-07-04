@@ -198,3 +198,23 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
+
+# ---------------------------------------------------------------------------
+# leptos-blitz native port: the WHOLE leptos family resolves to the local
+# fork (branch blitz-renderer) so the same 0.8-line API serves both the
+# wasm editor build and the native (Blitz) build, with ONE tachys in the
+# graph. Remove when the blitz backend ships in a leptos release.
+# ---------------------------------------------------------------------------
+[patch.crates-io]
+leptos = { path = "../leptos/leptos" }
+leptos_dom = { path = "../leptos/leptos_dom" }
+leptos_macro = { path = "../leptos/leptos_macro" }
+leptos_server = { path = "../leptos/leptos_server" }
+leptos_config = { path = "../leptos/leptos_config" }
+leptos_meta = { path = "../leptos/meta" }
+leptos_router = { path = "../leptos/router" }
+tachys = { path = "../leptos/tachys" }
+reactive_graph = { path = "../leptos/reactive_graph" }
+reactive_stores = { path = "../leptos/reactive_stores" }
+server_fn = { path = "../leptos/server_fn" }
+hydration_context = { path = "../leptos/hydration_context" }
