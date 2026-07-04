@@ -61,6 +61,7 @@ pub fn provide_active_scope() -> ActiveScope {
     let signal: ActiveScope = RwSignal::new(Scope::Product);
     provide_context(signal);
 
+    #[cfg(target_arch = "wasm32")]
     if let Some(window) = web_sys::window() {
         let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |idx: f64| {
             if idx.is_finite() && idx >= 0.0 {
@@ -91,14 +92,27 @@ pub fn use_active_scope() -> ActiveScope {
 /// `localStorage` key used by [`BrowserLangStore`]. Distinct from
 /// `gldf.display_language` (which the LanguageBanner uses for the
 /// document's own locales).
+#[cfg(target_arch = "wasm32")]
 const UI_LANGUAGE_STORAGE_KEY: &str = "gldf.ui_language";
 
 /// [`UiLanguageStore`] adapter writing to the browser's `localStorage`.
 /// Persistence is best-effort — if `window` or `localStorage` is
 /// unavailable (e.g. running headless), `load` returns `None` and
 /// `store` silently drops the value.
+///
+/// Natively there is no `localStorage`; the store is a no-op (the UI
+/// language resets to the default on every launch).
 pub struct BrowserLangStore;
 
+#[cfg(not(target_arch = "wasm32"))]
+impl UiLanguageStore for BrowserLangStore {
+    fn load(&self) -> Option<String> {
+        None
+    }
+    fn store(&self, _lang: &str) {}
+}
+
+#[cfg(target_arch = "wasm32")]
 impl UiLanguageStore for BrowserLangStore {
     fn load(&self) -> Option<String> {
         web_sys::window()?
