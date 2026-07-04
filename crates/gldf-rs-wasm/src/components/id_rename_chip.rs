@@ -11,8 +11,6 @@
 
 use leptos::prelude::*;
 use std::sync::Arc;
-use wasm_bindgen::JsCast;
-use web_sys::HtmlInputElement;
 
 /// Inline click-to-edit id chip.
 ///
@@ -51,12 +49,8 @@ pub fn IdRenameChip(
         is_editing.set(false);
     };
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        draft.set(input.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        draft.set(v);
     };
 
     view! {

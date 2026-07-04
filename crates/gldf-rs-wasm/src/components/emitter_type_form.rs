@@ -24,8 +24,6 @@
 use crate::state::LightEmitterKind;
 use leptos::prelude::*;
 use std::sync::Arc;
-use wasm_bindgen::JsCast;
-use web_sys::{HtmlInputElement, HtmlSelectElement};
 
 // `EmitterDraft` lives in `gldf-rs-editor::emitter_draft` so the
 // wizard, the TUI, the CLI, and Python all see the same plain-data
@@ -68,12 +66,8 @@ pub fn EmitterTypeForm(
     let sensors_for_select = available_sensors.clone();
 
     let on_kind_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let select: HtmlSelectElement = match target.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let new_kind = match select.value().as_str() {
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let new_kind = match v.as_str() {
             "Fixed" => LightEmitterKind::Fixed,
             "Changeable" => LightEmitterKind::Changeable,
             "MultiChannel" => LightEmitterKind::MultiChannel,
@@ -84,22 +78,14 @@ pub fn EmitterTypeForm(
     };
 
     let on_name_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let input: HtmlInputElement = match t.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        s_name.set(input.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        s_name.set(v);
     };
 
     let make_select_handler = |sig: RwSignal<String>| {
         move |e: crate::components::edit_util::EditEvent| {
-            let Some(target) = e.target() else { return };
-            let select: HtmlSelectElement = match target.dyn_into() {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            sig.set(select.value());
+            let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+            sig.set(v);
         }
     };
     let on_photo_change = make_select_handler(s_photo);

@@ -12,9 +12,12 @@ use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
 use gldf_rs::validation::xsd_enums::{is_canonical, CONTENT_TYPES};
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlInputElement;
 
 #[component]
@@ -23,52 +26,57 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
 
     let on_add_file = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        // Process every file the user picked. Each known photometric /
-        // geometry / spectral extension takes its specialised import
-        // path so we auto-register the matching wrapper element
-        // alongside the <File> entry:
-        //   - .l3d       → ImportL3dFile (also creates ModelGeometry)
-        //   - .ldt/.ies  → AddPhotometryFile (also creates Photometry)
-        //   - .spd       → ImportSpectrumFile (also creates Spectrum;
-        //                  binding to a LightSource happens later via
-        //                  the LightSource Spectrum picker)
-        // Everything else (images, custom blobs) falls through to the
-        // generic AddFileWithBytes flow that just registers a <File>.
-        for i in 0..files.length() {
-            let Some(file) = files.get(i) else { continue };
-            let filename = file.name();
-            let gloo_file = gloo::file::File::from(file);
-            spawn_local(async move {
-                match gloo::file::futures::read_as_bytes(&gloo_file).await {
-                    Ok(bytes) => {
-                        let lower = filename.to_lowercase();
-                        let is_l3d = lower.ends_with(".l3d");
-                        let is_photometric =
-                            lower.ends_with(".ldt") || lower.ends_with(".ies");
-                        let is_spectrum = lower.ends_with(".spd");
-                        state.update(|s| {
-                            if is_l3d {
-                                s.apply(GldfAction::ImportL3dFile { bytes, filename });
-                            } else if is_photometric {
-                                s.apply(GldfAction::AddPhotometryFile { bytes, filename });
-                            } else if is_spectrum {
-                                s.apply(GldfAction::ImportSpectrumFile { bytes, filename });
-                            } else {
-                                s.apply(GldfAction::AddFileWithBytes { bytes, filename });
-                            }
-                        });
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(target) = e.target() else { return };
+            let input: HtmlInputElement = match target.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            // Process every file the user picked. Each known photometric /
+            // geometry / spectral extension takes its specialised import
+            // path so we auto-register the matching wrapper element
+            // alongside the <File> entry:
+            //   - .l3d       → ImportL3dFile (also creates ModelGeometry)
+            //   - .ldt/.ies  → AddPhotometryFile (also creates Photometry)
+            //   - .spd       → ImportSpectrumFile (also creates Spectrum;
+            //                  binding to a LightSource happens later via
+            //                  the LightSource Spectrum picker)
+            // Everything else (images, custom blobs) falls through to the
+            // generic AddFileWithBytes flow that just registers a <File>.
+            for i in 0..files.length() {
+                let Some(file) = files.get(i) else { continue };
+                let filename = file.name();
+                let gloo_file = gloo::file::File::from(file);
+                spawn_local(async move {
+                    match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                        Ok(bytes) => {
+                            let lower = filename.to_lowercase();
+                            let is_l3d = lower.ends_with(".l3d");
+                            let is_photometric =
+                                lower.ends_with(".ldt") || lower.ends_with(".ies");
+                            let is_spectrum = lower.ends_with(".spd");
+                            state.update(|s| {
+                                if is_l3d {
+                                    s.apply(GldfAction::ImportL3dFile { bytes, filename });
+                                } else if is_photometric {
+                                    s.apply(GldfAction::AddPhotometryFile { bytes, filename });
+                                } else if is_spectrum {
+                                    s.apply(GldfAction::ImportSpectrumFile { bytes, filename });
+                                } else {
+                                    s.apply(GldfAction::AddFileWithBytes { bytes, filename });
+                                }
+                            });
+                        }
+                        Err(err) => log::error!("read file: {}", err),
                     }
-                    Err(err) => log::error!("read file: {}", err),
-                }
-            });
+                });
+            }
+            input.set_value("");
         }
-        input.set_value("");
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {
@@ -174,8 +182,8 @@ fn FileRow(
     let s_ct = RwSignal::new(file.content_type.clone());
     let s_type = RwSignal::new(file.type_attr.clone());
 
-    let on_download = move |e: web_sys::MouseEvent| {
-        e.stop_propagation();
+    let on_download = move |e: crate::components::edit_util::ClickEvt| {
+        crate::components::edit_util::stop_click_propagation(&e);
         if let Err(err) = download_embedded_file(state, &id_for_dl) {
             log::error!("download {}: {}", id_for_dl, err);
         }
@@ -275,9 +283,7 @@ fn FileRow(
                                 &state.with(|s| s.ui_language.clone()),
                             );
                             let msg = template.replace("{id}", &id);
-                            if web_sys::window()
-                                .and_then(|w| w.confirm_with_message(&msg).ok())
-                                .unwrap_or(false)
+                            if crate::components::edit_util::confirm(&msg)
                             {
                                 state.update(|s| s.apply(GldfAction::RemoveFile(id)));
                             }
@@ -305,10 +311,10 @@ fn FileRow(
 #[component]
 fn ActionCellButtons(
     is_editing: RwSignal<bool>,
-    on_edit: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
-    on_cancel: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
-    on_save: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
-    on_remove: impl Fn(web_sys::MouseEvent) + 'static + Send + Sync + Clone,
+    on_edit: impl Fn(crate::components::edit_util::ClickEvt) + 'static + Send + Sync + Clone,
+    on_cancel: impl Fn(crate::components::edit_util::ClickEvt) + 'static + Send + Sync + Clone,
+    on_save: impl Fn(crate::components::edit_util::ClickEvt) + 'static + Send + Sync + Clone,
+    on_remove: impl Fn(crate::components::edit_util::ClickEvt) + 'static + Send + Sync + Clone,
 ) -> impl IntoView {
     view! {
         {move || if is_editing.get() {
@@ -348,12 +354,8 @@ fn ActionCellButtons(
 #[component]
 fn TextField(value: RwSignal<String>) -> impl IntoView {
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        value.set(input.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        value.set(v);
     };
     view! {
         <input

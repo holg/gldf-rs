@@ -14,9 +14,12 @@
 use crate::exports::export_gldf;
 use crate::state::{use_gldf, GldfAction};
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlInputElement, HtmlSelectElement};
+#[cfg(target_arch = "wasm32")]
+use web_sys::HtmlInputElement;
 
 #[component]
 pub fn BuilderWidget() -> impl IntoView {
@@ -24,26 +27,31 @@ pub fn BuilderWidget() -> impl IntoView {
 
     // ---- Photometry drop ----
     let on_photometry_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        let filename = file.name();
-        let gloo_file = gloo::file::File::from(file);
-        spawn_local(async move {
-            match gloo::file::futures::read_as_bytes(&gloo_file).await {
-                Ok(bytes) => {
-                    state.update(|s| {
-                        s.apply(GldfAction::AddPhotometryFile { bytes, filename });
-                    });
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(target) = e.target() else { return };
+            let input: HtmlInputElement = match target.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            let filename = file.name();
+            let gloo_file = gloo::file::File::from(file);
+            spawn_local(async move {
+                match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                    Ok(bytes) => {
+                        state.update(|s| {
+                            s.apply(GldfAction::AddPhotometryFile { bytes, filename });
+                        });
+                    }
+                    Err(e) => log::error!("read photometry: {}", e),
                 }
-                Err(e) => log::error!("read photometry: {}", e),
-            }
-        });
-        input.set_value("");
+            });
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     // ---- Spectrum drop + light-source picker ----
@@ -66,54 +74,51 @@ pub fn BuilderWidget() -> impl IntoView {
     });
 
     let on_light_source_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let select: HtmlSelectElement = match target.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        light_source_id.set(select.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        light_source_id.set(v);
     };
 
     let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        let filename = file.name();
-        let ls_id = light_source_id.get();
-        if ls_id.is_empty() {
-            return;
-        }
-        let gloo_file = gloo::file::File::from(file);
-        spawn_local(async move {
-            match gloo::file::futures::read_as_bytes(&gloo_file).await {
-                Ok(bytes) => {
-                    state.update(|s| {
-                        s.apply(GldfAction::AddSpectrumFile {
-                            bytes,
-                            filename,
-                            light_source_id: ls_id,
-                        });
-                    });
-                }
-                Err(e) => log::error!("read spectrum: {}", e),
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(target) = e.target() else { return };
+            let input: HtmlInputElement = match target.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            let filename = file.name();
+            let ls_id = light_source_id.get();
+            if ls_id.is_empty() {
+                return;
             }
-        });
-        input.set_value("");
+            let gloo_file = gloo::file::File::from(file);
+            spawn_local(async move {
+                match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                    Ok(bytes) => {
+                        state.update(|s| {
+                            s.apply(GldfAction::AddSpectrumFile {
+                                bytes,
+                                filename,
+                                light_source_id: ls_id,
+                            });
+                        });
+                    }
+                    Err(e) => log::error!("read spectrum: {}", e),
+                }
+            });
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     // ---- Variant input ----
     let variant_name = RwSignal::new(String::new());
     let on_variant_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        variant_name.set(input.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        variant_name.set(v);
     };
     let on_variant_add = move |_| {
         let name = variant_name.get();

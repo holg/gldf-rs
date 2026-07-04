@@ -1355,7 +1355,7 @@ pub fn LispPanel(open: RwSignal<bool>, #[prop(into)] is_3d_view: Signal<bool>) -
                 <textarea
                     data-testid="lisp-panel-source"
                     prop:value=move || code.get()
-                    on:input=move |ev| { user_edited.set(true); code.set(event_target_value(&ev)); }
+                    on:input=move |ev| { user_edited.set(true); code.set(crate::components::edit_util::event_value(&ev).unwrap_or_default()); }
                     spellcheck="false"
                     style="flex: 1 1 200px; min-height: 160px; padding: 8px; font-family: var(--font-mono, monospace); \
                            font-size: 12px; background: var(--bg-primary, #111); color: var(--text-primary, #ddd); \

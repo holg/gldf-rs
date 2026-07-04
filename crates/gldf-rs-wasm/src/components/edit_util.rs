@@ -16,6 +16,21 @@ pub type EditEvent = web_sys::Event;
 #[cfg(not(target_arch = "wasm32"))]
 pub type EditEvent = leptos::tachys::renderer::blitz::typed_events::InputEvent;
 
+/// Drag & drop event alias: `web_sys::DragEvent` in the browser; natively
+/// the blitz `GenericEvent` fallback (blitz does not emit drag events, so
+/// these listeners attach but never fire — dead drop zones are acceptable).
+#[cfg(target_arch = "wasm32")]
+pub type DragEvt = web_sys::DragEvent;
+#[cfg(not(target_arch = "wasm32"))]
+pub type DragEvt = leptos::tachys::renderer::blitz::typed_events::GenericEvent;
+
+/// Click/mouse event alias: `web_sys::MouseEvent` in the browser, the
+/// blitz typed `PointerEvent` natively.
+#[cfg(target_arch = "wasm32")]
+pub type ClickEvt = web_sys::MouseEvent;
+#[cfg(not(target_arch = "wasm32"))]
+pub type ClickEvt = leptos::tachys::renderer::blitz::typed_events::PointerEvent;
+
 /// Native (blitz) counterpart: `input`/`change` events carry the new
 /// value directly in the typed payload — no DOM casting.
 #[cfg(not(target_arch = "wasm32"))]
@@ -89,6 +104,32 @@ pub fn event_i32(e: &web_sys::Event) -> Option<i32> {
         s.parse().ok()
     }
 }
+
+/// Ask the user to confirm a destructive action. Browser: `window.confirm`.
+/// Native: no blocking dialog available in the blitz shell yet — proceed.
+#[cfg(target_arch = "wasm32")]
+pub fn confirm(msg: &str) -> bool {
+    web_sys::window()
+        .and_then(|w| w.confirm_with_message(msg).ok())
+        .unwrap_or(false)
+}
+
+/// Native: proceed without a dialog.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn confirm(_msg: &str) -> bool {
+    true
+}
+
+/// Stop a click event from propagating. Native: the blitz typed
+/// `PointerEvent` payload has no propagation control — no-op.
+#[cfg(target_arch = "wasm32")]
+pub fn stop_click_propagation(e: &ClickEvt) {
+    e.stop_propagation();
+}
+
+/// Native no-op.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn stop_click_propagation(_e: &ClickEvt) {}
 
 /// Treat the empty string as `None`, otherwise `Some(s)`.
 pub fn optional_string(s: String) -> Option<String> {

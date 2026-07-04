@@ -10,6 +10,7 @@ use crate::state::GldfContext;
 use anyhow::{anyhow, Result};
 use gldf_rs::GldfProduct;
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
 /// Export the current product as `product.xml`.
@@ -197,12 +198,32 @@ fn lookup_photometry_bytes(
         .ok_or_else(|| anyhow!("photometry '{}' file not in embedded_files", photometry_id))
 }
 
+// ---- Native plumbing: "download" = write to a gldf-exports dir under
+// the system temp dir and log the path. The native shell's Save button
+// offers a proper file dialog; these helpers exist so the shared editor
+// pages' export buttons still do something observable.
+
+#[cfg(not(target_arch = "wasm32"))]
+fn download_bytes(bytes: &[u8], filename: &str, _mime: &str) {
+    let dir = std::env::temp_dir().join("gldf-exports");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::error!("export: create {}: {}", dir.display(), e);
+        return;
+    }
+    let path = dir.join(filename);
+    match std::fs::write(&path, bytes) {
+        Ok(()) => log::info!("exported {} ({} bytes)", path.display(), bytes.len()),
+        Err(e) => log::error!("export {}: {}", path.display(), e),
+    }
+}
+
 // ---- Browser plumbing ----
 
 fn download_text(text: &str, filename: &str, mime: &str) {
     download_bytes(text.as_bytes(), filename, mime);
 }
 
+#[cfg(target_arch = "wasm32")]
 fn download_bytes(bytes: &[u8], filename: &str, mime: &str) {
     let uint8arr = js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(bytes) }.into());
     let array = js_sys::Array::new();

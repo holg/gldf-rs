@@ -409,19 +409,12 @@ fn VariantCard(
                                 );
                                 let pid_for_change = pid_for_dl.clone();
                                 let on_format = move |e: crate::components::edit_util::EditEvent| {
-                                    use wasm_bindgen::JsCast;
                                     let _ = &pid_for_change;
-                                    if let Some(target) = e.target() {
-                                        if let Ok(sel) =
-                                            target.dyn_into::<web_sys::HtmlSelectElement>()
+                                    if let Some(v) = crate::components::edit_util::event_value(&e) {
+                                        if let Some(fmt) =
+                                            gldf_rs::PhotometryExportFormat::from_str(&v)
                                         {
-                                            if let Some(fmt) =
-                                                gldf_rs::PhotometryExportFormat::from_str(
-                                                    &sel.value(),
-                                                )
-                                            {
-                                                format_sig.set(fmt);
-                                            }
+                                            format_sig.set(fmt);
                                         }
                                     }
                                 };

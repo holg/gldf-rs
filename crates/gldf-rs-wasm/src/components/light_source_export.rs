@@ -10,7 +10,9 @@
 use anyhow::Result;
 use gldf_rs::export::lightsource as ls_export;
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlSelectElement;
 
 use crate::state::{use_gldf, GldfContext};
@@ -29,20 +31,21 @@ pub fn LightSourceExportMenu(
     let ls_id = light_source_id.clone();
 
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let select: HtmlSelectElement = match target.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let format = select.value();
+        let Some(format) = crate::components::edit_util::event_value(&e) else { return };
         // Reset to placeholder so the same format can be picked twice
         // in a row without the change event being suppressed.
-        select.set_value("");
+        #[cfg(target_arch = "wasm32")]
+        if let Some(target) = e.target() {
+            if let Ok(select) = target.dyn_into::<HtmlSelectElement>() {
+                select.set_value("");
+            }
+        }
         if format.is_empty() {
             return;
         }
         if let Err(e) = trigger_download(state, &ls_id, &format) {
             log::error!("LS export ({format}) failed: {e}");
+            #[cfg(target_arch = "wasm32")]
             if let Some(win) = web_sys::window() {
                 let _ = win.alert_with_message(&format!(
                     "Export failed: {e}\n\nThis LightSource needs to be bound by an Emitter that references a Photometry with embedded LDT/IES bytes.",
@@ -99,9 +102,26 @@ fn trigger_download(state: GldfContext, ls_id: &str, format: &str) -> Result<()>
     Ok(())
 }
 
+/// Native: write into the same gldf-exports temp dir as
+/// `crate::exports`' native download path.
+#[cfg(not(target_arch = "wasm32"))]
+fn download_bytes(bytes: &[u8], filename: &str, _mime: &str) {
+    let dir = std::env::temp_dir().join("gldf-exports");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::error!("export: create {}: {}", dir.display(), e);
+        return;
+    }
+    let path = dir.join(filename);
+    match std::fs::write(&path, bytes) {
+        Ok(()) => log::info!("exported {} ({} bytes)", path.display(), bytes.len()),
+        Err(e) => log::error!("export {}: {}", path.display(), e),
+    }
+}
+
 /// Same Blob / `<a download>` plumbing as [`crate::exports::download_bytes`],
 /// copied here to keep this component standalone. Single browser API call
 /// chain — split would only obscure intent.
+#[cfg(target_arch = "wasm32")]
 fn download_bytes(bytes: &[u8], filename: &str, mime: &str) {
     let uint8arr = js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(bytes) }.into());
     let array = js_sys::Array::new();

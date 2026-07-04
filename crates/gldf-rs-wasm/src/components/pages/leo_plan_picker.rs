@@ -462,7 +462,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
         let on_emitter = {
             let leo = leo_for_em.clone();
             move |e: crate::components::edit_util::EditEvent| {
-                let v = event_target_value(&e);
+                let v = crate::components::edit_util::event_value(&e).unwrap_or_default();
                 if !v.is_empty() {
                     bind_emitter(leo.clone(), v);
                 }
@@ -524,7 +524,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
                                 <label>{ "Photometry" }</label>
                                 <select
                                     data-testid=format!("leo-new-photometry-{}", idx)
-                                    on:change=move |e| new_photometry.set(event_target_value(&e))
+                                    on:change=move |e| new_photometry.set(crate::components::edit_util::event_value(&e).unwrap_or_default())
                                     style="font-size: 11px; font-family: var(--font-mono);">
                                     {photos.iter().map(|c| {
                                         let sel = c.photometry_id == new_photometry.get_untracked();
@@ -542,7 +542,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
                                     view! {
                                         <select
                                             data-testid=format!("leo-new-lightsource-{}", idx)
-                                            on:change=move |e| new_light_source.set(event_target_value(&e))
+                                            on:change=move |e| new_light_source.set(crate::components::edit_util::event_value(&e).unwrap_or_default())
                                             style="font-size: 11px; font-family: var(--font-mono);">
                                             {lss.iter().map(|(id, hint)| {
                                                 let sel = *id == new_light_source.get_untracked();
@@ -560,7 +560,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
                                     data-testid=format!("leo-new-flux-{}", idx)
                                     prop:value=move || new_flux.get().to_string()
                                     on:input=move |e| {
-                                        if let Ok(v) = event_target_value(&e).parse::<i32>() {
+                                        if let Ok(v) = crate::components::edit_util::event_value(&e).unwrap_or_default().parse::<i32>() {
                                             new_flux.set(v);
                                         }
                                     }

@@ -26,8 +26,6 @@ use gldf_rs::gldf::general_definitions::lightsources::{
 };
 use gldf_rs::gldf::header::{Locale, LocaleFoo};
 use leptos::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{HtmlInputElement, HtmlSelectElement};
 
 #[component]
 pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoView {
@@ -163,9 +161,7 @@ fn FixedCard(ls: FixedLightSource, editable: bool) -> impl IntoView {
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
         let msg = format!("Remove light source '{}'? Any Emitter or Equipment reference to it will dangle.", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
@@ -335,9 +331,7 @@ fn ChangeableCard(ls: ChangeableLightSource, editable: bool) -> impl IntoView {
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
         let msg = format!("Remove light source '{}'? Any Equipment reference to it will dangle.", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
@@ -481,9 +475,7 @@ fn MultiChannelCard(ls: MultiChannelLightSource, editable: bool) -> impl IntoVie
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
         let msg = format!("Remove multi-channel light source '{}'? Any MultiChannelLightEmitter referencing it will dangle.", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
@@ -724,31 +716,23 @@ fn ChannelRow(
     };
 
     let on_name_input = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
-                s_name.set(input.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_name.set(v);
         }
     };
     let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
-                s_spectrum.set(sel.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_spectrum.set(v);
         }
     };
     let on_photo_change = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
-                s_photo.set(sel.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_photo.set(v);
         }
     };
     let on_flux_input = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
-                s_flux.set(input.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_flux.set(v);
         }
     };
 
@@ -952,31 +936,23 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
     };
 
     let on_name_input = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
-                s_name.set(input.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_name.set(v);
         }
     };
     let on_spectrum_change = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
-                s_spectrum.set(sel.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_spectrum.set(v);
         }
     };
     let on_photo_change = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
-                s_photo.set(sel.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_photo.set(v);
         }
     };
     let on_flux_input = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(input) = target.dyn_into::<HtmlInputElement>() {
-                s_flux.set(input.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_flux.set(v);
         }
     };
 
@@ -1446,12 +1422,8 @@ fn TextRow(
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        value.set(input.value());
+        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        value.set(v);
     };
     view! {
         <label style="display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; font-size: 12px;">
@@ -1470,12 +1442,8 @@ fn TextRow(
 #[component]
 fn BoolRow(label: &'static str, value: RwSignal<bool>) -> impl IntoView {
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        value.set(input.checked());
+        let Some(c) = crate::components::edit_util::event_checked(&e) else { return };
+        value.set(c);
     };
     view! {
         <label style="display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: center; font-size: 12px;">
@@ -1632,12 +1600,7 @@ fn PhotometryPicker(light_source_id: String, current: Option<String>) -> impl In
 
     let ls_id_for_pick = light_source_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let select: HtmlSelectElement = match target.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let val = select.value();
+        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
         let photometry_id = if val.is_empty() { None } else { Some(val) };
         let ls_id = ls_id_for_pick.clone();
         state.update(|s| {
@@ -1707,12 +1670,7 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
 
     let ls_id_for_pick = light_source_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let select: HtmlSelectElement = match target.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let val = select.value();
+        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
         let spectrum_id = if val.is_empty() { None } else { Some(val) };
         let ls_id = ls_id_for_pick.clone();
         state.update(|s| {
@@ -1857,12 +1815,7 @@ fn FixedLightSourcePhotometryUsage(light_source_id: String) -> impl IntoView {
                         rows.into_iter().map(|(emitter_id, idx, current)| {
                             let emitter_id_for_pick = emitter_id.clone();
                             let on_pick = move |e: crate::components::edit_util::EditEvent| {
-                                let Some(target) = e.target() else { return };
-                                let select: HtmlSelectElement = match target.dyn_into() {
-                                    Ok(s) => s,
-                                    Err(_) => return,
-                                };
-                                let val = select.value();
+                                let Some(val) = crate::components::edit_util::event_value(&e) else { return };
                                 if val.is_empty() {
                                     return;
                                 }

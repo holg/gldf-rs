@@ -12,8 +12,6 @@ use crate::state::{use_gldf, GldfAction, LightEmitterKind};
 use gldf_rs::gldf::general_definitions::electrical::Equipment;
 use leptos::prelude::*;
 use std::sync::Arc;
-use wasm_bindgen::JsCast;
-use web_sys::HtmlSelectElement;
 
 #[component]
 pub fn EquipmentPage(editable: bool) -> impl IntoView {
@@ -76,9 +74,7 @@ fn EquipmentCard(equipment: Equipment, editable: bool) -> impl IntoView {
     let on_remove = move |_| {
         let id = id_for_remove.clone();
         let msg = format!("Remove equipment '{}'?", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveEquipment { id }));
         }
@@ -213,11 +209,9 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
     });
 
     let on_kind = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            if let Ok(sel) = target.dyn_into::<HtmlSelectElement>() {
-                s_kind.set(sel.value());
-                s_ls.set(String::new());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            s_kind.set(v);
+            s_ls.set(String::new());
         }
     };
     let on_ls = move |e: crate::components::edit_util::EditEvent| {

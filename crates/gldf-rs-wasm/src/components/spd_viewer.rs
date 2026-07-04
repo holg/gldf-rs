@@ -36,7 +36,6 @@ use eulumdat::atla::{
 use gldf_rs::gldf::general_definitions::photometries::Spectrum;
 use gldf_rs::gldf::GldfProduct;
 use leptos::prelude::*;
-use wasm_bindgen::JsCast;
 
 /// Mount an SVG string in the DOM via `Element::set_inner_html`.
 ///
@@ -55,17 +54,9 @@ pub fn SvgEmbed(
     #[prop(into)] svg: Signal<String>,
     #[prop(optional, into)] style: String,
 ) -> impl IntoView {
-    let node_ref = NodeRef::<leptos::html::Div>::new();
-
-    Effect::new(move |_| {
-        // Track the signal so any update re-runs this effect.
-        let s = svg.get();
-        if let Some(div) = node_ref.get() {
-            div.set_inner_html(&s);
-        }
-    });
-
-    view! { <div node_ref=node_ref style=style></div> }
+    // `inner_html` routes through the renderer on both targets (web DOM
+    // innerHTML / blitz HTML-fragment parsing), so no NodeRef needed.
+    view! { <div inner_html=move || svg.get() style=style></div> }
 }
 
 /// Top-level Spectra page. Reads the editor state and renders one
@@ -297,12 +288,7 @@ fn render_panel_body(
 
     // Slider input — parses the value and writes it into the signal.
     let on_height_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: web_sys::HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        if let Ok(v) = input.value().parse::<f64>() {
+        if let Some(v) = crate::components::edit_util::event_f64(&e) {
             height.set(v);
         }
     };

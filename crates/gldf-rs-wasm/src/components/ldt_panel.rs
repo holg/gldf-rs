@@ -19,6 +19,7 @@ use eulumdat::{
     BugDiagram, PhotometricSummary,
 };
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
 /// Available diagram view types — matches the Yew `ViewType` enum exactly.
@@ -120,6 +121,7 @@ pub fn LdtPanel(
     // Close on Esc — wire a doc-level keydown listener while the modal is up.
     // Without it the user has no escape from a fullscreen overlay; the click-
     // outside fallback works but Esc is the expected affordance.
+    #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
         if !is_zoomed.get() {
             return;
@@ -177,7 +179,7 @@ pub fn LdtPanel(
                         style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px;"
                     >
                         <div
-                            on:click=move |e| e.stop_propagation()
+                            on:click=move |e: crate::components::edit_util::ClickEvt| crate::components::edit_util::stop_click_propagation(&e)
                             style="background: #1a1a2e; border-radius: 8px; max-width: 95vw; max-height: 95vh; display: flex; flex-direction: column; padding: 16px;"
                         >
                             <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px;">

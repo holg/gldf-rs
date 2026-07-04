@@ -205,24 +205,18 @@ fn VariantSummaryCard(
     let state = use_gldf();
 
     let on_edit = move |_| editing.set(Some(idx));
-    let on_duplicate = move |e: web_sys::MouseEvent| {
-        e.stop_propagation();
+    let on_duplicate = move |e: crate::components::edit_util::ClickEvt| {
+        crate::components::edit_util::stop_click_propagation(&e);
         state.update(|s| s.apply(GldfAction::DuplicateVariant { src_idx: idx }));
     };
     let on_delete = {
         let id_for_remove = variant.id.clone();
-        move |e: web_sys::MouseEvent| {
-            e.stop_propagation();
-            let win = web_sys::window();
-            let confirmed = win
-                .and_then(|w| {
-                    w.confirm_with_message(&format!(
-                        "Delete variant '{}'? This cannot be undone.",
-                        id_for_remove
-                    ))
-                    .ok()
-                })
-                .unwrap_or(true);
+        move |e: crate::components::edit_util::ClickEvt| {
+            crate::components::edit_util::stop_click_propagation(&e);
+            let confirmed = crate::components::edit_util::confirm(&format!(
+                "Delete variant '{}'? This cannot be undone.",
+                id_for_remove
+            ));
             if confirmed {
                 state.update(|s| {
                     s.apply(GldfAction::RemoveVariant {
@@ -232,12 +226,12 @@ fn VariantSummaryCard(
             }
         }
     };
-    let on_move_up = move |e: web_sys::MouseEvent| {
-        e.stop_propagation();
+    let on_move_up = move |e: crate::components::edit_util::ClickEvt| {
+        crate::components::edit_util::stop_click_propagation(&e);
         state.update(|s| s.apply(GldfAction::MoveVariant { index: idx, delta: -1 }));
     };
-    let on_move_down = move |e: web_sys::MouseEvent| {
-        e.stop_propagation();
+    let on_move_down = move |e: crate::components::edit_util::ClickEvt| {
+        crate::components::edit_util::stop_click_propagation(&e);
         state.update(|s| s.apply(GldfAction::MoveVariant { index: idx, delta: 1 }));
     };
 

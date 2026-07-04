@@ -145,9 +145,7 @@ fn SensorRow(
             "gldf.sensors.remove_confirm",
             &state.with(|s| s.ui_language.clone()),
         );
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveSensor { index: idx }));
         }

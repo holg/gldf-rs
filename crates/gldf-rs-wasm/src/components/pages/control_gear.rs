@@ -75,9 +75,7 @@ fn ControlGearCard(gear: ControlGear, editable: bool) -> impl IntoView {
     let on_remove = move |_| {
         let id = id_for_remove.clone();
         let msg = format!("Remove control gear '{}'? Equipment and per-emitter references to it will dangle.", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveControlGear { id }));
         }
@@ -249,11 +247,8 @@ fn CheckboxField(
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(target) = e.target() {
-            use wasm_bindgen::JsCast;
-            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
-                value.set(input.checked());
-            }
+        if let Some(c) = crate::components::edit_util::event_checked(&e) {
+            value.set(c);
         }
     };
     view! {

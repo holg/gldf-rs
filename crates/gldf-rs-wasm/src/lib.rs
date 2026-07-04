@@ -7,7 +7,6 @@
 pub mod components;
 #[cfg(target_arch = "wasm32")]
 pub mod draw_l3d;
-#[cfg(target_arch = "wasm32")]
 pub mod exports;
 pub mod i18n;
 pub mod state;

@@ -18,10 +18,13 @@ use gldf_rs_editor::{
     apply_wizard, wizard_text as txt, WizardDraft, WizardLightSourceKind, WizardStep,
 };
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlInputElement, HtmlSelectElement};
+#[cfg(target_arch = "wasm32")]
+use web_sys::HtmlInputElement;
 
 /// Wizard-wide draft state. Each step writes into its own slice; the
 /// final `apply_all` reads everything in order.
@@ -292,31 +295,23 @@ fn StepChip(idx: usize, label: String, current: RwSignal<usize>) -> impl IntoVie
 #[component]
 fn HeaderStep(w: WizardState) -> impl IntoView {
     let on_author = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.header_author.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.header_author.set(v);
         }
     };
     let on_manuf = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.header_manufacturer.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.header_manufacturer.set(v);
         }
     };
     let on_created_with = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.header_created_with.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.header_created_with.set(v);
         }
     };
     let on_lang = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.header_default_language.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.header_default_language.set(v);
         }
     };
 
@@ -359,6 +354,7 @@ fn PhotometryStep(w: WizardState) -> impl IntoView {
     // Both the file picker and a direct drop on the dashed box land here.
     // gloo::file::File wraps `web_sys::File` so the async read works the
     // same in both paths.
+    #[cfg(target_arch = "wasm32")]
     let stash = move |file: web_sys::File| {
         let filename = file.name();
         let gloo_file = gloo::file::File::from(file);
@@ -374,29 +370,44 @@ fn PhotometryStep(w: WizardState) -> impl IntoView {
     };
 
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let input: HtmlInputElement = match t.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
-        input.set_value("");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(t) = e.target() else { return };
+            let input: HtmlInputElement = match t.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
-    let on_drop = move |e: web_sys::DragEvent| {
-        // Stop the drop from reaching the modal backdrop / Welcome view.
-        e.prevent_default();
-        e.stop_propagation();
-        let Some(dt) = e.data_transfer() else { return };
-        let Some(files) = dt.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
+    let on_drop = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Stop the drop from reaching the modal backdrop / Welcome view.
+            e.prevent_default();
+            e.stop_propagation();
+            let Some(dt) = e.data_transfer() else { return };
+            let Some(files) = dt.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_dragover = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
+    let on_dragover = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {
@@ -439,6 +450,7 @@ fn PhotometryStep(w: WizardState) -> impl IntoView {
 // <Sensor> entry; no follow-up retype-after-drop dispatch needed.
 #[component]
 fn SensorStep(w: WizardState) -> impl IntoView {
+    #[cfg(target_arch = "wasm32")]
     let stash = move |file: web_sys::File| {
         let filename = file.name();
         let gloo_file = gloo::file::File::from(file);
@@ -453,27 +465,42 @@ fn SensorStep(w: WizardState) -> impl IntoView {
         });
     };
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let input: HtmlInputElement = match t.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
-        input.set_value("");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(t) = e.target() else { return };
+            let input: HtmlInputElement = match t.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_drop = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
-        let Some(dt) = e.data_transfer() else { return };
-        let Some(files) = dt.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
+    let on_drop = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+            let Some(dt) = e.data_transfer() else { return };
+            let Some(files) = dt.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_dragover = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
+    let on_dragover = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {
@@ -519,6 +546,7 @@ fn SensorStep(w: WizardState) -> impl IntoView {
 // onto when retagging to `ph_emergency`.
 #[component]
 fn EmergencyStep(w: WizardState) -> impl IntoView {
+    #[cfg(target_arch = "wasm32")]
     let stash = move |file: web_sys::File| {
         let filename = file.name();
         let gloo_file = gloo::file::File::from(file);
@@ -533,27 +561,42 @@ fn EmergencyStep(w: WizardState) -> impl IntoView {
         });
     };
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let input: HtmlInputElement = match t.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
-        input.set_value("");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(t) = e.target() else { return };
+            let input: HtmlInputElement = match t.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_drop = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
-        let Some(dt) = e.data_transfer() else { return };
-        let Some(files) = dt.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
+    let on_drop = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+            let Some(dt) = e.data_transfer() else { return };
+            let Some(files) = dt.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_dragover = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
+    let on_dragover = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {
@@ -593,12 +636,8 @@ fn EmergencyStep(w: WizardState) -> impl IntoView {
 #[component]
 fn LightSourceStep(w: WizardState) -> impl IntoView {
     let on_kind = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let sel: HtmlSelectElement = match t.dyn_into() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let kind = match sel.value().as_str() {
+        let Some(sel_value) = crate::components::edit_util::event_value(&e) else { return };
+        let kind = match sel_value.as_str() {
             "Fixed" => WizardLightSourceKind::Fixed,
             "Changeable" => WizardLightSourceKind::Changeable,
             "MultiChannel" => WizardLightSourceKind::MultiChannel,
@@ -607,24 +646,18 @@ fn LightSourceStep(w: WizardState) -> impl IntoView {
         w.ls_kind.set(kind);
     };
     let on_name = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.ls_name.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.ls_name.set(v);
         }
     };
     let on_manuf = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.ls_manufacturer.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.ls_manufacturer.set(v);
         }
     };
     let on_power = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.ls_rated_power.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.ls_rated_power.set(v);
         }
     };
 
@@ -726,6 +759,7 @@ fn EmitterStep(w: WizardState) -> impl IntoView {
 
 #[component]
 fn GeometryStep(w: WizardState) -> impl IntoView {
+    #[cfg(target_arch = "wasm32")]
     let stash = move |file: web_sys::File| {
         let filename = file.name();
         let gloo_file = gloo::file::File::from(file);
@@ -741,28 +775,43 @@ fn GeometryStep(w: WizardState) -> impl IntoView {
     };
 
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(t) = e.target() else { return };
-        let input: HtmlInputElement = match t.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
-        input.set_value("");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(t) = e.target() else { return };
+            let input: HtmlInputElement = match t.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
+            };
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
-    let on_drop = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
-        let Some(dt) = e.data_transfer() else { return };
-        let Some(files) = dt.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        stash(file);
+    let on_drop = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+            let Some(dt) = e.data_transfer() else { return };
+            let Some(files) = dt.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            stash(file);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
-    let on_dragover = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
+    let on_dragover = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {
@@ -818,38 +867,28 @@ fn GeometryStep(w: WizardState) -> impl IntoView {
 #[component]
 fn MountingStep(w: WizardState) -> impl IntoView {
     let on_type = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(s) = t.dyn_into::<web_sys::HtmlSelectElement>() {
-                w.mounting_type.set(s.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.mounting_type.set(v);
         }
     };
     let on_depth = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.mounting_recessed_depth_mm.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.mounting_recessed_depth_mm.set(v);
         }
     };
     let on_pendant = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.mounting_pendant_length_mm.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.mounting_pendant_length_mm.set(v);
         }
     };
     let on_wall_h = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.mounting_height_mm.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.mounting_height_mm.set(v);
         }
     };
     let on_pole_h = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.mounting_pole_height_mm.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.mounting_pole_height_mm.set(v);
         }
     };
 
@@ -959,31 +998,23 @@ fn DriverStep(w: WizardState) -> impl IntoView {
     // box, fill the three fields, and the lib's apply_wizard mints the
     // ControlGear + Equipment + ControlGearReference on Finish.
     let on_enabled = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.driver_enabled.set(i.checked());
-            }
+        if let Some(c) = crate::components::edit_util::event_checked(&e) {
+            w.driver_enabled.set(c);
         }
     };
     let on_name = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.driver_name.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.driver_name.set(v);
         }
     };
     let on_dimmable = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.driver_dimmable.set(i.checked());
-            }
+        if let Some(c) = crate::components::edit_util::event_checked(&e) {
+            w.driver_dimmable.set(c);
         }
     };
     let on_standby = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.driver_standby_power.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.driver_standby_power.set(v);
         }
     };
 
@@ -1047,10 +1078,8 @@ fn DriverStep(w: WizardState) -> impl IntoView {
 #[component]
 fn VariantStep(w: WizardState) -> impl IntoView {
     let on_name = move |e: crate::components::edit_util::EditEvent| {
-        if let Some(t) = e.target() {
-            if let Ok(i) = t.dyn_into::<HtmlInputElement>() {
-                w.variant_name.set(i.value());
-            }
+        if let Some(v) = crate::components::edit_util::event_value(&e) {
+            w.variant_name.set(v);
         }
     };
 

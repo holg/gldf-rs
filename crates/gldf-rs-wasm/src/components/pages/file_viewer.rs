@@ -14,7 +14,9 @@
 //! `<Photometry>` block references — so the file count and the
 //! Photometry-page count can be reconciled in one place.
 
-use crate::components::{L3dPanel, LdtPanel, SpdPanel, Tm33Panel};
+#[cfg(target_arch = "wasm32")]
+use crate::components::L3dPanel;
+use crate::components::{LdtPanel, SpdPanel, Tm33Panel};
 use crate::exports::download_embedded_file;
 use crate::i18n::ui::t as ui_t;
 use crate::state::use_gldf;
@@ -216,7 +218,14 @@ fn FilePreview(selected: RwSignal<Option<String>>) -> impl IntoView {
 fn render_file_content(file_name: &str, content_type: &str, content: &[u8]) -> impl IntoView {
     let lower = file_name.to_lowercase();
     if lower.ends_with(".l3d") {
-        view! { <L3dPanel bytes=content.to_vec() /> }.into_any()
+        #[cfg(target_arch = "wasm32")]
+        {
+            view! { <L3dPanel bytes=content.to_vec() /> }.into_any()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            view! { <p style="color: var(--text-secondary); font-size: 12px;">{ "3D (.l3d) preview is not available in the native shell yet." }</p> }.into_any()
+        }
     } else if crate::components::is_tm33(file_name, content_type, content) {
         view! { <Tm33Panel bytes=content.to_vec() /> }.into_any()
     } else if lower.ends_with(".ldt") || lower.ends_with(".ies") {

@@ -548,9 +548,7 @@ fn EmitterEditForm(
     let on_remove_emitter = move |_| {
         let id = emitter_id_for_remove.clone();
         let msg = format!("Remove emitter '{}'? Variants that mount it will dangle.", id);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             state.update(|s| s.apply(GldfAction::RemoveEmitter { id }));
             on_done_for_remove();
@@ -831,10 +829,7 @@ fn ControlGearPicker(
 
     let emitter_id_for_pick = emitter_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        use wasm_bindgen::JsCast;
-        let Some(target) = e.target() else { return };
-        let Ok(sel) = target.dyn_into::<web_sys::HtmlSelectElement>() else { return };
-        let val = sel.value();
+        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
         let control_gear_id = if val.is_empty() { None } else { Some(val) };
         let eid = emitter_id_for_pick.clone();
         state.update(|s| {

@@ -21,8 +21,11 @@
 use crate::state::use_gldf;
 use gldf_rs::ifc::{import_ifc, GldfToIfc, ImportedLuminaire};
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use web_sys::HtmlInputElement;
 
 #[derive(Clone)]
@@ -72,32 +75,37 @@ pub fn IfcViewerPage() -> impl IntoView {
     });
 
     let on_file = move |e: crate::components::edit_util::EditEvent| {
-        let Some(target) = e.target() else { return };
-        let input: HtmlInputElement = match target.dyn_into() {
-            Ok(i) => i,
-            Err(_) => return,
-        };
-        let Some(files) = input.files() else { return };
-        let Some(file) = files.get(0) else { return };
-        let filename = file.name();
-        let gloo_file = gloo::file::File::from(file);
-        spawn_local(async move {
-            let bytes = match gloo::file::futures::read_as_bytes(&gloo_file).await {
-                Ok(b) => b,
-                Err(err) => {
-                    log::error!("read IFC: {err}");
-                    return;
-                }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(target) = e.target() else { return };
+            let input: HtmlInputElement = match target.dyn_into() {
+                Ok(i) => i,
+                Err(_) => return,
             };
-            let text = String::from_utf8_lossy(&bytes).into_owned();
-            let parsed = import_ifc(&text).map_err(|e| e.to_string());
-            external.set(Some(IfcSource {
-                source: format!("Dropped: {filename}"),
-                step_text: text,
-                parsed,
-            }));
-        });
-        input.set_value("");
+            let Some(files) = input.files() else { return };
+            let Some(file) = files.get(0) else { return };
+            let filename = file.name();
+            let gloo_file = gloo::file::File::from(file);
+            spawn_local(async move {
+                let bytes = match gloo::file::futures::read_as_bytes(&gloo_file).await {
+                    Ok(b) => b,
+                    Err(err) => {
+                        log::error!("read IFC: {err}");
+                        return;
+                    }
+                };
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                let parsed = import_ifc(&text).map_err(|e| e.to_string());
+                external.set(Some(IfcSource {
+                    source: format!("Dropped: {filename}"),
+                    step_text: text,
+                    parsed,
+                }));
+            });
+            input.set_value("");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     let on_revert = move |_| external.set(None);
@@ -361,6 +369,21 @@ fn EmbeddedFilesNode(files: Vec<gldf_rs::ifc::EmbeddedFile>) -> impl IntoView {
 /// Trigger an `<a download>` for the full IFC string. Mirrors the
 /// existing helper in `exports.rs` but stays inline here since it's
 /// only used by this page.
+#[cfg(not(target_arch = "wasm32"))]
+fn download_ifc_text(text: &str) {
+    let dir = std::env::temp_dir().join("gldf-exports");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::error!("export: create {}: {}", dir.display(), e);
+        return;
+    }
+    let path = dir.join("exported.ifc");
+    match std::fs::write(&path, text.as_bytes()) {
+        Ok(()) => log::info!("exported {} ({} bytes)", path.display(), text.len()),
+        Err(e) => log::error!("export {}: {}", path.display(), e),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 fn download_ifc_text(text: &str) {
     let uint8 = js_sys::Uint8Array::new(
         &unsafe { js_sys::Uint8Array::view(text.as_bytes()) }.into(),

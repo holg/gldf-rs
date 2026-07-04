@@ -11,7 +11,9 @@
 
 use leptos::prelude::*;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
 /// Centered modal. `open` toggles visibility; while open, Esc and
@@ -33,6 +35,8 @@ pub fn EditModal(
     // once at mount keeps the listener count constant at 1; the
     // forget() leak is bounded to that single instance and torn down
     // with the page.
+    #[cfg(target_arch = "wasm32")]
+    {
     let on_close_for_esc = on_close.clone();
     if let Some(window) = web_sys::window() {
         let cb = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
@@ -44,14 +48,15 @@ pub fn EditModal(
             .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
         cb.forget();
     }
+    }
 
     let on_backdrop = {
         let on_close = on_close.clone();
         move |_| on_close()
     };
-    let on_panel_click = move |e: web_sys::MouseEvent| {
+    let on_panel_click = move |e: crate::components::edit_util::ClickEvt| {
         // Stop the click from reaching the backdrop.
-        e.stop_propagation();
+        crate::components::edit_util::stop_click_propagation(&e);
     };
 
     // Swallow drag-and-drop on the backdrop. Without this, a file dropped
@@ -59,9 +64,14 @@ pub fn EditModal(
     // screen's `on:drop`, which then loads the file as a brand-new GLDF
     // and abandons whatever the user was doing. preventDefault stops the
     // browser's "navigate to file://…" fallback when nothing handles it.
-    let on_dnd_swallow = move |e: web_sys::DragEvent| {
-        e.prevent_default();
-        e.stop_propagation();
+    let on_dnd_swallow = move |e: crate::components::edit_util::DragEvt| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            e.prevent_default();
+            e.stop_propagation();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = e;
     };
 
     view! {

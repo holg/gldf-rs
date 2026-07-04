@@ -11,7 +11,6 @@ use crate::state::use_gldf;
 use gldf_rs::gldf::{Locale, LocaleFoo};
 use leptos::prelude::*;
 use std::sync::Arc;
-use wasm_bindgen::JsCast;
 
 /// Multi-locale editor. The `on_change` callback receives the full updated
 /// `LocaleFoo` whenever the user types into any field, adds a row, or
@@ -151,9 +150,7 @@ fn ExpandedRows(
             let on_change_remove = on_change.clone();
 
             let on_lang = move |e: crate::components::edit_util::EditEvent| {
-                let Some(target) = e.target() else { return };
-                let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else { return };
-                let new_lang = input.value();
+                let Some(new_lang) = read_input_value(&e) else { return };
                 let mut v = current.get();
                 if let Some(l) = v.locale.get_mut(idx) {
                     l.language = new_lang;
@@ -229,7 +226,7 @@ fn ExpandedRows(
 }
 
 /// Render either `<input>` (single line) or `<textarea>` (multiline).
-/// Takes any `FnMut(web_sys::Event)` so callers can hand it their own
+/// Takes any `FnMut(EditEvent)` so callers can hand it their own
 /// closure without sharing the captured signals across two siblings.
 fn render_value_input<F>(
     current: String,
@@ -238,7 +235,7 @@ fn render_value_input<F>(
     lang: impl AsRef<str>,
 ) -> impl IntoView
 where
-    F: FnMut(web_sys::Event) + 'static,
+    F: FnMut(crate::components::edit_util::EditEvent) + 'static,
 {
     let placeholder = if lang.as_ref().is_empty() {
         "Value".to_string()
@@ -271,13 +268,6 @@ where
 }
 
 /// Read the string from either an `<input>` or `<textarea>` event target.
-fn read_input_value(e: &web_sys::Event) -> Option<String> {
-    let target = e.target()?;
-    if let Ok(input) = target.clone().dyn_into::<web_sys::HtmlInputElement>() {
-        return Some(input.value());
-    }
-    if let Ok(textarea) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-        return Some(textarea.value());
-    }
-    None
+fn read_input_value(e: &crate::components::edit_util::EditEvent) -> Option<String> {
+    crate::components::edit_util::event_value(e)
 }

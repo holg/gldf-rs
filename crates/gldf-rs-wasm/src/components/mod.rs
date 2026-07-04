@@ -7,6 +7,7 @@ mod edit_modal;
 pub mod edit_util;
 mod emitter_type_form;
 mod id_rename_chip;
+#[cfg(target_arch = "wasm32")]
 mod l3d_panel;
 mod light_source_export;
 pub mod photometry_decode;
@@ -26,6 +27,7 @@ pub use edit_modal::EditModal;
 pub use emitter_type_form::{EmitterDraft, EmitterTypeForm};
 pub use id_rename_chip::IdRenameChip;
 pub use wizard::NewGldfWizard;
+#[cfg(target_arch = "wasm32")]
 pub use l3d_panel::L3dPanel;
 pub use ldt_panel::LdtPanel;
 pub use light_source_export::LightSourceExportMenu;

@@ -259,9 +259,7 @@ fn PhotometryRow(
             &state.with(|s| s.ui_language.clone()),
         );
         let msg = template.replace("{id}", &id_for_remove);
-        if web_sys::window()
-            .and_then(|w| w.confirm_with_message(&msg).ok())
-            .unwrap_or(false)
+        if crate::components::edit_util::confirm(&msg)
         {
             let id_now = id_for_remove.clone();
             state.update(|s| s.apply(GldfAction::RemovePhotometry { id: id_now }));
@@ -519,7 +517,7 @@ fn DualField(
     input_type: &'static str,
     step: &'static str,
     editable: bool,
-    on_change: Box<dyn Fn(web_sys::Event) + Send + Sync>,
+    on_change: Box<dyn Fn(crate::components::edit_util::EditEvent) + Send + Sync>,
 ) -> impl IntoView {
     let has_gldf = gldf.is_some();
     let has_calc = calc.is_some();
