@@ -12,11 +12,32 @@ pub mod orientation;
 pub mod scene;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scene_bundle;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod command_bridge;
 
 pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
 
 use bevy::prelude::*;
 use eulumdat_bevy::viewer::{EulumdatViewerPlugin, FirstPersonCamera, SceneType};
+
+/// Milliseconds clock shared by the animation cells' `started_at_ms` and
+/// the apply systems' elapsed-time math. WASM uses wall-clock
+/// `js_sys::Date::now()`; natively a monotonic since-start clock (both are
+/// only ever used as *deltas*, so the epoch difference is irrelevant).
+#[inline]
+fn anim_now_ms() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::sync::OnceLock;
+        use std::time::Instant;
+        static START: OnceLock<Instant> = OnceLock::new();
+        START.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+    }
+}
 pub use eulumdat_bevy::SceneSettings;
 
 /// Resource to store the current GLDF scene data
@@ -576,7 +597,6 @@ fn frame_camera_on_l3d(
 // without holding a Bevy World handle. A `OnceLock<Mutex<…>>` static is
 // the smallest thing that works.
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug)]
 struct CamRequest {
     pos: Vec3,
@@ -584,7 +604,6 @@ struct CamRequest {
     pitch: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug, Default)]
 struct CamSnapshot {
     pos: Vec3,
@@ -593,20 +612,16 @@ struct CamSnapshot {
     forward: Vec3,
 }
 
-#[cfg(target_arch = "wasm32")]
 static CAM_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<CamRequest>>> =
     std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 static CAM_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<CamSnapshot>> =
     std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn cam_request_cell() -> &'static std::sync::Mutex<Option<CamRequest>> {
     CAM_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-#[cfg(target_arch = "wasm32")]
 fn cam_snapshot_cell() -> &'static std::sync::Mutex<CamSnapshot> {
     CAM_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(CamSnapshot::default()))
 }
@@ -660,7 +675,6 @@ pub fn get_camera_from_js() -> wasm_bindgen::JsValue {
 /// Bevy system: consume a pending `CamRequest` (if any) and apply it
 /// to the FirstPersonCamera, then write the current camera state back
 /// to `CAM_SNAPSHOT` so `get_camera_from_js` can read it.
-#[cfg(target_arch = "wasm32")]
 fn js_camera_bridge_apply(
     mut camera_q: Query<(&mut Transform, &mut FirstPersonCamera)>,
 ) {
@@ -706,12 +720,10 @@ fn js_camera_bridge_apply(
 // sets `transform.rotation = base * tilt`. Re-applying overwrites
 // the previous tilt cleanly — no compounding across script runs.
 
-#[cfg(target_arch = "wasm32")]
 static JOINT_TILTS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>>,
 > = std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn joint_tilts_cell()
 -> &'static std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>> {
     JOINT_TILTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
@@ -763,7 +775,6 @@ pub fn reset_tilts_from_js() {
 // Surface targets ride as a string ("walls" / "floor" / "ceiling")
 // because we don't want gldf-bevy to depend on gldf-rs-lisp's enum.
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug)]
 struct RoomSizeRequest {
     width: f32,
@@ -771,7 +782,6 @@ struct RoomSizeRequest {
     height: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug)]
 struct SurfaceColorRequest {
     surface: String,
@@ -780,7 +790,6 @@ struct SurfaceColorRequest {
     b: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug)]
 struct SurfaceEmissiveRequest {
     surface: String,
@@ -789,49 +798,38 @@ struct SurfaceEmissiveRequest {
     b: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug)]
 struct SurfaceReflectanceRequest {
     surface: String,
     value: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 static AMBIENT_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<f32>>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static ROOM_SIZE_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<RoomSizeRequest>>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static SURFACE_COLOR_REQUEST: std::sync::OnceLock<
     std::sync::Mutex<Vec<SurfaceColorRequest>>,
 > = std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static SURFACE_REFLECTANCE_REQUEST: std::sync::OnceLock<
     std::sync::Mutex<Vec<SurfaceReflectanceRequest>>,
 > = std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static SURFACE_EMISSIVE_REQUEST: std::sync::OnceLock<
     std::sync::Mutex<Vec<SurfaceEmissiveRequest>>,
 > = std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn ambient_request_cell() -> &'static std::sync::Mutex<Option<f32>> {
     AMBIENT_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
 }
-#[cfg(target_arch = "wasm32")]
 fn room_size_request_cell() -> &'static std::sync::Mutex<Option<RoomSizeRequest>> {
     ROOM_SIZE_REQUEST.get_or_init(|| std::sync::Mutex::new(None))
 }
-#[cfg(target_arch = "wasm32")]
 fn surface_color_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceColorRequest>> {
     SURFACE_COLOR_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
-#[cfg(target_arch = "wasm32")]
 fn surface_reflectance_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceReflectanceRequest>> {
     SURFACE_REFLECTANCE_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
-#[cfg(target_arch = "wasm32")]
 fn surface_emissive_request_cell() -> &'static std::sync::Mutex<Vec<SurfaceEmissiveRequest>> {
     SURFACE_EMISSIVE_REQUEST.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
@@ -904,7 +902,6 @@ pub fn set_surface_emissive_from_js(surface: String, r: f32, g: f32, b: f32) {
 
 /// Bevy system: drain `ambient_request_cell` and write into
 /// `GlobalAmbientLight`. Runs every frame; no-op when the cell is None.
-#[cfg(target_arch = "wasm32")]
 fn apply_ambient_request(mut ambient: ResMut<bevy::light::GlobalAmbientLight>) {
     let Some(brightness) = ambient_request_cell()
         .lock()
@@ -929,7 +926,6 @@ fn apply_ambient_request(mut ambient: ResMut<bevy::light::GlobalAmbientLight>) {
 /// the demo we set Transform.scale so the visible extent scales
 /// proportionally to the requested vs the original dimensions. The
 /// original room defaults are read from `SceneSettings`.
-#[cfg(target_arch = "wasm32")]
 fn apply_room_size_request(
     settings: Res<SceneSettings>,
     mut floor_q: Query<
@@ -1024,7 +1020,6 @@ fn apply_room_size_request(
 /// `StandardMaterial` of every entity bearing the matching surface
 /// marker. Mutates the shared material handle so all four walls
 /// recolour in unison.
-#[cfg(target_arch = "wasm32")]
 fn apply_surface_color_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
@@ -1079,7 +1074,6 @@ fn apply_surface_color_requests(
 /// `perceptual_roughness` is left untouched. If you also want a glossy
 /// floor, that's a separate concern — would need a `SET-*-GLOSS`
 /// primitive (not implemented yet).
-#[cfg(target_arch = "wasm32")]
 fn apply_surface_reflectance_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
@@ -1129,7 +1123,6 @@ fn apply_surface_reflectance_requests(
 ///
 /// Bevy expects emissive as a `LinearRgba`; we treat the script's r/g/b
 /// values as linear sRGB to match the SET-*-COLOR conventions.
-#[cfg(target_arch = "wasm32")]
 fn apply_surface_emissive_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
@@ -1177,7 +1170,6 @@ fn apply_surface_emissive_requests(
 // `(GET-{WALLS,FLOOR,CEILING}-{COLOR,REFLECTANCE})` primitives call
 // those bridges via `window.gldf_bevy_get_*` and convert into Expr.
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug, Default)]
 struct RoomSizeSnapshot {
     width: f32,
@@ -1185,7 +1177,6 @@ struct RoomSizeSnapshot {
     height: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug, Default)]
 struct SurfaceMaterialSnapshot {
     r: f32,
@@ -1197,39 +1188,29 @@ struct SurfaceMaterialSnapshot {
     emissive_b: f32,
 }
 
-#[cfg(target_arch = "wasm32")]
 static AMBIENT_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<f32>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static ROOM_SIZE_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<RoomSizeSnapshot>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static WALLS_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static FLOOR_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
     std::sync::OnceLock::new();
-#[cfg(target_arch = "wasm32")]
 static CEILING_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
     std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn ambient_snapshot_cell() -> &'static std::sync::Mutex<f32> {
     AMBIENT_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(0.0))
 }
-#[cfg(target_arch = "wasm32")]
 fn room_size_snapshot_cell() -> &'static std::sync::Mutex<RoomSizeSnapshot> {
     ROOM_SIZE_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(RoomSizeSnapshot::default()))
 }
-#[cfg(target_arch = "wasm32")]
 fn walls_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
     WALLS_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
 }
-#[cfg(target_arch = "wasm32")]
 fn floor_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
     FLOOR_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
 }
-#[cfg(target_arch = "wasm32")]
 fn ceiling_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot> {
     CEILING_SNAPSHOT.get_or_init(|| std::sync::Mutex::new(SurfaceMaterialSnapshot::default()))
 }
@@ -1238,7 +1219,6 @@ fn ceiling_snapshot_cell() -> &'static std::sync::Mutex<SurfaceMaterialSnapshot>
 /// cells that the JS getters read. Cheap — three queries + four lock
 /// writes per frame, all backed by RwLocks we already poke for the
 /// setters.
-#[cfg(target_arch = "wasm32")]
 fn snapshot_room_state(
     ambient: Res<bevy::light::GlobalAmbientLight>,
     floor_q: Query<
@@ -1391,7 +1371,6 @@ pub fn get_surface_from_js(surface: String) -> wasm_bindgen::JsValue {
 /// `transform.rotation = base * Quat::from_euler(XYZ, …)`.
 ///
 /// Tilts persist across frames — no clearing.
-#[cfg(target_arch = "wasm32")]
 fn js_joint_bridge_apply(
     mut q: Query<(
         &mut Transform,
@@ -1458,7 +1437,6 @@ fn js_joint_bridge_apply(
 // plumb, and the timing is in lock-step with `gldf_bevy_*_animate`'s
 // own JS-side clock.
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug)]
 struct CamAnim {
     from_pos: Vec3,
@@ -1472,11 +1450,9 @@ struct CamAnim {
     duration_ms: f64,
 }
 
-#[cfg(target_arch = "wasm32")]
 static CAM_ANIM: std::sync::OnceLock<std::sync::Mutex<Option<CamAnim>>> =
     std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn cam_anim_cell() -> &'static std::sync::Mutex<Option<CamAnim>> {
     CAM_ANIM.get_or_init(|| std::sync::Mutex::new(None))
 }
@@ -1541,9 +1517,8 @@ pub fn camera_animate_from_js(
 /// result via `cam_request_cell` so the existing
 /// `js_camera_bridge_apply` system picks it up. Drops the record when
 /// `t >= 1.0`.
-#[cfg(target_arch = "wasm32")]
 fn js_camera_anim_apply() {
-    let now = js_sys::Date::now();
+    let now = anim_now_ms();
     let anim = match cam_anim_cell().lock() {
         Ok(g) => *g,
         Err(_) => return,
@@ -1567,7 +1542,6 @@ fn js_camera_anim_apply() {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy, Debug)]
 struct JointAnim {
     from_deg: [f32; 3],
@@ -1576,12 +1550,10 @@ struct JointAnim {
     duration_ms: f64,
 }
 
-#[cfg(target_arch = "wasm32")]
 static JOINT_ANIMS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, JointAnim>>,
 > = std::sync::OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
 fn joint_anims_cell()
 -> &'static std::sync::Mutex<std::collections::HashMap<String, JointAnim>> {
     JOINT_ANIMS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
@@ -1626,9 +1598,8 @@ pub fn luminaire_animate_from_js(
 /// degrees into the existing `JOINT_TILTS` map so the existing
 /// `js_joint_bridge_apply` system rotates the entities. Drops finished
 /// records.
-#[cfg(target_arch = "wasm32")]
 fn js_joint_anim_apply() {
-    let now = js_sys::Date::now();
+    let now = anim_now_ms();
     let snapshot: std::collections::HashMap<String, JointAnim> = joint_anims_cell()
         .lock()
         .ok()
@@ -1945,6 +1916,133 @@ pub fn run_on_canvas(_canvas_selector: &str) {
 }
 
 /// Run the 3D viewer as a native window (desktop only)
+// ---------- Native command-bridge request helpers ----------
+//
+// Phase 2: the editor forwards Lisp `SceneCommand`s to this viewer over
+// stdin (NDJSON); `command_bridge::apply` calls these to write into the
+// SAME request cells the WASM `*_from_js` setters use, so the (now shared)
+// apply/animation systems drive the scene identically on both targets.
+
+/// Snap the camera so its eye is at `eye` looking toward `target`.
+/// Derivation matches `camera_animate_from_js` / `CAMERA-SET`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_camera_look_at(eye: [f32; 3], target: [f32; 3]) {
+    let eye = Vec3::from(eye);
+    let dir = Vec3::from(target) - eye;
+    let (yaw, pitch) = if dir.length_squared() > 1e-6 {
+        let n = dir.normalize();
+        ((-n.x).atan2(-n.z), n.y.asin())
+    } else {
+        (0.0, 0.0)
+    };
+    if let Ok(mut slot) = cam_request_cell().lock() {
+        *slot = Some(CamRequest { pos: eye, yaw, pitch });
+    }
+}
+
+/// Animate the camera from its current pose to `eye` looking at `target`
+/// over `duration_ms`. `now` is a monotonic ms clock (native `now_ms()`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_camera_animate(
+    eye: [f32; 3],
+    target: [f32; 3],
+    duration_ms: f32,
+    now: f64,
+) {
+    let to_pos = Vec3::from(eye);
+    let dir = Vec3::from(target) - to_pos;
+    let (to_yaw, to_pitch) = if dir.length_squared() > 1e-6 {
+        let n = dir.normalize();
+        ((-n.x).atan2(-n.z), n.y.asin())
+    } else {
+        (0.0, 0.0)
+    };
+    let snap = cam_snapshot_cell().lock().ok().map(|s| *s).unwrap_or_default();
+    if let Ok(mut slot) = cam_anim_cell().lock() {
+        *slot = Some(CamAnim {
+            from_pos: snap.pos,
+            from_yaw: snap.yaw,
+            from_pitch: snap.pitch,
+            to_pos,
+            to_yaw,
+            to_pitch,
+            started_at_ms: now,
+            duration_ms: duration_ms as f64,
+        });
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_joint_tilt(joint: &str, euler_deg: [f32; 3]) {
+    if let Ok(mut map) = joint_tilts_cell().lock() {
+        map.insert(joint.to_string(), euler_deg);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_joint_animate(
+    joint: &str,
+    euler_deg: [f32; 3],
+    duration_ms: f32,
+    now: f64,
+) {
+    let from_deg = joint_tilts_cell()
+        .lock()
+        .ok()
+        .and_then(|m| m.get(joint).copied())
+        .unwrap_or([0.0, 0.0, 0.0]);
+    if let Ok(mut map) = joint_anims_cell().lock() {
+        map.insert(
+            joint.to_string(),
+            JointAnim {
+                from_deg,
+                to_deg: euler_deg,
+                started_at_ms: now,
+                duration_ms: duration_ms as f64,
+            },
+        );
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_reset_tilts() {
+    if let Ok(mut m) = joint_tilts_cell().lock() {
+        m.clear();
+    }
+    if let Ok(mut m) = joint_anims_cell().lock() {
+        m.clear();
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_ambient(brightness: f32) {
+    if let Ok(mut slot) = ambient_request_cell().lock() {
+        *slot = Some(brightness.max(0.0));
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_surface_color(surface: &str, r: f32, g: f32, b: f32) {
+    if let Ok(mut v) = surface_color_request_cell().lock() {
+        v.push(SurfaceColorRequest {
+            surface: surface.to_string(),
+            r,
+            g,
+            b,
+        });
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn request_surface_reflectance(surface: &str, value: f32) {
+    if let Ok(mut v) = surface_reflectance_request_cell().lock() {
+        v.push(SurfaceReflectanceRequest {
+            surface: surface.to_string(),
+            value: value.clamp(0.0, 1.0),
+        });
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native() {
     run_native_with_scene(GldfSceneData::default());
@@ -1972,6 +2070,9 @@ pub fn run_native_with_scene(scene_data: GldfSceneData) {
         .insert_resource(settings)
         .insert_resource(scene_data)
         .insert_resource(GldfTimestamp::default())
+        .insert_resource(command_bridge::CommandRx(std::sync::Mutex::new(
+            command_bridge::spawn_stdin_reader(),
+        )))
         .add_plugins((
             EulumdatViewerPlugin::default(),
             l3d_loader::L3dLoaderPlugin,
@@ -1983,6 +2084,22 @@ pub fn run_native_with_scene(scene_data: GldfSceneData) {
         .add_systems(Update, frame_camera_on_l3d)
         .add_systems(Update, print_camera_on_key)
         .add_systems(Update, append_camera_set_on_key)
+        // Room-state appliers (native + wasm now share these).
+        .add_systems(Update, apply_ambient_request)
+        .add_systems(Update, apply_room_size_request)
+        .add_systems(Update, apply_surface_color_requests)
+        .add_systems(Update, apply_surface_reflectance_requests)
+        .add_systems(Update, apply_surface_emissive_requests)
+        .add_systems(Update, snapshot_room_state)
+        // Animation drivers BEFORE the snapshot appliers (they write into
+        // the request cells the appliers read this same frame).
+        .add_systems(Update, js_camera_anim_apply)
+        .add_systems(Update, js_joint_anim_apply)
+        .add_systems(Update, js_camera_bridge_apply)
+        .add_systems(Update, js_joint_bridge_apply)
+        // Native command bridge: drain SceneCommands (from the editor's
+        // stdin, NDJSON) into the request cells above.
+        .add_systems(Update, command_bridge::drain_command_channel)
         .run();
 }
 

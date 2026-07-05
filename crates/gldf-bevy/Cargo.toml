@@ -24,6 +24,8 @@ webgl2 = []
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = { workspace = true }
+gldf-rs-lisp = { workspace = true }
+serde_json = { workspace = true }
 
 # WASM build: webgpu backend (matches eulumdat-bevy). Bevy from the local
 # `photometric_proposal` fork branch so the whole graph (gldf-bevy +
