@@ -10,6 +10,8 @@ pub mod ifc_loader;
 pub mod l3d_loader;
 pub mod orientation;
 pub mod scene;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod scene_bundle;
 
 pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
 
@@ -1945,9 +1947,17 @@ pub fn run_on_canvas(_canvas_selector: &str) {
 /// Run the 3D viewer as a native window (desktop only)
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native() {
+    run_native_with_scene(GldfSceneData::default());
+}
+
+/// Native entry point that starts with a pre-populated scene (loaded from
+/// a `.gldf` on disk by [`scene_bundle::load_scene_from_gldf`]). The
+/// argv-parsing `main` uses this so `gldf-bevy-viewer <file> --variant N`
+/// opens the luminaire immediately instead of an empty room.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run_native_with_scene(scene_data: GldfSceneData) {
     // Initialize with default settings
     let settings = SceneSettings::default();
-    let scene_data = GldfSceneData::default();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
