@@ -50,7 +50,7 @@ pub type SceneBridge = Box<dyn FnMut(SceneCommand) + Send>;
 /// All angles are degrees, all distances metres. Joint paths use the
 /// `"l3d://<partName>"` format — see the SLV hero-shot memory for the
 /// rationale (memory: `project-lisp-engine-camera-tilt-demo`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SceneCommand {
     /// Snap the camera to a pose this frame (no interpolation).
     CameraSet {
@@ -210,7 +210,7 @@ pub enum SceneCommand {
 
 /// Tag identifying which room surface a [`SceneCommand::SetSurfaceColor`]
 /// or [`SceneCommand::SetSurfaceReflectance`] targets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RoomSurface {
     /// All four walls together. Treated as one material in the
     /// existing room builder, so they always change in unison.

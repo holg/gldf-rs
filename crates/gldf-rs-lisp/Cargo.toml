@@ -26,6 +26,7 @@ acadlisp = { path = "../../../acadlisp" }
 gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
 
 anyhow = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
