@@ -67,6 +67,9 @@ pub fn drain_command_channel(rx: Option<Res<CommandRx>>) {
 }
 
 fn apply(cmd: SceneCommand) {
+    if std::env::var("GLDF_BEVY_TRACE").is_ok() {
+        eprintln!("[gldf-bevy] apply {cmd:?}");
+    }
     match cmd {
         SceneCommand::CameraSet { eye, target } => {
             super::request_camera_look_at(eye, target);
