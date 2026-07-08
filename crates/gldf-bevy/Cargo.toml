@@ -27,12 +27,12 @@ rfd = { workspace = true }
 gldf-rs-lisp = { workspace = true }
 serde_json = { workspace = true }
 
-# WASM build: webgpu backend (matches eulumdat-bevy). Bevy from the local
-# `photometric_proposal` fork branch so the whole graph (gldf-bevy +
-# eulumdat-bevy + bevy) shares one Bevy version.
+# WASM build: webgpu backend (matches eulumdat-bevy). Published Bevy
+# 0.19 — the photometric_proposal fork is retired (its shadow-field
+# PRs landed upstream); one Bevy version across the whole graph.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 base64 = { workspace = true }
-bevy = { git = "https://github.com/holg/bevy.git", branch = "photometric_proposal", default-features = false, features = [
+bevy = { version = "0.19", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_core_pipeline",
@@ -73,10 +73,9 @@ log.workspace = true
 # Serialization
 serde.workspace = true
 
-# Bevy 3D engine — same git source + branch as eulumdat-bevy uses, so
-# the dep graph has exactly one Bevy version. (Crates.io 0.18 +
-# eulumdat-bevy's 0.19-dev fork would dual-version every bevy_* crate.)
-bevy = { git = "https://github.com/holg/bevy.git", branch = "photometric_proposal", default-features = false, features = [
+# Bevy 3D engine — published 0.19, same as eulumdat-bevy, so the dep
+# graph has exactly one Bevy version. (Fork retired; see above.)
+bevy = { version = "0.19", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_core_pipeline",

@@ -15,9 +15,9 @@ members = [
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
     "crates/gldf-unreal",
-    # gldf-stadium-plugin is parked: it still pulls crates.io Bevy 0.18,
-    # which conflicts with gldf-bevy's `photometric_proposal` fork
-    # (Bevy 0.19-dev). Re-add once stadium is migrated to the same fork.
+    # gldf-stadium-plugin is parked: it still pins crates.io Bevy 0.18
+    # while the rest of the graph is on published 0.19 (fork retired).
+    # Re-add once its bevy dep is bumped to 0.19.
     # "crates/gldf-stadium-plugin",
 ]
 
@@ -100,7 +100,7 @@ three-d = { version = "0.18", default-features = true }
 three-d-asset = { version = "0.9", features = ["obj"] }
 
 # Bevy 3D engine
-bevy = { version = "0.18", default-features = false, features = [
+bevy = { version = "0.19", default-features = false, features = [
     "bevy_asset",
     "bevy_render",
     "bevy_core_pipeline",
@@ -115,10 +115,10 @@ bevy = { version = "0.18", default-features = false, features = [
 
 # eulumdat-bevy for lighting plugins.
 # Path-dep into the local eulumdat-rs workspace so we get exactly one
-# eulumdat-bevy + one eulumdat in the graph. The local eulumdat-bevy
-# pins Bevy to a custom fork branch (`photometric_proposal`); gldf-bevy
-# matches that pin so the whole graph rides on one Bevy version too.
-# Flip back to a published `eulumdat-bevy = "0.7.x"` once that ships.
+# eulumdat-bevy + one eulumdat in the graph. The whole graph now rides
+# published Bevy 0.19 (the photometric_proposal fork is retired — its
+# shadow-field PRs landed upstream). Flip back to a published
+# `eulumdat-bevy = "0.7.x"` once that ships.
 eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 
 # Photometric data — local path so the upcoming 0.7 release rides along
@@ -140,9 +140,9 @@ eulumdat-i18n = { path = "../eulumdat-rs/crates/eulumdat-i18n" }
 l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
 
 # ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
-# `cfb 0.10` which pins `uuid = ^1` to 1.19.0; the local Bevy fork
-# (photometric_proposal, 0.19-dev) needs `uuid ^1.21.0`, and Cargo
-# can't satisfy both with a single uuid version. Live ULD work lives
+# `cfb 0.10` which pins `uuid = ^1` to 1.19.0; published Bevy 0.19
+# wants a newer uuid, and Cargo can't satisfy both with a single
+# uuid version. Live ULD work lives
 # in `../light-other-rs` (on the `light-other` branch). Re-enable
 # once the `uld` feature is rebound to that crate.
 # uld-rs = { path = "../uld-rs", features = ["gldf"] }
