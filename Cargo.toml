@@ -15,10 +15,7 @@ members = [
     "crates/gldf-rs-wasm",
     "crates/gldf-starsky-wasm",
     "crates/gldf-unreal",
-    # gldf-stadium-plugin is parked: it still pins crates.io Bevy 0.18
-    # while the rest of the graph is on published 0.19 (fork retired).
-    # Re-add once its bevy dep is bumped to 0.19.
-    # "crates/gldf-stadium-plugin",
+    "crates/gldf-stadium-plugin",
 ]
 
 [workspace.package]

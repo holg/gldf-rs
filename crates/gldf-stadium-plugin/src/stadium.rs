@@ -619,7 +619,7 @@ fn spawn_floodlights_with_tilt(
                 radius: 0.5,
                 inner_angle: 0.2,
                 outer_angle: 0.7,
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 ..default()
             },
             light_transform,
@@ -635,7 +635,7 @@ fn spawn_floodlights_with_tilt(
                 radius: 0.8,
                 inner_angle: 0.4,
                 outer_angle: 1.0,
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 ..default()
             },
             light_transform,
@@ -649,7 +649,7 @@ fn spawn_floodlights_with_tilt(
                 intensity: intensity * 0.3,
                 range: 150.0,
                 radius: 1.0,
-                shadows_enabled: false,
+                shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_translation(light_pos),
