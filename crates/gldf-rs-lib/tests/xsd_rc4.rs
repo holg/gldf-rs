@@ -1,24 +1,24 @@
 //! rc.4 schema tests — validate the four PR #30 features against the
-//! actual rc.4 XSD, fetched from the (still-open) upstream PR branch and
-//! bundled at `tests/data/gldf-1.0.0-rc-4.xsd`.
+//! bundled rc.4 XSD, through the SHIPPING selectable-schema validator
+//! (`xsd_validate_product_xml_with_schema(.., Rc4)`), not a bespoke
+//! uppsala call. This proves the public API respects rc-4 today.
 //!
-//! We compile the rc.4 XSD directly with uppsala (the same engine the
-//! shipping rc-3 validator uses) so this works BEFORE gldf.io publishes
-//! the versioned URL — the schema is public on the PR branch, just at the
-//! flat `xsd/gldf.xsd` path rather than `/xsd/gldf/1.0.0-rc.4/gldf.xsd`.
-//!
-//! PR: globallightingdata/gldf#30 (holg/gldf @ typo-fixes). Features:
-//!   1. spelling cleanup (RatedChromaticityCoordinateValues, Fluorescent…)
-//!   2. six control protocols (Zigbee, Matter, Thread, Bluetooth Mesh,
-//!      DALI-2, DALI D4i) + unbounded Interface maxOccurs
-//!   3. per-channel RatedInputPower on MultiChannelLightSource
-//!   4. decimal ColorTolerance pattern ("1.5 SDCM", "1.47 SDCM")
+//! rc.4 is public on the (still-open) upstream PR branch
+//! (globallightingdata/gldf#30, holg/gldf @ typo-fixes) at the flat
+//! `xsd/gldf.xsd` path — NOT yet at the versioned
+//! `gldf.io/xsd/gldf/1.0.0-rc.4/gldf.xsd` URL — so it's bundled at
+//! `tests/data/gldf-1.0.0-rc-4.xsd` and embedded by the validator.
 //!
 //! Run: cargo test -p gldf-rs --features xsd --test xsd_rc4
 
 #![cfg(feature = "xsd")]
 
 use std::path::PathBuf;
+
+use gldf_rs::validation::{
+    xsd_validate_product_xml, xsd_validate_product_xml_with_schema,
+    DEFAULT_VALIDATION_SCHEMA, GldfSchemaVersion,
+};
 
 const RC4_XSD: &str = include_str!("../../../tests/data/gldf-1.0.0-rc-4.xsd");
 
@@ -41,35 +41,31 @@ fn slv_product_xml() -> String {
     xml
 }
 
-fn rc4_validator() -> uppsala::XsdValidator {
-    let doc = uppsala::parse(RC4_XSD).expect("parse rc.4 xsd");
-    uppsala::XsdValidator::from_schema(&doc).expect("compile rc.4 xsd")
-}
-
-/// Validate `xml` against the rc.4 schema; returns the violation messages.
-fn rc4_errors(v: &uppsala::XsdValidator, xml: &str) -> Vec<String> {
-    let doc = uppsala::parse(xml).expect("parse product xml");
-    v.validate(&doc).into_iter().map(|e| e.message).collect()
+#[test]
+fn default_validation_schema_is_latest_published_rc() {
+    // We must NOT silently make an unpublished rc the default: producers
+    // who validate without opting in get the latest PUBLISHED schema.
+    assert_eq!(DEFAULT_VALIDATION_SCHEMA, GldfSchemaVersion::Rc3);
 }
 
 #[test]
-fn rc4_xsd_compiles() {
-    let _ = rc4_validator();
-}
-
-#[test]
-fn slv_fixture_validates_clean_against_rc4() {
-    // rc.4 is backward compatible: an rc-3-clean file stays clean.
-    let v = rc4_validator();
+fn slv_fixture_validates_clean_under_both_schemas() {
+    // rc.4 is backward compatible: an rc-3-clean file stays clean under
+    // rc-4 too — and the version-less default (rc-3) still passes.
     let xml = slv_product_xml();
-    let errs = rc4_errors(&v, &xml);
-    assert!(errs.is_empty(), "SLV should be rc.4-clean; got: {errs:?}");
+    let default_errs = xsd_validate_product_xml(&xml).expect("default validate");
+    assert!(default_errs.is_empty(), "SLV rc-3 default: {default_errs:?}");
+    for v in [GldfSchemaVersion::Rc3, GldfSchemaVersion::Rc4] {
+        let errs = xsd_validate_product_xml_with_schema(&xml, v).expect("validate");
+        assert!(errs.is_empty(), "SLV should be {v:?}-clean; got: {errs:?}");
+    }
 }
 
 #[test]
-fn rc4_accepts_decimal_sdcm() {
-    // Feature 4: the unified ColorTolerance pattern accepts decimals.
-    let v = rc4_validator();
+fn rc4_accepts_decimal_sdcm_but_rc3_rejects_it() {
+    // Feature 4: the unified ColorTolerance pattern accepts decimals under
+    // rc-4; the same value is still rejected under rc-3 — proving the
+    // selectable schema is a real behavioural difference, not a no-op.
     let base = slv_product_xml();
     assert!(
         base.contains("<InitialColorTolerance>3 SDCM</InitialColorTolerance>"),
@@ -80,38 +76,24 @@ fn rc4_accepts_decimal_sdcm() {
             "<InitialColorTolerance>3 SDCM</InitialColorTolerance>",
             &format!("<InitialColorTolerance>{decimal}</InitialColorTolerance>"),
         );
-        let errs = rc4_errors(&v, &patched);
+        let rc4 = xsd_validate_product_xml_with_schema(&patched, GldfSchemaVersion::Rc4)
+            .expect("rc4 validate");
+        assert!(rc4.is_empty(), "rc.4 should accept {decimal:?}; got: {rc4:?}");
+
+        let rc3 = xsd_validate_product_xml_with_schema(&patched, GldfSchemaVersion::Rc3)
+            .expect("rc3 validate");
         assert!(
-            errs.is_empty(),
-            "rc.4 should accept decimal SDCM {decimal:?}; got: {errs:?}"
+            !rc3.is_empty(),
+            "rc-3 must reject decimal SDCM {decimal:?} (integer enum only)"
         );
     }
 }
 
 #[test]
-fn rc3_rejects_decimal_sdcm_negative_control() {
-    // Sanity: the SAME decimal value is NOT valid against the shipping
-    // rc-3 validator (its ColorTolerance was a discrete integer enum), so
-    // the rc.4 acceptance above is a real schema change, not a no-op.
-    let base = slv_product_xml();
-    let patched = base.replace(
-        "<InitialColorTolerance>3 SDCM</InitialColorTolerance>",
-        "<InitialColorTolerance>1.5 SDCM</InitialColorTolerance>",
-    );
-    let errs = gldf_rs::validation::xsd_validate_product_xml(&patched)
-        .expect("rc-3 validate");
-    assert!(
-        !errs.is_empty(),
-        "rc-3 must reject the decimal SDCM '1.5 SDCM' (enum was integers only)"
-    );
-}
-
-#[test]
 fn rc4_xsd_declares_new_control_protocols() {
-    // Feature 2: the six new Interface protocols are in the schema's
-    // enumeration. (An instance-level positive test would need a Control
-    // Gear with Interfaces, which the SLV fixture lacks; asserting the
-    // enum text is the schema-level proof.)
+    // Feature 2: the six new Interface protocols are in the rc-4 schema.
+    // (An instance-level positive would need a ControlGear with Interfaces,
+    // which the SLV fixture lacks; the enum text is the schema-level proof.)
     for proto in [
         "Zigbee",
         "Matter",

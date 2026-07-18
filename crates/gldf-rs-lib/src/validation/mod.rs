@@ -34,10 +34,15 @@ pub use engine::{validate_gldf, ValidationError, ValidationLevel, ValidationResu
 // Canonical-enum walker surface.
 pub use canonical::{validate, Violation};
 
-// XSD-validator surface — Rc-3 schema check via uppsala.
+// XSD-validator surface — selectable rc-3 / rc-4 schema check via uppsala.
+// Version-less entry points default to `DEFAULT_VALIDATION_SCHEMA` (the
+// latest published rc = rc-3 today); the `*_with_schema` variants take an
+// explicit `GldfSchemaVersion` so rc-4 can be validated before it ships.
 #[cfg(feature = "xsd")]
 pub use xsd_schema::{
     validate_gldf_archive as xsd_validate_gldf_archive,
+    validate_gldf_archive_with_schema as xsd_validate_gldf_archive_with_schema,
     validate_product_xml as xsd_validate_product_xml,
-    XsdError, XsdFinding, XsdResult,
+    validate_product_xml_with_schema as xsd_validate_product_xml_with_schema,
+    DEFAULT_VALIDATION_SCHEMA, GldfSchemaVersion, XsdError, XsdFinding, XsdResult,
 };

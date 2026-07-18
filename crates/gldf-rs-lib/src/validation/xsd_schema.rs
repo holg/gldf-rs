@@ -1,24 +1,47 @@
-//! XSD validation against the GLDF rc-3 schema, via the pure-Rust
-//! `uppsala` crate.
+//! XSD validation against the GLDF schema, via the pure-Rust `uppsala`
+//! crate.
 //!
-//! The rc-3 XSD is embedded into the binary (`include_str!`) so consumers
-//! don't have to ship it alongside. uppsala compiles the schema once;
-//! subsequent calls reuse the compiled validator via a OnceLock cache.
+//! Two schema revisions are embedded (`include_str!`) so consumers don't
+//! ship them alongside; each compiles once and is cached in its own
+//! `OnceLock`:
 //!
-//! Surface (gated on the `xsd` feature so WASM builds that don't want
-//! the extra ~150 KB of schema text can opt out):
+//! - **rc-3** — the latest *published* GLDF schema
+//!   (`gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd`). Default validation target.
+//! - **rc-4** — the proposed schema from globallightingdata/gldf#30
+//!   (spelling cleanup, six control protocols, per-channel power, decimal
+//!   SDCM). Public on the PR branch at the flat `xsd/gldf.xsd` path but
+//!   not yet at a versioned `gldf.io` URL. Selectable now so producers can
+//!   author and validate rc-4 features ahead of the (slow) merge.
 //!
-//! - [`validate_product_xml`] — validate a `product.xml` string.
-//! - [`validate_gldf_archive`] — read `product.xml` from a `.gldf` ZIP
-//!   byte slice and validate.
+//! Which revision a call validates against is chosen with
+//! [`GldfSchemaVersion`]; the version-less entry points default to
+//! [`DEFAULT_VALIDATION_SCHEMA`] (= the latest *published* rc, so rc-3
+//! today — flip that one constant when rc-4 publishes).
+//!
+//! Surface (gated on the `xsd` feature so WASM builds that don't want the
+//! extra schema text can opt out):
+//!
+//! - [`validate_product_xml`] / [`validate_product_xml_with_schema`]
+//! - [`validate_gldf_archive`] / [`validate_gldf_archive_with_schema`]
 //! - [`XsdFinding`] — flat per-error record (message + line + column).
 
 use std::sync::OnceLock;
 
-/// Embedded XSD text. The rc-3 schema is the de-facto target for our
-/// exporter; rc-4 is internal canonical form that re-serializes to rc-3
-/// via `GldfProduct::to_xml`.
+pub use crate::GldfSchemaVersion;
+
+/// Default schema revision for the version-less validation entry points:
+/// the latest *published* GLDF rc. rc-4 is still an open PR (#30) with no
+/// versioned `gldf.io` URL yet, so producers who validate without opting
+/// in get the published rc-3 behaviour. Flip this to `Rc4` the day rc-4
+/// publishes — every version-less caller then upgrades in one edit.
+pub const DEFAULT_VALIDATION_SCHEMA: GldfSchemaVersion = GldfSchemaVersion::Rc3;
+
+/// Embedded rc-3 XSD — the latest published schema (default target).
 const RC3_XSD: &str = include_str!("../../../../tests/data/gldf-1.0.0-rc-3.xsd");
+
+/// Embedded rc-4 XSD — the proposed schema (globallightingdata/gldf#30),
+/// bundled from the PR branch so rc-4 features can be validated pre-merge.
+const RC4_XSD: &str = include_str!("../../../../tests/data/gldf-1.0.0-rc-4.xsd");
 
 /// One XSD violation as reported by the validator.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,29 +92,57 @@ impl std::error::Error for XsdError {}
 /// validation couldn't even run (bad input).
 pub type XsdResult<T> = Result<T, XsdError>;
 
-fn validator() -> XsdResult<&'static uppsala::XsdValidator> {
-    static VALIDATOR: OnceLock<Result<uppsala::XsdValidator, String>> = OnceLock::new();
-    let cached = VALIDATOR.get_or_init(|| {
-        let doc = uppsala::parse(RC3_XSD).map_err(|e| format!("parse xsd: {e:?}"))?;
+/// Compiled validator for one schema revision, cached for the process
+/// lifetime. Each revision compiles at most once (first use).
+fn validator(version: GldfSchemaVersion) -> XsdResult<&'static uppsala::XsdValidator> {
+    static RC3: OnceLock<Result<uppsala::XsdValidator, String>> = OnceLock::new();
+    static RC4: OnceLock<Result<uppsala::XsdValidator, String>> = OnceLock::new();
+
+    let compile = |xsd: &str| -> Result<uppsala::XsdValidator, String> {
+        let doc = uppsala::parse(xsd).map_err(|e| format!("parse xsd: {e:?}"))?;
         uppsala::XsdValidator::from_schema(&doc)
             .map_err(|e| format!("compile xsd: {e:?}"))
-    });
-    cached
-        .as_ref()
-        .map_err(|e| XsdError::Schema(e.clone()))
+    };
+
+    let cached = match version {
+        GldfSchemaVersion::Rc3 => RC3.get_or_init(|| compile(RC3_XSD)),
+        GldfSchemaVersion::Rc4 => RC4.get_or_init(|| compile(RC4_XSD)),
+    };
+    cached.as_ref().map_err(|e| XsdError::Schema(e.clone()))
 }
 
-/// Validate a `product.xml` source against the rc-3 XSD.
+/// Validate a `product.xml` source against the default published schema
+/// ([`DEFAULT_VALIDATION_SCHEMA`] — rc-3 today).
 ///
 /// An empty Vec means clean. A non-empty Vec is the list of violations.
 pub fn validate_product_xml(xml: &str) -> XsdResult<Vec<XsdFinding>> {
-    let v = validator()?;
+    validate_product_xml_with_schema(xml, DEFAULT_VALIDATION_SCHEMA)
+}
+
+/// Validate a `product.xml` source against an explicitly chosen schema
+/// revision. Use [`GldfSchemaVersion::Rc4`] to check the proposed rc-4
+/// features (control protocols, decimal SDCM, …) ahead of the merge.
+pub fn validate_product_xml_with_schema(
+    xml: &str,
+    version: GldfSchemaVersion,
+) -> XsdResult<Vec<XsdFinding>> {
+    let v = validator(version)?;
     let doc = uppsala::parse(xml).map_err(|e| XsdError::BadXml(format!("{e:?}")))?;
     Ok(v.validate(&doc).into_iter().map(into_finding).collect())
 }
 
-/// Validate the `product.xml` inside a `.gldf` archive byte slice.
+/// Validate the `product.xml` inside a `.gldf` archive byte slice against
+/// the default published schema ([`DEFAULT_VALIDATION_SCHEMA`]).
 pub fn validate_gldf_archive(bytes: &[u8]) -> XsdResult<Vec<XsdFinding>> {
+    validate_gldf_archive_with_schema(bytes, DEFAULT_VALIDATION_SCHEMA)
+}
+
+/// Validate the `product.xml` inside a `.gldf` archive against an
+/// explicitly chosen schema revision.
+pub fn validate_gldf_archive_with_schema(
+    bytes: &[u8],
+    version: GldfSchemaVersion,
+) -> XsdResult<Vec<XsdFinding>> {
     use std::io::Read;
     let reader = std::io::Cursor::new(bytes);
     let mut zip = zip::ZipArchive::new(reader)
@@ -103,7 +154,7 @@ pub fn validate_gldf_archive(bytes: &[u8]) -> XsdResult<Vec<XsdFinding>> {
     entry
         .read_to_string(&mut xml)
         .map_err(|e| XsdError::Archive(format!("read product.xml: {e}")))?;
-    validate_product_xml(&xml)
+    validate_product_xml_with_schema(&xml, version)
 }
 
 fn into_finding(e: uppsala::ValidationError) -> XsdFinding {
@@ -119,8 +170,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn schema_compiles() {
-        assert!(validator().is_ok(), "rc-3 XSD should compile cleanly");
+    fn both_schemas_compile() {
+        assert!(
+            validator(GldfSchemaVersion::Rc3).is_ok(),
+            "rc-3 XSD should compile cleanly"
+        );
+        assert!(
+            validator(GldfSchemaVersion::Rc4).is_ok(),
+            "rc-4 XSD should compile cleanly"
+        );
+    }
+
+    #[test]
+    fn default_is_latest_published_rc() {
+        assert_eq!(
+            DEFAULT_VALIDATION_SCHEMA,
+            GldfSchemaVersion::Rc3,
+            "version-less validation defaults to the latest PUBLISHED rc"
+        );
     }
 
     #[test]
