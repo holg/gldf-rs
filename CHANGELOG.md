@@ -22,7 +22,7 @@ Everything since 0.4.0 in one release: the feature branch was merged into
 - **gldf-bevy**: native scene loading from a `.gldf`, command bridge for Lisp scene commands.
 - **gldf-unreal** (not published): exporter, C ABI, Interchange translator plugin for Unreal Engine.
 - Web editor: GLDF builder, SPD viewer, IFC viewer, URL deep links, validation banner, mobile layout.
-- New crates on crates.io: `gldf-rs-i18n`, `gldf-rs-editor`.
+- New crate on crates.io: `gldf-rs-i18n`. Published at 0.5.0: `gldf-rs`, `gldf-rs-ffi`, `gldf-rs-i18n`; the editor crate and the frontends built on it wait for their sibling dependencies (`light-convert`, `acadlisp`) to be published.
 
 - **Validation in every desktop frontend**: `gldf-cli validate --schema rc3|rc4` (and `batch --validate --schema …`), a *Validation* page in `gldf-editor-egui` with an rc-3/rc-4 switch, and a *Validation* section in the `gldf-edit` TUI (`t` toggles the schema). All three render the new frontend-neutral `gldf_rs_editor::validation_report` (engine + canonical + XSD, behind the editor crate's `xsd` feature) — the same bucketing as the web banner.
 
