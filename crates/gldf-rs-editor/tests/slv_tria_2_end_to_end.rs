@@ -56,8 +56,8 @@ fn slv_tria_2_housing_color_update_survives_round_trip() {
     let gldf_bytes = std::fs::read(SLV_TRIA_2_PATH).expect("SLV Tria 2 fixture missing");
 
     // --- Step 1+2: load like the WASM viewer does ---
-    let bundle = GldfProduct::load_gldf_from_buf_all(gldf_bytes.clone())
-        .expect("load_gldf_from_buf_all");
+    let bundle =
+        GldfProduct::load_gldf_from_buf_all(gldf_bytes.clone()).expect("load_gldf_from_buf_all");
     let mut embedded_files: HashMap<String, Vec<u8>> = HashMap::new();
     for f in bundle.files {
         if let Some(content) = f.content {

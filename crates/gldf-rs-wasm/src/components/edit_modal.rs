@@ -37,17 +37,16 @@ pub fn EditModal(
     // with the page.
     #[cfg(target_arch = "wasm32")]
     {
-    let on_close_for_esc = on_close.clone();
-    if let Some(window) = web_sys::window() {
-        let cb = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
-            if e.key() == "Escape" && open.get_untracked() {
-                (on_close_for_esc)();
-            }
-        }) as Box<dyn FnMut(_)>);
-        let _ = window
-            .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
-        cb.forget();
-    }
+        let on_close_for_esc = on_close.clone();
+        if let Some(window) = web_sys::window() {
+            let cb = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
+                if e.key() == "Escape" && open.get_untracked() {
+                    (on_close_for_esc)();
+                }
+            }) as Box<dyn FnMut(_)>);
+            let _ = window.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+            cb.forget();
+        }
     }
 
     let on_backdrop = {

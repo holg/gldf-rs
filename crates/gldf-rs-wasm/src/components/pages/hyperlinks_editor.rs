@@ -81,15 +81,17 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
         move |e: crate::components::edit_util::EditEvent| {
             let Some(v) = event_value(&e) else { return };
             let scp = scope.get();
-            state.update(|s| s.apply(GldfAction::UpdateHyperlink {
-                scope: scp,
-                index: idx,
-                href: v,
-                language: snap.language.clone(),
-                region: snap.region.clone(),
-                country_code: snap.country_code.clone(),
-                value: snap.value.clone(),
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::UpdateHyperlink {
+                    scope: scp,
+                    index: idx,
+                    href: v,
+                    language: snap.language.clone(),
+                    region: snap.region.clone(),
+                    country_code: snap.country_code.clone(),
+                    value: snap.value.clone(),
+                })
+            });
         }
     };
     let on_lang = {
@@ -97,15 +99,17 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
         move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
-            state.update(|s| s.apply(GldfAction::UpdateHyperlink {
-                scope: scp,
-                index: idx,
-                href: snap.href.clone(),
-                language: optional_string(v),
-                region: snap.region.clone(),
-                country_code: snap.country_code.clone(),
-                value: snap.value.clone(),
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::UpdateHyperlink {
+                    scope: scp,
+                    index: idx,
+                    href: snap.href.clone(),
+                    language: optional_string(v),
+                    region: snap.region.clone(),
+                    country_code: snap.country_code.clone(),
+                    value: snap.value.clone(),
+                })
+            });
         }
     };
     let on_region = {
@@ -113,15 +117,17 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
         move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
-            state.update(|s| s.apply(GldfAction::UpdateHyperlink {
-                scope: scp,
-                index: idx,
-                href: snap.href.clone(),
-                language: snap.language.clone(),
-                region: optional_string(v),
-                country_code: snap.country_code.clone(),
-                value: snap.value.clone(),
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::UpdateHyperlink {
+                    scope: scp,
+                    index: idx,
+                    href: snap.href.clone(),
+                    language: snap.language.clone(),
+                    region: optional_string(v),
+                    country_code: snap.country_code.clone(),
+                    value: snap.value.clone(),
+                })
+            });
         }
     };
     let on_country = {
@@ -129,15 +135,17 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
         move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             let scp = scope.get();
-            state.update(|s| s.apply(GldfAction::UpdateHyperlink {
-                scope: scp,
-                index: idx,
-                href: snap.href.clone(),
-                language: snap.language.clone(),
-                region: snap.region.clone(),
-                country_code: optional_string(v),
-                value: snap.value.clone(),
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::UpdateHyperlink {
+                    scope: scp,
+                    index: idx,
+                    href: snap.href.clone(),
+                    language: snap.language.clone(),
+                    region: snap.region.clone(),
+                    country_code: optional_string(v),
+                    value: snap.value.clone(),
+                })
+            });
         }
     };
     let on_label = {
@@ -145,20 +153,27 @@ fn HyperlinkRow(idx: usize, link: Hyperlink, scope: RwSignal<Scope>) -> impl Int
         move |e: crate::components::edit_util::EditEvent| {
             let Some(v) = event_value(&e) else { return };
             let scp = scope.get();
-            state.update(|s| s.apply(GldfAction::UpdateHyperlink {
-                scope: scp,
-                index: idx,
-                href: snap.href.clone(),
-                language: snap.language.clone(),
-                region: snap.region.clone(),
-                country_code: snap.country_code.clone(),
-                value: v,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::UpdateHyperlink {
+                    scope: scp,
+                    index: idx,
+                    href: snap.href.clone(),
+                    language: snap.language.clone(),
+                    region: snap.region.clone(),
+                    country_code: snap.country_code.clone(),
+                    value: v,
+                })
+            });
         }
     };
     let on_remove = move |_| {
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::RemoveHyperlink { scope: scp, index: idx }));
+        state.update(|s| {
+            s.apply(GldfAction::RemoveHyperlink {
+                scope: scp,
+                index: idx,
+            })
+        });
     };
 
     let href = link.href.clone();

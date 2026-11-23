@@ -54,8 +54,7 @@ impl BatchTemplate {
     /// Parse template JSON, classifying by shape: object → wizard draft,
     /// array → action script.
     pub fn parse(raw: &str) -> Result<Self> {
-        let value: serde_json::Value =
-            serde_json::from_str(raw).context("parse template JSON")?;
+        let value: serde_json::Value = serde_json::from_str(raw).context("parse template JSON")?;
         match &value {
             serde_json::Value::Object(_) => Ok(Self::Wizard(value)),
             serde_json::Value::Array(_) => Ok(Self::Script(value)),
@@ -129,12 +128,18 @@ fn placeholder_table(input_filename: &str, meta: &LdtMetadata) -> Vec<(&'static 
         ("{input.filename}", input_filename.to_string()),
         ("{input.stem}", stem),
         ("{ldt.name}", meta.name.clone()),
-        ("{ldt.manufacturer}", meta.manufacturer.clone().unwrap_or_default()),
+        (
+            "{ldt.manufacturer}",
+            meta.manufacturer.clone().unwrap_or_default(),
+        ),
         (
             "{ldt.luminaire_number}",
             meta.luminaire_number.clone().unwrap_or_default(),
         ),
-        ("{ldt.lamp_type}", meta.lamp_type.clone().unwrap_or_default()),
+        (
+            "{ldt.lamp_type}",
+            meta.lamp_type.clone().unwrap_or_default(),
+        ),
         (
             "{ldt.lamp_count}",
             meta.lamp_count.map(|n| n.to_string()).unwrap_or_default(),
@@ -196,10 +201,7 @@ fn autofill_draft(
         draft.header_manufacturer = meta.manufacturer.clone().unwrap_or_default();
     }
     if draft.ls_name.trim().is_empty() {
-        draft.ls_name = meta
-            .lamp_type
-            .clone()
-            .unwrap_or_else(|| meta.name.clone());
+        draft.ls_name = meta.lamp_type.clone().unwrap_or_else(|| meta.name.clone());
     }
     if draft.ls_rated_power.trim().is_empty() {
         if let Some(watts) = meta.watts {
@@ -259,8 +261,7 @@ impl TemplateDraft {
     /// refs (with the filename twin defaulted to the path's basename);
     /// empty slots are dropped rather than serialized as `null`.
     pub fn to_template_value(&self) -> serde_json::Value {
-        let mut value = serde_json::to_value(&self.draft)
-            .expect("WizardDraft serializes to JSON");
+        let mut value = serde_json::to_value(&self.draft).expect("WizardDraft serializes to JSON");
         let obj = value.as_object_mut().expect("draft is an object");
         for (bytes_key, _) in BYTE_FIELDS {
             obj.remove(bytes_key);
@@ -272,10 +273,7 @@ impl TemplateDraft {
             if path.trim().is_empty() {
                 return;
             }
-            obj.insert(
-                bytes_key.to_string(),
-                serde_json::json!({ "@file": path }),
-            );
+            obj.insert(bytes_key.to_string(), serde_json::json!({ "@file": path }));
             let filename_missing = obj
                 .get(filename_key)
                 .and_then(|v| v.as_str())
@@ -304,8 +302,7 @@ impl TemplateDraft {
 
     /// Pretty-printed [`Self::to_template_value`].
     pub fn to_template_json(&self) -> String {
-        serde_json::to_string_pretty(&self.to_template_value())
-            .expect("template JSON serializes")
+        serde_json::to_string_pretty(&self.to_template_value()).expect("template JSON serializes")
     }
 
     /// Parse a wizard template back into the form model. `{"@file": …}`
@@ -366,9 +363,7 @@ pub fn process_one(
     options: &BatchOptions,
 ) -> Result<BatchOutput> {
     #[cfg(feature = "uld")]
-    if light_convert::is_uld(input_bytes)
-        || input_filename.to_ascii_lowercase().ends_with(".uld")
-    {
+    if light_convert::is_uld(input_bytes) || input_filename.to_ascii_lowercase().ends_with(".uld") {
         return process_uld(input_bytes, input_filename, template, resolver, options);
     }
 
@@ -528,7 +523,9 @@ fn apply_header_overrides(state: &mut GldfState, draft: &WizardDraft) -> Result<
     }
     let created_with = draft.header_created_with.trim();
     if !created_with.is_empty() {
-        dispatch(GldfAction::SetCreatedWithApplication(created_with.to_string()))?;
+        dispatch(GldfAction::SetCreatedWithApplication(
+            created_with.to_string(),
+        ))?;
     }
     let lang = draft.header_default_language.trim();
     if !lang.is_empty() {
@@ -680,8 +677,8 @@ mod fs_impl {
             error: None,
         };
         let result = (|| -> Result<()> {
-            let bytes = std::fs::read(input)
-                .with_context(|| format!("read {}", input.display()))?;
+            let bytes =
+                std::fs::read(input).with_context(|| format!("read {}", input.display()))?;
             let filename = input
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -689,19 +686,16 @@ mod fs_impl {
             let resolver = FsResolver {
                 root: job.template_dir.clone(),
             };
-            let output =
-                process_one(&bytes, filename, &job.template, &resolver, &job.options)?;
+            let output = process_one(&bytes, filename, &job.template, &resolver, &job.options)?;
             report.product_name = Some(output.product_name.clone());
             if let Some(gldf) = &output.gldf {
                 let path = job.out_dir.join(format!("{}.gldf", stem));
-                std::fs::write(&path, gldf)
-                    .with_context(|| format!("write {}", path.display()))?;
+                std::fs::write(&path, gldf).with_context(|| format!("write {}", path.display()))?;
                 report.gldf_path = Some(path);
             }
             if let Some(ifc) = &output.ifc {
                 let path = job.out_dir.join(format!("{}.ifc", stem));
-                std::fs::write(&path, ifc)
-                    .with_context(|| format!("write {}", path.display()))?;
+                std::fs::write(&path, ifc).with_context(|| format!("write {}", path.display()))?;
                 report.ifc_path = Some(path);
             }
             Ok(())

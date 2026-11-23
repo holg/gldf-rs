@@ -188,40 +188,90 @@ pub fn extract_product_bim_properties(gldf: &GldfProduct) -> Vec<BimProperty> {
     // ── Electrical ──────────────────────────────────────────────
     if let Some(e) = &attrs.electrical {
         if let Some(v) = &e.electrical_safety_class {
-            out.push(prop("ElectricalSafetyClass", v.clone(), BimValueKind::Label, BimPset::Electrical));
+            out.push(prop(
+                "ElectricalSafetyClass",
+                v.clone(),
+                BimValueKind::Label,
+                BimPset::Electrical,
+            ));
         }
         if let Some(v) = &e.ingress_protection_ip_code {
-            out.push(prop("IngressProtectionIPCode", v.clone(), BimValueKind::Label, BimPset::Electrical));
+            out.push(prop(
+                "IngressProtectionIPCode",
+                v.clone(),
+                BimValueKind::Label,
+                BimPset::Electrical,
+            ));
         }
         if let Some(v) = e.power_factor {
-            out.push(prop("PowerFactor", fmt_f64(v), BimValueKind::Real, BimPset::Electrical));
+            out.push(prop(
+                "PowerFactor",
+                fmt_f64(v),
+                BimValueKind::Real,
+                BimPset::Electrical,
+            ));
         }
         if let Some(v) = e.constant_light_output {
-            out.push(prop("ConstantLightOutput", v.to_string(), BimValueKind::Boolean, BimPset::Electrical));
+            out.push(prop(
+                "ConstantLightOutput",
+                v.to_string(),
+                BimValueKind::Boolean,
+                BimPset::Electrical,
+            ));
         }
     }
 
     // ── Mechanical ──────────────────────────────────────────────
     if let Some(m) = &attrs.mechanical {
         if let Some(v) = m.weight {
-            out.push(prop("Weight", fmt_f64(v), BimValueKind::MassMeasure, BimPset::Mechanical));
+            out.push(prop(
+                "Weight",
+                fmt_f64(v),
+                BimValueKind::MassMeasure,
+                BimPset::Mechanical,
+            ));
         }
         if let Some(v) = &m.ik_rating {
-            out.push(prop("IKRating", v.clone(), BimValueKind::Label, BimPset::Mechanical));
+            out.push(prop(
+                "IKRating",
+                v.clone(),
+                BimValueKind::Label,
+                BimPset::Mechanical,
+            ));
         }
         if let Some(v) = &m.product_form {
-            out.push(prop("ProductForm", v.clone(), BimValueKind::Label, BimPset::Mechanical));
+            out.push(prop(
+                "ProductForm",
+                v.clone(),
+                BimValueKind::Label,
+                BimPset::Mechanical,
+            ));
         }
         if let Some(size) = &m.product_size {
             // ProductSize children are mm in GLDF.
             if size.width != 0 {
-                out.push(prop("OverallWidth", size.width.to_string(), BimValueKind::LengthMm, BimPset::Mechanical));
+                out.push(prop(
+                    "OverallWidth",
+                    size.width.to_string(),
+                    BimValueKind::LengthMm,
+                    BimPset::Mechanical,
+                ));
             }
             if size.height != 0 {
-                out.push(prop("OverallHeight", size.height.to_string(), BimValueKind::LengthMm, BimPset::Mechanical));
+                out.push(prop(
+                    "OverallHeight",
+                    size.height.to_string(),
+                    BimValueKind::LengthMm,
+                    BimPset::Mechanical,
+                ));
             }
             if size.length != 0 {
-                out.push(prop("OverallLength", size.length.to_string(), BimValueKind::LengthMm, BimPset::Mechanical));
+                out.push(prop(
+                    "OverallLength",
+                    size.length.to_string(),
+                    BimValueKind::LengthMm,
+                    BimPset::Mechanical,
+                ));
             }
         }
     }
@@ -231,7 +281,12 @@ pub fn extract_product_bim_properties(gldf: &GldfProduct) -> Vec<BimProperty> {
         if let Some(lifetimes) = &ops.median_useful_life_times {
             if let Some(first) = lifetimes.median_useful_life.first() {
                 if !first.is_empty() {
-                    out.push(prop("MedianUsefulLife", first.clone(), BimValueKind::Label, BimPset::OperationsAndMaintenance));
+                    out.push(prop(
+                        "MedianUsefulLife",
+                        first.clone(),
+                        BimValueKind::Label,
+                        BimPset::OperationsAndMaintenance,
+                    ));
                 }
             }
         }
@@ -240,7 +295,12 @@ pub fn extract_product_bim_properties(gldf: &GldfProduct) -> Vec<BimProperty> {
     // ── Emergency ───────────────────────────────────────────────
     if let Some(em) = &attrs.emergency {
         if let Some(v) = &em.dedicated_emergency_lighting_type {
-            out.push(prop("DedicatedEmergencyLightingType", v.clone(), BimValueKind::Label, BimPset::Emergency));
+            out.push(prop(
+                "DedicatedEmergencyLightingType",
+                v.clone(),
+                BimValueKind::Label,
+                BimPset::Emergency,
+            ));
         }
     }
 
@@ -271,15 +331,16 @@ mod tests {
     };
 
     fn product_with_attrs(attrs: DescriptiveAttributes) -> GldfProduct {
-        let mut p = GldfProduct::default();
-        p.product_definitions = ProductDefinitions {
-            product_meta_data: Some(ProductMetaData {
-                descriptive_attributes: Some(attrs),
-                ..ProductMetaData::default()
-            }),
-            ..ProductDefinitions::default()
-        };
-        p
+        GldfProduct {
+            product_definitions: ProductDefinitions {
+                product_meta_data: Some(ProductMetaData {
+                    descriptive_attributes: Some(attrs),
+                    ..ProductMetaData::default()
+                }),
+                ..ProductDefinitions::default()
+            },
+            ..GldfProduct::default()
+        }
     }
 
     #[test]
@@ -302,12 +363,21 @@ mod tests {
         let p = product_with_attrs(attrs);
         let props = extract_product_bim_properties(&p);
 
-        let sc = props.iter().find(|p| p.name == "ElectricalSafetyClass").unwrap();
+        let sc = props
+            .iter()
+            .find(|p| p.name == "ElectricalSafetyClass")
+            .unwrap();
         assert_eq!(sc.value, "II");
-        assert!(!sc.bsdd_id.is_empty(), "safety class should carry a bSDD id");
+        assert!(
+            !sc.bsdd_id.is_empty(),
+            "safety class should carry a bSDD id"
+        );
         assert_eq!(sc.pset, BimPset::Electrical);
 
-        let ip = props.iter().find(|p| p.name == "IngressProtectionIPCode").unwrap();
+        let ip = props
+            .iter()
+            .find(|p| p.name == "IngressProtectionIPCode")
+            .unwrap();
         assert_eq!(ip.value, "IP20");
 
         let pf = props.iter().find(|p| p.name == "PowerFactor").unwrap();

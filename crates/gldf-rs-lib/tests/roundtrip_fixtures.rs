@@ -51,7 +51,9 @@ fn assert_roundtrip(label: &str, path: &str) {
     // even when the XML is byte-identical, so XML-equality is the
     // practical "round-trip safe" definition.
     let lhs = original.to_xml().expect("serialize original to XML");
-    let rhs = roundtripped.to_xml().expect("serialize roundtripped to XML");
+    let rhs = roundtripped
+        .to_xml()
+        .expect("serialize roundtripped to XML");
     if lhs == rhs {
         return;
     }

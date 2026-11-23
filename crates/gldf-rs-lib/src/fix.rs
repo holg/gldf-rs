@@ -60,9 +60,7 @@ pub fn fix_legacy_content_types(gldf_bytes: Vec<u8>) -> Result<(Vec<u8>, bool)> 
     if !changed {
         return Ok((gldf_bytes, false));
     }
-    let new_xml = product
-        .to_xml()
-        .context("serialize updated product.xml")?;
+    let new_xml = product.to_xml().context("serialize updated product.xml")?;
 
     let mut out_buf: Vec<u8> = Vec::new();
     {
@@ -140,8 +138,8 @@ mod tests {
         let mut out = Vec::new();
         {
             let mut w = ZipWriter::new(Cursor::new(&mut out));
-            let opts = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated);
+            let opts =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
             w.start_file("product.xml", opts).unwrap();
             w.write_all(xml.as_bytes()).unwrap();
             w.start_file("geometry/model_1.l3d", opts).unwrap();

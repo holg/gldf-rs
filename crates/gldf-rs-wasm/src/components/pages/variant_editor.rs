@@ -228,11 +228,21 @@ fn VariantSummaryCard(
     };
     let on_move_up = move |e: crate::components::edit_util::ClickEvt| {
         crate::components::edit_util::stop_click_propagation(&e);
-        state.update(|s| s.apply(GldfAction::MoveVariant { index: idx, delta: -1 }));
+        state.update(|s| {
+            s.apply(GldfAction::MoveVariant {
+                index: idx,
+                delta: -1,
+            })
+        });
     };
     let on_move_down = move |e: crate::components::edit_util::ClickEvt| {
         crate::components::edit_util::stop_click_propagation(&e);
-        state.update(|s| s.apply(GldfAction::MoveVariant { index: idx, delta: 1 }));
+        state.update(|s| {
+            s.apply(GldfAction::MoveVariant {
+                index: idx,
+                delta: 1,
+            })
+        });
     };
 
     let id_str = variant.id.clone();
@@ -398,7 +408,6 @@ fn VariantEditForm(idx: usize, variant: Variant) -> impl IntoView {
         </p>
     }
 }
-
 
 /// Geometry editor for a single variant. Mode picker (None / Bare /
 /// Simple / Model) + per-mode form. Dispatches the appropriate
@@ -673,8 +682,14 @@ fn SimpleGeometryPicker(
     available_emitters: Vec<(String, Option<String>)>,
 ) -> impl IntoView {
     let state = use_gldf();
-    let cur_geom = current.as_ref().map(|s| s.geometry_id.clone()).unwrap_or_default();
-    let cur_emitter = current.as_ref().map(|s| s.emitter_id.clone()).unwrap_or_default();
+    let cur_geom = current
+        .as_ref()
+        .map(|s| s.geometry_id.clone())
+        .unwrap_or_default();
+    let cur_emitter = current
+        .as_ref()
+        .map(|s| s.emitter_id.clone())
+        .unwrap_or_default();
 
     let cur_emitter_for_geom = cur_emitter.clone();
     let on_geom = move |e: crate::components::edit_util::EditEvent| {
@@ -747,7 +762,10 @@ fn ModelGeometryEditor(
     available_emitters: Vec<(String, Option<String>)>,
 ) -> impl IntoView {
     let state = use_gldf();
-    let geometry_id = current.as_ref().map(|m| m.geometry_id.clone()).unwrap_or_default();
+    let geometry_id = current
+        .as_ref()
+        .map(|m| m.geometry_id.clone())
+        .unwrap_or_default();
     let bindings_init: Vec<ModelEmitterBinding> = current
         .as_ref()
         .map(|m| {
@@ -980,9 +998,8 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     );
 
     let wall_enabled = RwSignal::new(init.wall.is_some());
-    let wall_mounting_height = RwSignal::new(
-        init.wall.as_ref().map(|w| w.mounting_height).unwrap_or(0),
-    );
+    let wall_mounting_height =
+        RwSignal::new(init.wall.as_ref().map(|w| w.mounting_height).unwrap_or(0));
     let wall_recessed_depth = RwSignal::new(
         init.wall
             .as_ref()
@@ -991,7 +1008,10 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             .unwrap_or(0),
     );
     let wall_use_recessed = RwSignal::new(
-        init.wall.as_ref().map(|w| w.recessed.is_some()).unwrap_or(false),
+        init.wall
+            .as_ref()
+            .map(|w| w.recessed.is_some())
+            .unwrap_or(false),
     );
 
     let ground_enabled = RwSignal::new(init.ground.is_some());
@@ -1012,7 +1032,9 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
                     .as_ref()
                     .and_then(PoleTop::get_pole_height)
                     .or_else(|| {
-                        g.pole_integrated.as_ref().and_then(PoleIntegrated::get_pole_height)
+                        g.pole_integrated
+                            .as_ref()
+                            .and_then(PoleIntegrated::get_pole_height)
                     })
             })
             .unwrap_or(0),
@@ -1159,42 +1181,36 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
     // mutation lands as a single action; the reducer never sees an
     // intermediate half-applied state.
     let toggle_ceiling = {
-        let dispatch = dispatch.clone();
         move |_| {
             ceiling_enabled.update(|v| *v = !*v);
             dispatch();
         }
     };
     let toggle_wall = {
-        let dispatch = dispatch.clone();
         move |_| {
             wall_enabled.update(|v| *v = !*v);
             dispatch();
         }
     };
     let toggle_ground = {
-        let dispatch = dispatch.clone();
         move |_| {
             ground_enabled.update(|v| *v = !*v);
             dispatch();
         }
     };
     let toggle_working_plane = {
-        let dispatch = dispatch.clone();
         move |_| {
             working_plane_enabled.update(|v| *v = !*v);
             dispatch();
         }
     };
     let toggle_wall_recessed = {
-        let dispatch = dispatch.clone();
         move |_| {
             wall_use_recessed.update(|v| *v = !*v);
             dispatch();
         }
     };
     let set_ceiling_mode = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let v: u8 = event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0);
             ceiling_mode.set(v);
@@ -1202,7 +1218,6 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
         }
     };
     let set_ground_mode = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let v: u8 = event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0);
             ground_mode.set(v);
@@ -1210,47 +1225,32 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
         }
     };
     let set_ceiling_depth = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
-            ceiling_recessed_depth.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
-            );
+            ceiling_recessed_depth.set(event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0));
             dispatch();
         }
     };
     let set_ceiling_pendant = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
-            ceiling_pendant_length.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
-            );
+            ceiling_pendant_length.set(event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0));
             dispatch();
         }
     };
     let set_wall_height = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
-            wall_mounting_height.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
-            );
+            wall_mounting_height.set(event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0));
             dispatch();
         }
     };
     let set_wall_depth = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
-            wall_recessed_depth.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
-            );
+            wall_recessed_depth.set(event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0));
             dispatch();
         }
     };
     let set_ground_height = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
-            ground_pole_height.set(
-                event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0),
-            );
+            ground_pole_height.set(event_value(&e).and_then(|s| s.parse().ok()).unwrap_or(0));
             dispatch();
         }
     };
@@ -1279,7 +1279,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             </label>
             {move || ceiling_enabled.get().then(|| view! {
                 <div style=sub_style>
-                    <select on:change=set_ceiling_mode.clone() prop:value=move || ceiling_mode.get().to_string()>
+                    <select on:change=set_ceiling_mode prop:value=move || ceiling_mode.get().to_string()>
                         <option value="0">{ tr("gldf.mountings.recessed") }</option>
                         <option value="1">{ tr("gldf.mountings.surface_mounted") }</option>
                         <option value="2">{ tr("gldf.mountings.pendant") }</option>
@@ -1287,13 +1287,13 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
                     {move || (ceiling_mode.get() == 0).then(|| view! {
                         <>
                             <label>{ tr("gldf.mountings.depth_mm") }</label>
-                            <input type="number" min="0" prop:value=move || ceiling_recessed_depth.get().to_string() on:change=set_ceiling_depth.clone() style="width: 80px;" />
+                            <input type="number" min="0" prop:value=move || ceiling_recessed_depth.get().to_string() on:change=set_ceiling_depth style="width: 80px;" />
                         </>
                     })}
                     {move || (ceiling_mode.get() == 2).then(|| view! {
                         <>
                             <label>{ tr("gldf.mountings.length_mm") }</label>
-                            <input type="number" min="0" step="any" prop:value=move || ceiling_pendant_length.get().to_string() on:change=set_ceiling_pendant.clone() style="width: 80px;" />
+                            <input type="number" min="0" step="any" prop:value=move || ceiling_pendant_length.get().to_string() on:change=set_ceiling_pendant style="width: 80px;" />
                         </>
                     })}
                 </div>
@@ -1307,15 +1307,15 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             {move || wall_enabled.get().then(|| view! {
                 <div style=sub_style>
                     <label>{ tr("gldf.mountings.mounting_height_mm") }</label>
-                    <input type="number" min="0" prop:value=move || wall_mounting_height.get().to_string() on:change=set_wall_height.clone() style="width: 100px;" />
+                    <input type="number" min="0" prop:value=move || wall_mounting_height.get().to_string() on:change=set_wall_height style="width: 100px;" />
                     <label style="margin-left: 8px;">
-                        <input type="checkbox" prop:checked=move || wall_use_recessed.get() on:change=toggle_wall_recessed.clone() />
+                        <input type="checkbox" prop:checked=move || wall_use_recessed.get() on:change=toggle_wall_recessed />
                         { format!(" {}", tr("gldf.mountings.recessed_label")) }
                     </label>
                     {move || wall_use_recessed.get().then(|| view! {
                         <>
                             <label>{ tr("gldf.mountings.depth_mm") }</label>
-                            <input type="number" min="0" prop:value=move || wall_recessed_depth.get().to_string() on:change=set_wall_depth.clone() style="width: 80px;" />
+                            <input type="number" min="0" prop:value=move || wall_recessed_depth.get().to_string() on:change=set_wall_depth style="width: 80px;" />
                         </>
                     })}
                 </div>
@@ -1328,7 +1328,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
             </label>
             {move || ground_enabled.get().then(|| view! {
                 <div style=sub_style>
-                    <select on:change=set_ground_mode.clone() prop:value=move || ground_mode.get().to_string()>
+                    <select on:change=set_ground_mode prop:value=move || ground_mode.get().to_string()>
                         <option value="0">{ tr("gldf.mountings.pole_top") }</option>
                         <option value="1">{ tr("gldf.mountings.pole_integrated") }</option>
                         <option value="2">{ tr("gldf.mountings.free_standing") }</option>
@@ -1337,7 +1337,7 @@ fn VariantMountingsEditor(idx: usize, mountings: Option<Mountings>) -> impl Into
                     {move || matches!(ground_mode.get(), 0 | 1).then(|| view! {
                         <>
                             <label>{ tr("gldf.mountings.pole_height_mm") }</label>
-                            <input type="number" min="0" prop:value=move || ground_pole_height.get().to_string() on:change=set_ground_height.clone() style="width: 100px;" />
+                            <input type="number" min="0" prop:value=move || ground_pole_height.get().to_string() on:change=set_ground_height style="width: 100px;" />
                         </>
                     })}
                 </div>
@@ -1376,9 +1376,7 @@ fn VariantProductSeriesEditor(
     use gldf_rs::gldf::LocaleFoo;
 
     let state = use_gldf();
-    let init: Vec<ProductSerie> = series
-        .map(|ps| ps.product_serie)
-        .unwrap_or_default();
+    let init: Vec<ProductSerie> = series.map(|ps| ps.product_serie).unwrap_or_default();
     let rows = RwSignal::new(init);
 
     let dispatch = move || {
@@ -1392,7 +1390,6 @@ fn VariantProductSeriesEditor(
     };
 
     let on_add = {
-        let dispatch = dispatch.clone();
         move |_| {
             rows.update(|rs| {
                 rs.push(ProductSerie {
@@ -1453,9 +1450,6 @@ fn VariantProductSeriesEditor(
                     let entries: Vec<_> = rs.iter().enumerate().map(|(row_idx, r)| {
                         let id_value = r.id.clone();
                         let name_value = r.name.clone().unwrap_or_default();
-                        let on_id = on_id.clone();
-                        let on_name = on_name.clone();
-                        let on_remove = on_remove.clone();
                         view! {
                             <div style="display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px;">
                                 <div style="display: flex; align-items: center; gap: 6px;">

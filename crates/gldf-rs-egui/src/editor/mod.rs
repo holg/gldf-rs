@@ -15,9 +15,9 @@ mod pages;
 mod wizard_modal;
 
 use eframe::egui;
+use gldf_rs::i18n::Translator;
 use gldf_rs_editor::{GldfAction, GldfState};
 use gldf_rs_i18n::GldfStaticTranslator;
-use gldf_rs::i18n::Translator;
 use std::path::PathBuf;
 
 pub use wizard_modal::WizardModal;
@@ -31,6 +31,7 @@ pub enum Page {
     LightSources,
     Emitters,
     Variants,
+    Validation,
     Batch,
 }
 
@@ -43,6 +44,7 @@ impl Page {
         Page::LightSources,
         Page::Emitters,
         Page::Variants,
+        Page::Validation,
         Page::Batch,
     ];
 
@@ -56,6 +58,7 @@ impl Page {
             Page::LightSources => "gldf.nav.light_sources",
             Page::Emitters => "gldf.nav.emitters",
             Page::Variants => "gldf.nav.variants",
+            Page::Validation => "gldf.nav.validation",
             Page::Batch => "gldf.nav.batch",
         }
     }
@@ -69,6 +72,7 @@ impl Page {
             Page::LightSources => "Light sources",
             Page::Emitters => "Emitters",
             Page::Variants => "Variants",
+            Page::Validation => "Validation",
             Page::Batch => "Batch convert",
         }
     }
@@ -109,6 +113,14 @@ pub struct GldfEditorApp {
     /// Batch-conversion page state (worker thread, rows, template).
     pub batch: crate::batch_app::BatchPanel,
 
+    /// Schema revision the Validation page checks against (rc-3 = the
+    /// published default; rc-4 previews PR #30).
+    pub validation_schema: gldf_rs::validation::GldfSchemaVersion,
+    /// Report for the current state, computed lazily by
+    /// [`Self::validation_report`] and dropped on every dispatch so
+    /// the page never shows stale findings.
+    pub validation_cache: Option<gldf_rs_editor::ValidationReport>,
+
     /// Self-test harness: when `GLDF_EDITOR_SHOT_DIR` is set, the app
     /// walks every page, saves a screenshot of each into that dir, and
     /// exits. Lets CI (or an agent) verify the UI renders without a
@@ -142,11 +154,15 @@ impl GldfEditorApp {
             rename_target: None,
             rename_buf: String::new(),
             batch: crate::batch_app::BatchPanel::default(),
-            autoshot: std::env::var("GLDF_EDITOR_SHOT_DIR").ok().map(|dir| AutoShot {
-                dir: PathBuf::from(dir),
-                page_idx: 0,
-                frames_on_page: 0,
-            }),
+            validation_schema: gldf_rs::validation::DEFAULT_VALIDATION_SCHEMA,
+            validation_cache: None,
+            autoshot: std::env::var("GLDF_EDITOR_SHOT_DIR")
+                .ok()
+                .map(|dir| AutoShot {
+                    dir: PathBuf::from(dir),
+                    page_idx: 0,
+                    frames_on_page: 0,
+                }),
         }
     }
 
@@ -155,18 +171,14 @@ impl GldfEditorApp {
     pub fn t(&self, key: &str) -> String {
         self.tr
             .t(key, &self.state.ui_language)
-            .unwrap_or_else(|| {
-                key.rsplit('.')
-                    .next()
-                    .unwrap_or(key)
-                    .replace('_', " ")
-            })
+            .unwrap_or_else(|| key.rsplit('.').next().unwrap_or(key).replace('_', " "))
     }
 
     /// Dispatch through the shared reducer; surface reducer errors in
     /// the status bar (same contract as the WASM banner).
     pub fn dispatch(&mut self, action: GldfAction) {
         self.state.apply(action);
+        self.validation_cache = None;
         if let Some(err) = self.state.last_error.clone() {
             self.status = Some((err, true));
         }
@@ -174,6 +186,25 @@ impl GldfEditorApp {
 
     pub fn info(&mut self, msg: impl Into<String>) {
         self.status = Some((msg.into(), false));
+    }
+
+    /// Validation report for the current state and schema. Computed on
+    /// first use and cached until the next dispatch or schema change —
+    /// the XSD pass costs a few ms, too much to redo every frame.
+    pub fn validation_report(&mut self) -> &gldf_rs_editor::ValidationReport {
+        let stale = self
+            .validation_cache
+            .as_ref()
+            .map(|r| r.schema != self.validation_schema)
+            .unwrap_or(true);
+        if stale {
+            self.validation_cache = Some(gldf_rs_editor::validation_report(
+                &self.state.product,
+                &self.state.embedded_files,
+                self.validation_schema,
+            ));
+        }
+        self.validation_cache.as_ref().unwrap()
     }
 
     fn open_dialog(&mut self) {
@@ -242,9 +273,11 @@ impl GldfEditorApp {
         } else {
             self.file_path.clone().unwrap()
         };
-        match self.state.save_to_buf().and_then(|bytes| {
-            std::fs::write(&path, bytes).map_err(anyhow::Error::from)
-        }) {
+        match self
+            .state
+            .save_to_buf()
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(anyhow::Error::from))
+        {
             Ok(()) => {
                 self.file_path = Some(path.clone());
                 self.state.is_modified = false;
@@ -338,10 +371,7 @@ impl GldfEditorApp {
                 .tr
                 .t(page.nav_key(), &self.state.ui_language)
                 .unwrap_or_else(|| page.fallback_label().to_string());
-            if ui
-                .selectable_label(self.page == *page, label)
-                .clicked()
-            {
+            if ui.selectable_label(self.page == *page, label).clicked() {
                 self.page = *page;
             }
         }
@@ -385,7 +415,7 @@ impl GldfEditorApp {
             i.raw
                 .dropped_files
                 .iter()
-                .filter_map(|f| f.path.clone())
+                .map(|f| f.path().to_path_buf())
                 .collect()
         });
         if paths.is_empty() {
@@ -398,9 +428,7 @@ impl GldfEditorApp {
         for path in paths {
             match std::fs::read(&path) {
                 Ok(bytes) => self.add_file_bytes(&path, bytes),
-                Err(e) => {
-                    self.status = Some((format!("read {}: {}", path.display(), e), true))
-                }
+                Err(e) => self.status = Some((format!("read {}: {}", path.display(), e), true)),
             }
         }
     }
@@ -481,16 +509,10 @@ impl GldfEditorApp {
                 .unwrap_or_else(|| "wizard".to_string());
             let _ = std::fs::create_dir_all(&a.dir);
             let path = a.dir.join(format!("{:02}-{}.png", a.page_idx, label));
-            let px: Vec<u8> = image
-                .pixels
-                .iter()
-                .flat_map(|c| c.to_array())
-                .collect();
-            if let Some(img) = image::RgbaImage::from_raw(
-                image.width() as u32,
-                image.height() as u32,
-                px,
-            ) {
+            let px: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+            if let Some(img) =
+                image::RgbaImage::from_raw(image.width() as u32, image.height() as u32, px)
+            {
                 let _ = img.save(&path);
                 eprintln!("autoshot: {}", path.display());
             }
@@ -526,7 +548,12 @@ impl GldfEditorApp {
 }
 
 impl eframe::App for GldfEditorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // egui 0.36: the app draws into a root `Ui`; panels attach to it
+        // instead of the context. Everything below that needs the
+        // context (input, viewport commands, modals) borrows it here.
+        let ctx = ui.ctx().clone();
+        let ctx = &ctx;
         self.handle_dropped(ctx);
         self.autoshot_tick(ctx);
 
@@ -538,26 +565,26 @@ impl eframe::App for GldfEditorApp {
             }
         }
 
-        egui::TopBottomPanel::top("editor-top").show(ctx, |ui| {
+        egui::Panel::top("editor-top").show(ui, |ui| {
             ui.add_space(4.0);
             self.toolbar(ui);
             ui.add_space(4.0);
         });
 
-        egui::TopBottomPanel::bottom("editor-status").show(ctx, |ui| {
+        egui::Panel::bottom("editor-status").show(ui, |ui| {
             ui.add_space(2.0);
             self.status_bar(ui);
             ui.add_space(2.0);
         });
 
-        egui::SidePanel::left("editor-nav")
+        egui::Panel::left("editor-nav")
             .resizable(false)
-            .default_width(150.0)
-            .show(ctx, |ui| {
+            .default_size(150.0)
+            .show(ui, |ui| {
                 self.sidebar(ui);
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| match self.page {
                 Page::Overview => pages::overview(self, ui),
                 Page::Header => pages::header(self, ui),
@@ -566,6 +593,7 @@ impl eframe::App for GldfEditorApp {
                 Page::LightSources => pages::light_sources(self, ui),
                 Page::Emitters => pages::emitters(self, ui),
                 Page::Variants => pages::variants(self, ui),
+                Page::Validation => pages::validation(self, ui),
                 Page::Batch => {
                     let heading = self
                         .tr

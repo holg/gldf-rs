@@ -40,17 +40,20 @@ fn normalize_xs_datetime(raw: &str) -> String {
         // also gets the seconds insertion — that variant doesn't
         // happen via datetime-local but a user typing manually might
         // produce it.
-        let time_head = time_part
-            .split(['Z', '+', '-'])
-            .next()
-            .unwrap_or(time_part);
+        let time_head = time_part.split(['Z', '+', '-']).next().unwrap_or(time_part);
         if time_head.matches(':').count() >= 2 {
             return s.to_string();
         }
         // Insert `:00` BEFORE the timezone suffix if present, else
         // at the end.
         if let Some(tz_at) = time_part.find(['Z', '+', '-']) {
-            return format!("{}T{}{}:00{}", s.split_once('T').unwrap().0, &time_part[..tz_at], "", &time_part[tz_at..]);
+            return format!(
+                "{}T{}{}:00{}",
+                s.split_once('T').unwrap().0,
+                &time_part[..tz_at],
+                "",
+                &time_part[tz_at..]
+            );
         }
         return format!("{}:00", s);
     }

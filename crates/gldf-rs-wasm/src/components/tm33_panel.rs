@@ -56,9 +56,7 @@ pub fn Tm33Panel(bytes: Vec<u8>) -> impl IntoView {
         .first()
         .and_then(|e| e.spectral_distribution.as_ref())
         .and_then(|spd| {
-            if spd.wavelengths.is_empty()
-                || spd.wavelengths.len() != spd.values.len()
-            {
+            if spd.wavelengths.is_empty() || spd.wavelengths.len() != spd.values.len() {
                 return None;
             }
             let mut buf = String::with_capacity(spd.wavelengths.len() * 16);
@@ -120,8 +118,7 @@ pub fn is_tm33(filename: &str, content_type: &str, sniff: &[u8]) -> bool {
     // file — including TM-33-23. The bytes-sniff disambiguates TM-33
     // from plain IES-XML.
     let head = std::str::from_utf8(&sniff[..sniff.len().min(2048)]).unwrap_or("");
-    let has_tm33_root =
-        head.contains("IESTM33-22") || head.contains("LuminaireOpticalData");
+    let has_tm33_root = head.contains("IESTM33-22") || head.contains("LuminaireOpticalData");
     if content_type.eq_ignore_ascii_case("ldc/iesxml") && has_tm33_root {
         return true;
     }

@@ -54,8 +54,7 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                         Ok(bytes) => {
                             let lower = filename.to_lowercase();
                             let is_l3d = lower.ends_with(".l3d");
-                            let is_photometric =
-                                lower.ends_with(".ldt") || lower.ends_with(".ies");
+                            let is_photometric = lower.ends_with(".ldt") || lower.ends_with(".ies");
                             let is_spectrum = lower.ends_with(".spd");
                             state.update(|s| {
                                 if is_l3d {
@@ -93,7 +92,7 @@ pub fn FilesListPage(#[prop(default = false)] editable: bool) -> impl IntoView {
                                     <input
                                         type="file"
                                         multiple=true
-                                        on:change=on_add_file.clone()
+                                        on:change=on_add_file
                                         data-testid="files-add-input"
                                         style="font-size: 12px;"
                                     />
@@ -166,10 +165,12 @@ fn FileRow(
     let on_rename_id: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = id_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameFile {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameFile {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
     let file_name = file.file_name.clone();
@@ -354,7 +355,9 @@ fn ActionCellButtons(
 #[component]
 fn TextField(value: RwSignal<String>) -> impl IntoView {
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         value.set(v);
     };
     view! {

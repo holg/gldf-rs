@@ -61,9 +61,7 @@ fn check_field(out: &mut Vec<Violation>, path: &str, field_name: &'static str, v
             // Build a short hint: first 3 canonical values + ellipsis when
             // the set is bigger than that. Long sets (IP codes, application
             // strings) get just a count.
-            let hint = if set.len() <= 3 {
-                format!("expected one of: {}", set.join(", "))
-            } else if set.len() <= 8 {
+            let hint = if set.len() <= 8 {
                 format!("expected one of: {}", set.join(", "))
             } else {
                 format!(
@@ -436,11 +434,13 @@ mod tests {
     fn invalid_ip_code_is_flagged() {
         let mut product = GldfProduct::default();
         let mut meta = crate::gldf::product_definitions::ProductMetaData::default();
-        let mut attrs = DescriptiveAttributes::default();
-        attrs.electrical = Some(Electrical {
-            ingress_protection_ip_code: Some("IP99".to_string()),
+        let attrs = DescriptiveAttributes {
+            electrical: Some(Electrical {
+                ingress_protection_ip_code: Some("IP99".to_string()),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
         meta.descriptive_attributes = Some(attrs);
         product.product_definitions.product_meta_data = Some(meta);
 
@@ -455,17 +455,19 @@ mod tests {
     fn multiple_violations_accumulate() {
         let mut product = GldfProduct::default();
         let mut meta = crate::gldf::product_definitions::ProductMetaData::default();
-        let mut attrs = DescriptiveAttributes::default();
-        attrs.marketing = Some(Marketing {
-            applications: Some(Applications {
-                application: vec![
-                    "Bogus".to_string(),            // non-canonical
-                    "Interior: Office".to_string(), // canonical
-                    "Another fake".to_string(),     // non-canonical
-                ],
+        let attrs = DescriptiveAttributes {
+            marketing: Some(Marketing {
+                applications: Some(Applications {
+                    application: vec![
+                        "Bogus".to_string(),            // non-canonical
+                        "Interior: Office".to_string(), // canonical
+                        "Another fake".to_string(),     // non-canonical
+                    ],
+                }),
+                ..Default::default()
             }),
             ..Default::default()
-        });
+        };
         meta.descriptive_attributes = Some(attrs);
         product.product_definitions.product_meta_data = Some(meta);
 

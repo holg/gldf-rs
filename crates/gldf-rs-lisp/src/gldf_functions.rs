@@ -30,8 +30,7 @@ fn gldf_load(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     let bytes = match std::fs::read(&path) {
         Ok(b) => b,
         Err(e) => {
-            ctx.output
-                .push(format!("(GLDF-LOAD {path:?}) read: {e}\n"));
+            ctx.output.push(format!("(GLDF-LOAD {path:?}) read: {e}\n"));
             return Expr::Nil;
         }
     };
@@ -76,7 +75,7 @@ fn gldf_variant_names(ctx: &mut ForeignContext, _args: &[Expr]) -> Expr {
                 .collect()
         })
         .unwrap_or_default();
-    Expr::List(names)
+    Expr::list(names)
 }
 
 /// `(GLDF-VARIANT-SET <index>)` — change the active variant index.
@@ -131,5 +130,5 @@ fn gldf_emitter_ids(ctx: &mut ForeignContext, _args: &[Expr]) -> Expr {
             }
         }
     }
-    Expr::List(ids)
+    Expr::list(ids)
 }

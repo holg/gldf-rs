@@ -15,7 +15,12 @@ pub fn EmergencyEditorPage() -> impl IntoView {
     let on_type = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::SetDedicatedEmergencyLightingType(scp, optional_string(v))));
+        state.update(|s| {
+            s.apply(GldfAction::SetDedicatedEmergencyLightingType(
+                scp,
+                optional_string(v),
+            ))
+        });
     };
     let on_add_flux = move |_| {
         let scp = scope.get();

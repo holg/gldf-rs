@@ -3,11 +3,15 @@
 
 use anyhow::{Context, Result};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use gldf_rs::validation::{GldfSchemaVersion, DEFAULT_VALIDATION_SCHEMA};
 use gldf_rs::EditableGldf;
+use gldf_rs_editor::{validation_report, ValidationReport};
 use gldf_rs_editor::{GldfAction, GldfState, LangStore};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
@@ -34,6 +38,7 @@ pub enum Section {
     Variants,
     Files,
     Linkage,
+    Validation,
 }
 
 impl Section {
@@ -47,6 +52,7 @@ impl Section {
         Self::Variants,
         Self::Files,
         Self::Linkage,
+        Self::Validation,
     ];
 
     pub fn label(self) -> &'static str {
@@ -60,12 +66,15 @@ impl Section {
             Self::Variants => "Variants",
             Self::Files => "Files",
             Self::Linkage => "Linkage Map",
+            Self::Validation => "Validation",
         }
     }
 }
 
 /// What modal is on top right now (or `None` for the regular
 /// sidebar/detail view).
+// Transient UI value, one at a time; boxing would change the public enum.
+#[allow(clippy::large_enum_variant)]
 pub enum Modal {
     Wizard(WizardOverlay),
     SavePrompt {
@@ -109,6 +118,18 @@ pub struct App {
     /// Last status line message (info, warning, error). Cleared on the
     /// next event tick.
     pub status: Option<String>,
+    /// Schema revision the Validation section checks against; `t`
+    /// toggles rc-3 ↔ rc-4 while that section is active.
+    pub validation_schema: GldfSchemaVersion,
+    /// Report for the current state, refreshed after every key event
+    /// while the Validation section is showing (`None` until then).
+    pub validation: Option<ValidationReport>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl App {
@@ -124,6 +145,8 @@ impl App {
             orbit: OrbitAngles::default(),
             running: true,
             status: None,
+            validation_schema: DEFAULT_VALIDATION_SCHEMA,
+            validation: None,
         }
     }
 
@@ -170,10 +193,8 @@ impl App {
     /// `EditableGldf::from_gldf` which is the same path the WASM editor
     /// uses — every frontend goes through the same loader.
     pub fn load_file(&mut self, path: &Path) -> Result<()> {
-        let editable = EditableGldf::from_gldf(
-            path.to_str().context("non-UTF-8 path")?,
-        )
-        .with_context(|| format!("parse {}", path.display()))?;
+        let editable = EditableGldf::from_gldf(path.to_str().context("non-UTF-8 path")?)
+            .with_context(|| format!("parse {}", path.display()))?;
         self.state.apply(GldfAction::LoadWithFiles {
             product: editable.product,
             embedded_files: editable.embedded_files,
@@ -220,10 +241,7 @@ impl App {
         match ActionMenu::new(section, row, &self.state) {
             Some(menu) => self.modal = Some(Modal::Menu(menu)),
             None => {
-                self.status = Some(format!(
-                    "Nothing editable in {} yet",
-                    section.label()
-                ));
+                self.status = Some(format!("Nothing editable in {} yet", section.label()));
             }
         }
     }
@@ -303,22 +321,45 @@ impl App {
         result
     }
 
-    fn run_loop(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    ) -> Result<()> {
+    fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         while self.running {
-            terminal.draw(|frame| ui::draw(frame, self)).context("draw")?;
+            terminal
+                .draw(|frame| ui::draw(frame, self))
+                .context("draw")?;
             if event::poll(Duration::from_millis(250)).context("poll")? {
                 match event::read().context("read")? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => {
                         self.on_key(key.code, key.modifiers);
+                        self.refresh_validation();
                     }
                     _ => {}
                 }
             }
         }
         Ok(())
+    }
+
+    /// Recompute the validation report when the Validation section is
+    /// showing. Runs after every key event: the XSD pass is a few ms,
+    /// cheap next to a keypress, and keeps the view in sync with edits
+    /// made through the modals without a separate dirty flag.
+    fn refresh_validation(&mut self) {
+        if !self.has_content || !matches!(self.current_section(), Section::Validation) {
+            return;
+        }
+        let stale = self
+            .validation
+            .as_ref()
+            .map(|r| r.schema != self.validation_schema)
+            .unwrap_or(true)
+            || self.modal.is_none();
+        if stale {
+            self.validation = Some(validation_report(
+                &self.state.product,
+                &self.state.embedded_files,
+                self.validation_schema,
+            ));
+        }
     }
 
     fn on_key(&mut self, key: KeyCode, mods: KeyModifiers) {
@@ -352,6 +393,21 @@ impl App {
 
         if !self.has_content {
             // Welcome screen: only N / Ctrl-S / q are meaningful.
+            return;
+        }
+
+        // `t` flips the XSD schema revision on the Validation section.
+        if matches!(key, KeyCode::Char('t') | KeyCode::Char('T'))
+            && matches!(self.current_section(), Section::Validation)
+        {
+            self.validation_schema = match self.validation_schema {
+                GldfSchemaVersion::Rc3 => GldfSchemaVersion::Rc4,
+                GldfSchemaVersion::Rc4 => GldfSchemaVersion::Rc3,
+            };
+            self.status = Some(format!(
+                "Validating against {}",
+                ValidationReport::schema_label(self.validation_schema)
+            ));
             return;
         }
 
@@ -422,17 +478,13 @@ impl App {
                 .light_sources
                 .as_ref()
                 .and_then(|l| l.fixed_light_source.get(row))
-                .map(|ls| gldf_rs_editor::GldfAction::RemoveLightSource {
-                    id: ls.id.clone(),
-                }),
+                .map(|ls| gldf_rs_editor::GldfAction::RemoveLightSource { id: ls.id.clone() }),
             Section::Emitters => p
                 .general_definitions
                 .emitters
                 .as_ref()
                 .and_then(|e| e.emitter.get(row))
-                .map(|em| gldf_rs_editor::GldfAction::RemoveEmitter {
-                    id: em.id.clone(),
-                }),
+                .map(|em| gldf_rs_editor::GldfAction::RemoveEmitter { id: em.id.clone() }),
             Section::Variants => p
                 .product_definitions
                 .variants
@@ -468,28 +520,29 @@ impl App {
         // dispatch without fighting the borrow checker.
         let modal = self.modal.take().unwrap();
         match modal {
-            Modal::Wizard(mut overlay) => match overlay.on_key(crossterm::event::KeyEvent::new(key, mods)) {
-                WizardOutcome::Continue => {
-                    self.modal = Some(Modal::Wizard(overlay));
-                }
-                WizardOutcome::Cancelled => {
-                    self.status = Some("Wizard cancelled".to_string());
-                }
-                WizardOutcome::Finished(draft) => match wizard::finish(draft) {
-                    Ok(state) => {
-                        self.state = state;
-                        self.has_content = true;
-                        self.selected = 0;
-                        self.status = Some(
-                            "Wizard finished. Ctrl-S to save, q to quit.".to_string(),
-                        );
-                    }
-                    Err(err) => {
-                        overlay.message = Some(format!("apply_wizard failed: {}", err));
+            Modal::Wizard(mut overlay) => {
+                match overlay.on_key(crossterm::event::KeyEvent::new(key, mods)) {
+                    WizardOutcome::Continue => {
                         self.modal = Some(Modal::Wizard(overlay));
                     }
-                },
-            },
+                    WizardOutcome::Cancelled => {
+                        self.status = Some("Wizard cancelled".to_string());
+                    }
+                    WizardOutcome::Finished(draft) => match wizard::finish(draft) {
+                        Ok(state) => {
+                            self.state = state;
+                            self.has_content = true;
+                            self.selected = 0;
+                            self.status =
+                                Some("Wizard finished. Ctrl-S to save, q to quit.".to_string());
+                        }
+                        Err(err) => {
+                            overlay.message = Some(format!("apply_wizard failed: {}", err));
+                            self.modal = Some(Modal::Wizard(overlay));
+                        }
+                    },
+                }
+            }
             Modal::SavePrompt {
                 mut buffer,
                 quit_after,
@@ -563,9 +616,7 @@ impl App {
                         self.status = Some("Quit cancelled".to_string());
                     }
                     KeyCode::Left | KeyCode::Char('h') => {
-                        if selected > 0 {
-                            selected -= 1;
-                        }
+                        selected = selected.saturating_sub(1);
                         self.modal = Some(Modal::QuitConfirm { selected });
                     }
                     KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {

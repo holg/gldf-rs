@@ -3,14 +3,14 @@
 //! Two complementary walkers, both producing structured findings against
 //! a parsed [`crate::gldf::GldfProduct`]:
 //!
-//! - **[`engine`]** — schema-rule validation (required fields, reference
+//! - **[`engine`](crate::validation::engine)** — schema-rule validation (required fields, reference
 //!   integrity, data consistency). Reports [`ValidationError`] with a
 //!   [`ValidationLevel`] severity. Predates the rc.4 work.
-//! - **[`canonical`]** — closed-XSD-enum value validation. Walks every
+//! - **[`canonical`](crate::validation::canonical)** — closed-XSD-enum value validation. Walks every
 //!   field bound to an `<xs:enumeration>` and reports any value outside
-//!   the canonical set as a [`Violation`]. Powers the viewer's
+//!   the canonical set as a [`Violation`](crate::validation::Violation). Powers the viewer's
 //!   ⚠ banner and is callable from any consumer (CLI, FFI, server).
-//! - **[`xsd_enums`]** — the canonical-values tables themselves
+//! - **[`xsd_enums`](crate::validation::xsd_enums)** — the canonical-values tables themselves
 //!   (IK ratings, IP codes, hazardous-area enums, etc.). Pure data,
 //!   shared by `canonical` and the editor's dropdown widgets.
 //!
@@ -43,6 +43,6 @@ pub use xsd_schema::{
     validate_gldf_archive as xsd_validate_gldf_archive,
     validate_gldf_archive_with_schema as xsd_validate_gldf_archive_with_schema,
     validate_product_xml as xsd_validate_product_xml,
-    validate_product_xml_with_schema as xsd_validate_product_xml_with_schema,
-    DEFAULT_VALIDATION_SCHEMA, GldfSchemaVersion, XsdError, XsdFinding, XsdResult,
+    validate_product_xml_with_schema as xsd_validate_product_xml_with_schema, GldfSchemaVersion,
+    XsdError, XsdFinding, XsdResult, DEFAULT_VALIDATION_SCHEMA,
 };

@@ -120,9 +120,9 @@ fn resolve_variant_ldt(
     let mappings = gldf_rs::mapping::get_l3d_ldt_mappings(product);
     let mapping = mappings.iter().find(|m| m.variant_id == variant.id)?;
     let ldt_file_id = mapping.ldt_file_id.as_ref()?;
-    let bytes = embedded.get(ldt_file_id).or_else(|| {
-        mapping.ldt_file_name.as_ref().and_then(|n| embedded.get(n))
-    })?;
+    let bytes = embedded
+        .get(ldt_file_id)
+        .or_else(|| mapping.ldt_file_name.as_ref().and_then(|n| embedded.get(n)))?;
     let text = String::from_utf8_lossy(bytes).into_owned();
     eulumdat::Eulumdat::parse(&text).ok()
 }
@@ -168,7 +168,11 @@ fn resolve_mounting(variant: &Variant) -> MountingConfig {
             .pole_top
             .as_ref()
             .and_then(PoleTop::get_pole_height)
-            .or_else(|| g.pole_integrated.as_ref().and_then(PoleIntegrated::get_pole_height));
+            .or_else(|| {
+                g.pole_integrated
+                    .as_ref()
+                    .and_then(PoleIntegrated::get_pole_height)
+            });
         MountingConfig {
             mounting_type: Some("ground".into()),
             pole_height_mm: pole,

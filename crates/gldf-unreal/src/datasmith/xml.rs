@@ -57,11 +57,7 @@ fn write_static_mesh(out: &mut String, m: &StaticMesh, depth: usize) {
         xml_escape(&m.name),
         xml_escape(&m.label),
     );
-    let _ = writeln!(
-        out,
-        "{ind}  <file path=\"{}\"/>",
-        xml_escape(&m.file_path)
-    );
+    let _ = writeln!(out, "{ind}  <file path=\"{}\"/>", xml_escape(&m.file_path));
     let _ = writeln!(out, "{ind}</StaticMesh>");
 }
 
@@ -122,10 +118,7 @@ fn write_actor_light(out: &mut String, l: &ActorLight, depth: usize) {
     }
     if let Some(ref ies) = l.ies_file {
         let _ = writeln!(out, "{ind}  <Ies file=\"{}\"/>", xml_escape(ies));
-        let _ = writeln!(
-            out,
-            "{ind}  <IesBrightnessScale>1.0</IesBrightnessScale>"
-        );
+        let _ = writeln!(out, "{ind}  <IesBrightnessScale>1.0</IesBrightnessScale>");
     }
     let _ = writeln!(out, "{ind}</ActorLight>");
 }

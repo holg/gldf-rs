@@ -345,7 +345,10 @@ fn gldf_add_variant(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     // Touch the second arg through expr_to_usize/str so a future
     // (id name) form is forward-compatible; ignored today.
     let _ = args.get(1).and_then(expr_to_usize);
-    emit_action(ctx, json!({ "action": "AddVariantSimple", "data": { "name": name } }))
+    emit_action(
+        ctx,
+        json!({ "action": "AddVariantSimple", "data": { "name": name } }),
+    )
 }
 
 /// `(GLDF-ADD-LIGHTSOURCE id name cct [power])` → `AddFixedLightSource`
@@ -380,7 +383,10 @@ fn gldf_add_lightsource(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     if let Some(cct) = cct {
         ls["ColorInformation"] = json!({ "CorrelatedColorTemperature": cct });
     }
-    emit_action(ctx, json!({ "action": "AddFixedLightSource", "data": { "payload": ls } }))
+    emit_action(
+        ctx,
+        json!({ "action": "AddFixedLightSource", "data": { "payload": ls } }),
+    )
 }
 
 /// `(GLDF-ADD-EMITTER photometry-id light-source-id [child-name] [lumens])`
@@ -461,7 +467,10 @@ fn gldf_variant_geometry(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     let mut i = 0;
     while i < rest.len() {
         let emitter_id = rest[i].clone();
-        let external_name = rest.get(i + 1).cloned().unwrap_or_else(|| emitter_id.clone());
+        let external_name = rest
+            .get(i + 1)
+            .cloned()
+            .unwrap_or_else(|| emitter_id.clone());
         bindings.push(json!({ "emitter_id": emitter_id, "external_name": external_name }));
         i += 2;
     }
@@ -720,7 +729,12 @@ fn gldf_sensor_chars(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
 /// real catalogues.
 fn gldf_variant_gtin(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     let Some(index) = args.first().and_then(expr_to_usize) else {
-        return arg_error(ctx.output, "GLDF-VARIANT-GTIN", "<variant-index> <gtin>", args);
+        return arg_error(
+            ctx.output,
+            "GLDF-VARIANT-GTIN",
+            "<variant-index> <gtin>",
+            args,
+        );
     };
     let gtin = args.get(1).and_then(expr_to_string);
     emit_action(
@@ -738,13 +752,22 @@ fn gldf_size(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     let width = args.get(2).and_then(expr_to_f32).map(|v| v as i64);
     let height = args.get(3).and_then(expr_to_f32).map(|v| v as i64);
     if let Some(l) = length {
-        let _ = emit_action(ctx, json!({ "action": "SetMechanicalLength", "data": [scope, l] }));
+        let _ = emit_action(
+            ctx,
+            json!({ "action": "SetMechanicalLength", "data": [scope, l] }),
+        );
     }
     if let Some(w) = width {
-        let _ = emit_action(ctx, json!({ "action": "SetMechanicalWidth", "data": [scope, w] }));
+        let _ = emit_action(
+            ctx,
+            json!({ "action": "SetMechanicalWidth", "data": [scope, w] }),
+        );
     }
     if let Some(h) = height {
-        let _ = emit_action(ctx, json!({ "action": "SetMechanicalHeight", "data": [scope, h] }));
+        let _ = emit_action(
+            ctx,
+            json!({ "action": "SetMechanicalHeight", "data": [scope, h] }),
+        );
     }
     Expr::T
 }
@@ -846,15 +869,13 @@ mod tests {
 
     #[test]
     fn full_build_script_logs_in_order() {
-        let log = run(
-            r#"
+        let log = run(r#"
             (NEEDS-FILES "middle.ldt" "example_007.l3d")
             (GLDF-NEW "Prolumia" "Lumina Pro")
             (GLDF-ADD-PHOTOMETRY "middle.ldt")
             (GLDF-SET-GEOMETRY "example_007.l3d")
             (GLDF-ADD-VARIANT "RAL6018")
-            "#,
-        );
+            "#);
         // NeedFiles + (Manufacturer + Name) + Photometry + Geometry + Variant
         assert_eq!(log.len(), 6);
         assert!(matches!(log[0], SceneCommand::NeedFiles { .. }));

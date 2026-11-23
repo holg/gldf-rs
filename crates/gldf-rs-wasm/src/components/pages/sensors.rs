@@ -11,10 +11,10 @@
 use crate::components::IdRenameChip;
 use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
+use eulumdat::diagram::SvgTheme;
+use eulumdat::sensor::{Motion, Quality, SensorFile, SensorWarning};
 use gldf_rs::gldf::general_definitions::sensors::Sensor;
-use gldf_rs::validation::xsd_enums::{
-    DETECTION_METHODS, DETECTOR_CHARACTERISTICS, DETECTOR_TYPES,
-};
+use gldf_rs::validation::xsd_enums::{DETECTION_METHODS, DETECTOR_CHARACTERISTICS, DETECTOR_TYPES};
 use leptos::prelude::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -113,10 +113,12 @@ fn SensorRow(
     let on_rename_id: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = id_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameSensor {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameSensor {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
     let current_file_id = sensor
@@ -124,6 +126,7 @@ fn SensorRow(
         .as_ref()
         .map(|r| r.file_id.clone())
         .unwrap_or_default();
+    let detection_file_id = current_file_id.clone();
     let chars: Vec<String> = sensor
         .detector_characteristics
         .as_ref()
@@ -145,8 +148,7 @@ fn SensorRow(
             "gldf.sensors.remove_confirm",
             &state.with(|s| s.ui_language.clone()),
         );
-        if crate::components::edit_util::confirm(&msg)
-        {
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveSensor { index: idx }));
         }
     };
@@ -154,7 +156,12 @@ fn SensorRow(
     let on_file_change = move |e: crate::components::edit_util::EditEvent| {
         let v = crate::components::edit_util::event_value(&e).unwrap_or_default();
         let file_id = if v.is_empty() { None } else { Some(v) };
-        state.update(|s| s.apply(GldfAction::SetSensorFileId { index: idx, file_id }));
+        state.update(|s| {
+            s.apply(GldfAction::SetSensorFileId {
+                index: idx,
+                file_id,
+            })
+        });
     };
 
     view! {
@@ -193,6 +200,10 @@ fn SensorRow(
                 }}
                 <span class="form-help">{ tr("gldf.sensors.sensor_file_hint") }</span>
             </div>
+
+            {(!detection_file_id.is_empty()).then(|| view! {
+                <SensorDetection file_id=detection_file_id.clone() />
+            })}
 
             <EnumGrid
                 title=tr("gldf.sensors.detector_characteristic")
@@ -283,7 +294,6 @@ fn EnumGrid(
     let current_for_change = current.clone();
     let make_handler = move |value: &'static str| {
         let current_now = current_for_change.clone();
-        let on_change = on_change.clone();
         move |_e: crate::components::edit_util::EditEvent| {
             let target = value.to_string();
             let mut next = current_now.clone();
@@ -302,7 +312,7 @@ fn EnumGrid(
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px;">
                 {values.iter().map(|v| {
                     let is_selected = selected.contains(*v);
-                    let handler = make_handler(*v);
+                    let handler = make_handler(v);
                     view! {
                         <label class="application-checkbox-row">
                             <input type="checkbox" prop:checked=is_selected on:change=handler />
@@ -324,4 +334,208 @@ fn EnumGrid(
             } else { ().into_any() }}
         </div>
     }.into_any()
+}
+
+/// Parsed sensor file; equal only to itself (re-parsed when the bytes change).
+#[derive(Clone)]
+struct ParsedSensor(Option<Result<Arc<SensorFile>, String>>);
+
+impl PartialEq for ParsedSensor {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (None, None) => true,
+            (Some(Ok(a)), Some(Ok(b))) => Arc::ptr_eq(a, b),
+            (Some(Err(a)), Some(Err(b))) => a == b,
+            _ => false,
+        }
+    }
+}
+
+/// Cheap fingerprint of the referenced file (length, FNV-1a hash, content
+/// type), so editing other parts of the GLDF does not re-parse it.
+fn file_fingerprint(s: &crate::state::GldfState, file_id: &str) -> Option<(usize, u64, String)> {
+    let bytes = s.embedded_files.get(file_id)?;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    let ct = s
+        .product
+        .general_definitions
+        .files
+        .file
+        .iter()
+        .find(|f| f.id == file_id)
+        .map(|f| f.content_type.clone())
+        .unwrap_or_default();
+    Some((bytes.len(), h, ct))
+}
+
+fn motion_key(m: Motion) -> &'static str {
+    match m {
+        Motion::Tangential => "gldf.sensors.motion_tangential",
+        Motion::Radial => "gldf.sensors.motion_radial",
+        Motion::Presence => "gldf.sensors.motion_presence",
+    }
+}
+
+fn quality_key(q: Quality) -> &'static str {
+    match q {
+        Quality::Measured => "gldf.sensors.detection_q_measured",
+        Quality::Interpolated => "gldf.sensors.detection_q_interpolated",
+        Quality::Extrapolated => "gldf.sensors.detection_q_extrapolated",
+    }
+}
+
+/// Detection areas of the referenced sensor file (sensor LDT or SensXML),
+/// computed with `eulumdat::sensor`: plan view and one row per motion type
+/// at an adjustable height.
+#[component]
+fn SensorDetection(file_id: String) -> impl IntoView {
+    let state = use_gldf();
+    let lang = move || state.with(|s| s.ui_language.clone());
+    let tr = move |key: &str| ui_t(key, &lang());
+
+    let fid = file_id.clone();
+    let fingerprint = Memo::new(move |_| state.with(|s| file_fingerprint(s, &fid)));
+    let fid = file_id.clone();
+    let parsed = Memo::new(move |_| {
+        let Some((_, _, ct)) = fingerprint.get() else {
+            return ParsedSensor(None);
+        };
+        let res = state.with_untracked(|s| {
+            s.embedded_files
+                .get(&fid)
+                .map(|bytes| SensorFile::from_bytes(bytes, &ct).map(Arc::new))
+        });
+        ParsedSensor(res)
+    });
+    let height: RwSignal<Option<f64>> = RwSignal::new(None);
+    let planning = RwSignal::new(false);
+
+    view! {
+        <div class="sensor-detection" style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+            <h4 style="margin: 0 0 6px;">{ move || tr("gldf.sensors.detection_title") }</h4>
+            {move || match parsed.get().0 {
+                None => view! {
+                    <p class="form-help">{ tr("gldf.sensors.detection_no_bytes") }</p>
+                }.into_any(),
+                Some(Err(e)) => view! {
+                    <p style="color: var(--accent-orange);">{ tr("gldf.sensors.detection_error").replace("{err}", &e) }</p>
+                }.into_any(),
+                Some(Ok(file)) => {
+                    let is_xml = file.is_sensxml();
+                    let default_h = file.default_height();
+                    let measured = file.measured_heights();
+                    let mut head = vec![file.kind_label().to_string()];
+                    let name = file.name();
+                    if !name.is_empty() {
+                        head.push(name);
+                    }
+                    if let Some(m) = file.measurement_type() {
+                        head.push(tr("gldf.sensors.detection_measurement").replace("{m}", &m));
+                    }
+                    let warnings: Vec<String> = file
+                        .warnings()
+                        .into_iter()
+                        .map(|w| match w {
+                            SensorWarning::ImplausibleRange { max } => tr("gldf.sensors.detection_implausible")
+                                .replace("{max}", &format!("{max:.0}")),
+                            SensorWarning::NoSensorParameters => tr("gldf.sensors.detection_no_params"),
+                            SensorWarning::Reader(s) => s,
+                        })
+                        .collect();
+                    let h_now = move || height.get().unwrap_or(default_h);
+                    let f_svg = file.clone();
+                    let svg = move || {
+                        let l = lang();
+                        f_svg.plan_svg_with_labels(h_now(), planning.get(), 420.0, &SvgTheme::light(), &|m| {
+                            ui_t(motion_key(m), &l)
+                        })
+                    };
+                    let f_rows = file.clone();
+                    view! {
+                        <p class="form-help" style="margin: 0 0 6px;">{ head.join(" · ") }</p>
+                        {warnings.into_iter().map(|w| view! {
+                            <p style="color: var(--accent-orange); margin: 0 0 6px;">{ format!("⚠ {w}") }</p>
+                        }).collect::<Vec<_>>()}
+                        <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                            <label>
+                                { if is_xml { tr("gldf.sensors.detection_height_xml") } else { tr("gldf.sensors.detection_height_ldt") } }
+                                " "
+                                <input
+                                    type="number" step="0.1" min="0.3" max="40"
+                                    style="width: 80px;"
+                                    data-testid="sensor-height"
+                                    prop:value=move || format!("{:.2}", h_now())
+                                    on:change=move |e| {
+                                        if let Ok(v) = event_target_value(&e).trim().parse::<f64>() {
+                                            if v > 0.0 { height.set(Some(v)); }
+                                        }
+                                    }
+                                />
+                                " m"
+                            </label>
+                            {(!measured.is_empty()).then(|| {
+                                let list = measured.iter().map(|h| format!("{h:.1}")).collect::<Vec<_>>().join(" / ");
+                                view! { <span class="form-help">{ format!("{} {list} m", tr("gldf.sensors.detection_measured_heights")) }</span> }
+                            })}
+                            {is_xml.then(|| view! {
+                                <label>
+                                    <input type="checkbox"
+                                        prop:checked=move || planning.get()
+                                        on:change=move |e| planning.set(event_target_checked(&e)) />
+                                    " " { tr("gldf.sensors.detection_planning") }
+                                </label>
+                            })}
+                        </div>
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px;">
+                            <div style="background: #fff; border-radius: 6px; width: 420px; max-width: 100%;" inner_html=svg />
+                            <table class="data-table" style="border-collapse: collapse; font-size: 13px;">
+                                <thead><tr>
+                                    <th style="text-align: left; padding: 3px 8px;">{ tr("gldf.sensors.detection_motion") }</th>
+                                    <th style="text-align: right; padding: 3px 8px;">{ tr("gldf.sensors.detection_max_range") }</th>
+                                    <th style="text-align: right; padding: 3px 8px;">{ tr("gldf.sensors.detection_area") }</th>
+                                    <th style="text-align: right; padding: 3px 8px;">{ tr("gldf.sensors.detection_diameter") }</th>
+                                    {is_xml.then(|| view! { <th style="text-align: left; padding: 3px 8px;">{ tr("gldf.sensors.detection_quality") }</th> })}
+                                </tr></thead>
+                                <tbody>
+                                    {move || {
+                                        let l = lang();
+                                        f_rows.areas(h_now(), planning.get()).into_iter().map(|a| {
+                                            let label = ui_t(motion_key(a.motion), &l);
+                                            let quality = a.quality.map(|q| ui_t(quality_key(q), &l)).unwrap_or_default();
+                                            if a.detected() {
+                                                view! {
+                                                    <tr>
+                                                        <td style="padding: 3px 8px;">{ label }</td>
+                                                        <td style="text-align: right; padding: 3px 8px;">{ format!("{:.2} m", a.max_range()) }</td>
+                                                        <td style="text-align: right; padding: 3px 8px;">{ format!("{:.1} m²", a.area_m2()) }</td>
+                                                        <td style="text-align: right; padding: 3px 8px;">{ format!("{:.1} m", a.diameter()) }</td>
+                                                        {is_xml.then(|| view! { <td style="padding: 3px 8px;">{ quality.clone() }</td> })}
+                                                    </tr>
+                                                }.into_any()
+                                            } else {
+                                                let mut why = ui_t("gldf.sensors.detection_not_detected", &l);
+                                                if let Some(d) = a.depth_limit {
+                                                    why = format!("{why} · {}", ui_t("gldf.sensors.detection_volume_ends", &l).replace("{d}", &format!("{d:.2}")));
+                                                }
+                                                view! {
+                                                    <tr>
+                                                        <td style="padding: 3px 8px;">{ label }</td>
+                                                        <td colspan="4" style="padding: 3px 8px; color: var(--text-tertiary);">{ why }</td>
+                                                    </tr>
+                                                }.into_any()
+                                            }
+                                        }).collect::<Vec<_>>()
+                                    }}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="form-help" style="margin-top: 8px;">{ tr("gldf.sensors.detection_note") }</p>
+                    }.into_any()
+                }
+            }}
+        </div>
+    }
 }

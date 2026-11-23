@@ -63,9 +63,7 @@ fn ui_language_persists_via_lang_store() {
     }
 
     let last = Arc::new(Mutex::new(None));
-    let store: LangStore = Arc::new(RecordingStore {
-        last: last.clone(),
-    });
+    let store: LangStore = Arc::new(RecordingStore { last: last.clone() });
     let mut state = GldfState::with_lang_store(store);
     state.apply(GldfAction::SetUiLanguage("de".to_string()));
     assert_eq!(state.ui_language, "de");

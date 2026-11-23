@@ -622,8 +622,7 @@ fn spawn_l3d_model(
             // no `/ 1000.0` scale — see comment in spawn_lights_from_emitters.
             let leo_local_pos = z_to_y_rotation * first_leo.world_position;
             let leo_world_pos = leo_local_pos + mounting_offset;
-            let leo_names: Vec<String> =
-                matched_leos.iter().map(|e| e.name.clone()).collect();
+            let leo_names: Vec<String> = matched_leos.iter().map(|e| e.name.clone()).collect();
             commands.spawn((
                 Mesh3d(mesh_handle),
                 MeshMaterial3d(luminaire_material.clone()),
@@ -910,7 +909,7 @@ fn spawn_lights_from_emitters(
         let color_temp = lamp
             .map(|l| parse_color_temperature(&l.color_appearance))
             .unwrap_or(4000.0);
-        let flux = ldt.total_luminous_flux() as f32;
+        let flux = ldt.luminous_flux() as f32;
         let lor = (ldt.light_output_ratio / 100.0) as f32;
         (kelvin_to_rgb(color_temp), flux * lor)
     } else {
@@ -1105,8 +1104,8 @@ fn spawn_lights_from_emitters(
         //   - emergency_behavior == "EmergencyOnly" on the config.
         // Both checks because not every emergency-only emitter is a
         // SensorObject, and not every SensorObject is wired emergency.
-        let is_sensor_or_emergency = emitter.name.eq_ignore_ascii_case("Sensor")
-            || is_emergency_only;
+        let is_sensor_or_emergency =
+            emitter.name.eq_ignore_ascii_case("Sensor") || is_emergency_only;
         if is_sensor_or_emergency {
             // Skip cone spawn for this emitter; the SpotLight + glow
             // disc spawned above already represent the emergency LED.
@@ -1116,124 +1115,124 @@ fn spawn_lights_from_emitters(
             // (The early-`continue` would skip those, hence the if/else
             //  rather than a continue.)
         } else {
-        // Translucent visible spotlight cone — readable without
-        // dominating the scene. 60 cm long, modest 18 cm base radius
-        // (~17° half-angle), low-alpha emissive in the LEO's CCT
-        // color. Visible against both light and dark backgrounds.
-        let cone_len = 0.60_f32;
-        let cone_base_radius = 0.18_f32;
-        let cone_mesh = meshes.add(Cone::new(cone_base_radius, cone_len));
-        let cone_color = color;
-        let cone_linear = cone_color.to_linear();
-        let cone_material = materials.add(StandardMaterial {
-            // Demo-tuned (post task #197 rebalance): the previous
-            // alpha=0.25 + 3× emissive boost over-bloomed in
-            // recordings — readable but dominating. alpha=0.15 +
-            // 1.2× emissive keeps the cone visible against both
-            // light and dark backgrounds without halo'ing the
-            // luminaire.
-            base_color: cone_color.with_alpha(0.15),
-            emissive: LinearRgba::new(
-                cone_linear.red * 1.2,
-                cone_linear.green * 1.2,
-                cone_linear.blue * 1.2,
-                1.0,
-            ),
-            alpha_mode: AlphaMode::Blend,
-            // Default backface culling so the inside (apex-facing) of
-            // the cone doesn't emit into the ceiling cavity. Removing
-            // `cull_mode: None` + `double_sided: true` was the
-            // remaining upward leak — both sides previously glowed.
-            unlit: true,
-            ..default()
-        });
-        // The parent is a pure pivot (identity rotation, position at
-        // LEO). The cone child carries BOTH the cone's mesh-aligning
-        // rotation AND the half-height offset that puts the apex on
-        // the pivot. Then when the tilt animation rotates the parent,
-        // the child orbits around the LEO position — the apex stays
-        // pinned, exactly like a real gimbal.
-        //
-        // Cone-mesh local axes (Bevy convention):
-        //   +Y/2 = apex
-        //   -Y/2 = base
-        // World goal:
-        //   apex at world_pos (LEO)
-        //   base at world_pos + bevy_dir * cone_len
-        // ⇒ the cone-local +Y direction must map to -bevy_dir
-        //   (because the apex is "back" along the light path from the
-        //    base). So q_cone = from_rotation_arc(+Y, -bevy_dir).
-        //   The cone's CENTRE in world is then world_pos + bevy_dir *
-        //   (cone_len/2). Since the parent is at world_pos with
-        //   identity rotation, the child's local translation is just
-        //   bevy_dir * (cone_len/2) in world coordinates.
-        let bevy_dir_n = bevy_dir.normalize_or_zero();
-        let cone_local_rot = Quat::from_rotation_arc(Vec3::Y, -bevy_dir_n);
-        let cone_centre_offset = bevy_dir_n * (cone_len / 2.0);
-        // Compose the cone's final world transform inline rather than
-        // using a parent/child hierarchy. Reason: in Bevy 0.19 a child
-        // entity needs the full visibility bundle
-        // (Visibility/InheritedVisibility/ViewVisibility) to inherit
-        // updates from its parent, AND the parent's transform updates
-        // only reach the child after one frame of propagation. The
-        // child cone's world rotation didn't update reliably — the
-        // tilt wrote to the parent's Transform but the cone mesh stayed
-        // put for the user. Spawning a single mesh entity with the
-        // pre-composed transform sidesteps the hierarchy entirely:
-        // `js_joint_bridge_apply` writes directly to this entity's
-        // Transform, no propagation needed.
-        //
-        // For apex-pinning we redo the math: rotate THIS entity by
-        // base * tilt around its translation = world_pos. Without
-        // child-offset trickery the cone's CENTRE sits at world_pos,
-        // not its apex — so it rotates around its centre and the apex
-        // swings off. Compromise: shift the mesh inside the entity by
-        // pushing the centre of the cone away from world_pos along
-        // bevy_dir at spawn time. Since the apply rotation is applied
-        // around translation (world_pos), the cone's apex stays
-        // approximately at world_pos for small tilts because the apex
-        // is on the rotation axis through `(world_pos, world_pos +
-        // bevy_dir)`.
-        //
-        // For larger tilts the apex drifts, but for the ±35° we use
-        // in the demo the drift is < 5cm and reads correctly as
-        // "spotlight swinging."
-        let cone_centre = world_pos + cone_centre_offset;
-        commands.spawn((
-            Mesh3d(cone_mesh),
-            MeshMaterial3d(cone_material),
-            Transform {
-                translation: cone_centre,
-                rotation: cone_local_rot,
-                scale: Vec3::ONE,
-            },
-            L3dLight,
-            // L3dLightCone tag + Hidden default → cones are invisible
-            // unless the user presses `K` to toggle the debug overlay.
-            // Without this gating the 60 cm emissive cone hangs below
-            // every LEO and dominates the scene (e.g. on the SLV Tria
-            // 2 fixture it looks like a glowing pole stuck to the
-            // bottom of the luminaire). The Lisp tilt animation still
-            // tags the cone via LightEmitterJoint so the tilt math
-            // applies whether or not it's visible.
-            L3dLightCone,
-            Visibility::Hidden,
-            LightEmitterJoint(vec![emitter.name.clone()]),
-            // Capture the rest rotation so the apply system's
-            // `base * tilt` math doesn't drift away from the original
-            // direction when tilt is zero.
-            LightEmitterBaseRotation(cone_local_rot),
-            // Orbit the cone around the LEO position — without this
-            // the cone rotates around its OWN centre (50cm below the
-            // LEO) and barely moves visually. With the pivot at the
-            // LEO and base_translation at the cone's centre, the apply
-            // system swings the cone about the LEO like a gimballed
-            // spotlight pointing in a new direction.
-            LightEmitterPivot {
-                pivot: world_pos,
-                base_translation: cone_centre,
-            },
-        ));
+            // Translucent visible spotlight cone — readable without
+            // dominating the scene. 60 cm long, modest 18 cm base radius
+            // (~17° half-angle), low-alpha emissive in the LEO's CCT
+            // color. Visible against both light and dark backgrounds.
+            let cone_len = 0.60_f32;
+            let cone_base_radius = 0.18_f32;
+            let cone_mesh = meshes.add(Cone::new(cone_base_radius, cone_len));
+            let cone_color = color;
+            let cone_linear = cone_color.to_linear();
+            let cone_material = materials.add(StandardMaterial {
+                // Demo-tuned (post task #197 rebalance): the previous
+                // alpha=0.25 + 3× emissive boost over-bloomed in
+                // recordings — readable but dominating. alpha=0.15 +
+                // 1.2× emissive keeps the cone visible against both
+                // light and dark backgrounds without halo'ing the
+                // luminaire.
+                base_color: cone_color.with_alpha(0.15),
+                emissive: LinearRgba::new(
+                    cone_linear.red * 1.2,
+                    cone_linear.green * 1.2,
+                    cone_linear.blue * 1.2,
+                    1.0,
+                ),
+                alpha_mode: AlphaMode::Blend,
+                // Default backface culling so the inside (apex-facing) of
+                // the cone doesn't emit into the ceiling cavity. Removing
+                // `cull_mode: None` + `double_sided: true` was the
+                // remaining upward leak — both sides previously glowed.
+                unlit: true,
+                ..default()
+            });
+            // The parent is a pure pivot (identity rotation, position at
+            // LEO). The cone child carries BOTH the cone's mesh-aligning
+            // rotation AND the half-height offset that puts the apex on
+            // the pivot. Then when the tilt animation rotates the parent,
+            // the child orbits around the LEO position — the apex stays
+            // pinned, exactly like a real gimbal.
+            //
+            // Cone-mesh local axes (Bevy convention):
+            //   +Y/2 = apex
+            //   -Y/2 = base
+            // World goal:
+            //   apex at world_pos (LEO)
+            //   base at world_pos + bevy_dir * cone_len
+            // ⇒ the cone-local +Y direction must map to -bevy_dir
+            //   (because the apex is "back" along the light path from the
+            //    base). So q_cone = from_rotation_arc(+Y, -bevy_dir).
+            //   The cone's CENTRE in world is then world_pos + bevy_dir *
+            //   (cone_len/2). Since the parent is at world_pos with
+            //   identity rotation, the child's local translation is just
+            //   bevy_dir * (cone_len/2) in world coordinates.
+            let bevy_dir_n = bevy_dir.normalize_or_zero();
+            let cone_local_rot = Quat::from_rotation_arc(Vec3::Y, -bevy_dir_n);
+            let cone_centre_offset = bevy_dir_n * (cone_len / 2.0);
+            // Compose the cone's final world transform inline rather than
+            // using a parent/child hierarchy. Reason: in Bevy 0.19 a child
+            // entity needs the full visibility bundle
+            // (Visibility/InheritedVisibility/ViewVisibility) to inherit
+            // updates from its parent, AND the parent's transform updates
+            // only reach the child after one frame of propagation. The
+            // child cone's world rotation didn't update reliably — the
+            // tilt wrote to the parent's Transform but the cone mesh stayed
+            // put for the user. Spawning a single mesh entity with the
+            // pre-composed transform sidesteps the hierarchy entirely:
+            // `js_joint_bridge_apply` writes directly to this entity's
+            // Transform, no propagation needed.
+            //
+            // For apex-pinning we redo the math: rotate THIS entity by
+            // base * tilt around its translation = world_pos. Without
+            // child-offset trickery the cone's CENTRE sits at world_pos,
+            // not its apex — so it rotates around its centre and the apex
+            // swings off. Compromise: shift the mesh inside the entity by
+            // pushing the centre of the cone away from world_pos along
+            // bevy_dir at spawn time. Since the apply rotation is applied
+            // around translation (world_pos), the cone's apex stays
+            // approximately at world_pos for small tilts because the apex
+            // is on the rotation axis through `(world_pos, world_pos +
+            // bevy_dir)`.
+            //
+            // For larger tilts the apex drifts, but for the ±35° we use
+            // in the demo the drift is < 5cm and reads correctly as
+            // "spotlight swinging."
+            let cone_centre = world_pos + cone_centre_offset;
+            commands.spawn((
+                Mesh3d(cone_mesh),
+                MeshMaterial3d(cone_material),
+                Transform {
+                    translation: cone_centre,
+                    rotation: cone_local_rot,
+                    scale: Vec3::ONE,
+                },
+                L3dLight,
+                // L3dLightCone tag + Hidden default → cones are invisible
+                // unless the user presses `K` to toggle the debug overlay.
+                // Without this gating the 60 cm emissive cone hangs below
+                // every LEO and dominates the scene (e.g. on the SLV Tria
+                // 2 fixture it looks like a glowing pole stuck to the
+                // bottom of the luminaire). The Lisp tilt animation still
+                // tags the cone via LightEmitterJoint so the tilt math
+                // applies whether or not it's visible.
+                L3dLightCone,
+                Visibility::Hidden,
+                LightEmitterJoint(vec![emitter.name.clone()]),
+                // Capture the rest rotation so the apply system's
+                // `base * tilt` math doesn't drift away from the original
+                // direction when tilt is zero.
+                LightEmitterBaseRotation(cone_local_rot),
+                // Orbit the cone around the LEO position — without this
+                // the cone rotates around its OWN centre (50cm below the
+                // LEO) and barely moves visually. With the pivot at the
+                // LEO and base_translation at the cone's centre, the apply
+                // system swings the cone about the LEO like a gimballed
+                // spotlight pointing in a new direction.
+                LightEmitterPivot {
+                    pivot: world_pos,
+                    base_translation: cone_centre,
+                },
+            ));
         } // end else (non-sensor / non-emergency: spawn cone)
 
         // "Rim-glow" PointLight at the LED face.
@@ -1499,15 +1498,21 @@ mod walker_tests {
 
     #[test]
     fn each_leo_records_its_owning_geometry_partname() {
-        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
-            .expect("Tria-2-like XML must parse");
+        let luminaire =
+            l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML).expect("Tria-2-like XML must parse");
         let mut emitters = Vec::new();
         extract_light_emitters(&luminaire.structure.geometry, &mut emitters, Mat4::IDENTITY);
 
         assert_eq!(emitters.len(), 2, "must find LEO0 and LEO1");
 
-        let leo0 = emitters.iter().find(|e| e.name == "LEO0").expect("LEO0 present");
-        let leo1 = emitters.iter().find(|e| e.name == "LEO1").expect("LEO1 present");
+        let leo0 = emitters
+            .iter()
+            .find(|e| e.name == "LEO0")
+            .expect("LEO0 present");
+        let leo1 = emitters
+            .iter()
+            .find(|e| e.name == "LEO1")
+            .expect("LEO1 present");
 
         // The key regression guard: each LEO records the partName of
         // the <Geometry> node that directly contains it — not the
@@ -1531,8 +1536,8 @@ mod walker_tests {
         //     joint head-joint-0 → head-0
         //     joint head-joint-1 → head-1
         // → post-order children push: head-0, head-1, then base.
-        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
-            .expect("Tria-2-like XML must parse");
+        let luminaire =
+            l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML).expect("Tria-2-like XML must parse");
         let mut names = Vec::new();
         collect_part_geom_partnames(&luminaire.structure.geometry, &mut names);
         assert_eq!(
@@ -1553,8 +1558,8 @@ mod walker_tests {
         // "head.obj"). The NEW logic disambiguates by the structure-tree
         // partName: head-0 owns LEO0, head-1 owns LEO1, even though they
         // share the same OBJ asset.
-        let luminaire = l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML)
-            .expect("Tria-2-like XML must parse");
+        let luminaire =
+            l3d_rs::Luminaire::from_xml(TRIA_LIKE_XML).expect("Tria-2-like XML must parse");
         let mut emitters = Vec::new();
         extract_light_emitters(&luminaire.structure.geometry, &mut emitters, Mat4::IDENTITY);
         let mut names = Vec::new();

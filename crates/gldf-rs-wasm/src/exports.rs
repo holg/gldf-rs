@@ -59,15 +59,16 @@ pub fn export_gldf_with_options(
 /// surface them (slice 1 stubs to a log message).
 pub fn export_ifc(state: GldfContext) -> Result<()> {
     use gldf_rs::ifc::GldfToIfc;
-    let ifc = state.with(|s| {
-        // GldfToIfc::export_with_mesh_and_files takes a &[BufFile]; we don't
-        // have those on the Leptos side since the state model dropped the
-        // legacy FileBufGldf in favor of (product, embedded_files). For slice
-        // 1 we hand it the product only — geometry export falls back to the
-        // symbolic luminaire, which still validates as IFC.
-        GldfToIfc::export_with_mesh_and_files(&s.product, None, &[])
-    })
-    .map_err(|e| anyhow!("ifc export: {}", e))?;
+    let ifc = state
+        .with(|s| {
+            // GldfToIfc::export_with_mesh_and_files takes a &[BufFile]; we don't
+            // have those on the Leptos side since the state model dropped the
+            // legacy FileBufGldf in favor of (product, embedded_files). For slice
+            // 1 we hand it the product only — geometry export falls back to the
+            // symbolic luminaire, which still validates as IFC.
+            GldfToIfc::export_with_mesh_and_files(&s.product, None, &[])
+        })
+        .map_err(|e| anyhow!("ifc export: {}", e))?;
     download_text(&ifc, "exported.ifc", "application/x-step");
     Ok(())
 }
@@ -101,7 +102,7 @@ pub fn export_variant_photometry(state: GldfContext, photometry_id: &str) -> Res
 }
 
 /// Download the photometry file PATCHED with this variant's flux / power
-/// overrides, emitting in the chosen [`PhotometryExportFormat`]. The
+/// overrides, emitting in the chosen [`gldf_rs::PhotometryExportFormat`]. The
 /// filename is rewritten so its extension matches the format — important
 /// when the source photometry is TM-33 XML but the user picked LDT (or
 /// vice versa); the old "always LDT, original name" path produced
@@ -168,10 +169,7 @@ fn download_raw_photometry(state: GldfContext, photometry_id: &str) -> Result<()
 }
 
 /// Shared lookup: photometry id → (filename, raw bytes).
-fn lookup_photometry_bytes(
-    state: GldfContext,
-    photometry_id: &str,
-) -> Result<(String, Vec<u8>)> {
+fn lookup_photometry_bytes(state: GldfContext, photometry_id: &str) -> Result<(String, Vec<u8>)> {
     state
         .with(|s| {
             let photometry = s

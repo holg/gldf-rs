@@ -1,6 +1,7 @@
 #!/bin/bash
-# Cross-build the plugin's Rust staticlibs from macOS and refresh
-# ThirdParty/{GldfUnreal,GldfSearch}/lib/{Mac,Linux,Win64}.
+# Cross-build the plugin's Rust staticlib (gldf_unreal) from macOS and refresh
+# ThirdParty/GldfUnreal/lib/{Mac,Linux,Win64}. (The gldf-search cabi is gone:
+# GLDF Search is the web panel + REST, 2026-10-28.)
 #
 # Targets:
 #   Mac    — native build (aarch64; pass --mac-universal yourself if needed)
@@ -22,7 +23,6 @@
 set -euo pipefail
 
 GLDF_RS="$(cd "$(dirname "$0")/../.." && pwd)"
-GLDF_SEARCH="${GLDF_SEARCH_WORKSPACE:-$GLDF_RS/../gldf-search}"
 THIRD_PARTY="$GLDF_RS/extra/unreal-plugin-interchange/GldfImporter/ThirdParty"
 SYSROOT="$HOME/opt/x86_64-windows"
 TOOLCHAIN="$(rustc --print sysroot)"
@@ -67,18 +67,11 @@ build_mac   "$GLDF_RS" gldf-unreal
 build_linux "$GLDF_RS" gldf-unreal
 build_win64 "$GLDF_RS" gldf-unreal
 
-echo "=== gldf-search-cabi (gldf-search workspace) ==="
-build_mac   "$GLDF_SEARCH" gldf-search-cabi
-build_linux "$GLDF_SEARCH" gldf-search-cabi
-build_win64 "$GLDF_SEARCH" gldf-search-cabi
 
 echo "=== copy into ThirdParty ==="
 cp "$GLDF_RS/target/release/libgldf_unreal.a"                                "$THIRD_PARTY/GldfUnreal/lib/Mac/"
 cp "$GLDF_RS/target/x86_64-unknown-linux-gnu/release/libgldf_unreal.a"       "$THIRD_PARTY/GldfUnreal/lib/Linux/"
 cp "$GLDF_RS/target/x86_64-pc-windows-msvc/release/gldf_unreal.lib"          "$THIRD_PARTY/GldfUnreal/lib/Win64/"
-cp "$GLDF_SEARCH/target/release/libgldf_search_cabi.a"                       "$THIRD_PARTY/GldfSearch/lib/Mac/"
-cp "$GLDF_SEARCH/target/x86_64-unknown-linux-gnu/release/libgldf_search_cabi.a" "$THIRD_PARTY/GldfSearch/lib/Linux/"
-cp "$GLDF_SEARCH/target/x86_64-pc-windows-msvc/release/gldf_search_cabi.lib" "$THIRD_PARTY/GldfSearch/lib/Win64/"
 
 echo "Done:"
 ls -la "$THIRD_PARTY"/Gldf*/lib/*/

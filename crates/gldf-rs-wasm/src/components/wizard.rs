@@ -137,10 +137,7 @@ impl WizardState {
 /// Top-level wizard modal. `open` toggles visibility; `on_close` fires
 /// after Finish (or Cancel) so the welcome screen can hide.
 #[component]
-pub fn NewGldfWizard(
-    open: RwSignal<bool>,
-    on_close: Arc<dyn Fn() + Send + Sync>,
-) -> impl IntoView {
+pub fn NewGldfWizard(open: RwSignal<bool>, on_close: Arc<dyn Fn() + Send + Sync>) -> impl IntoView {
     let state = use_gldf();
     let wizard = WizardState::new();
     let current = RwSignal::new(0_usize);
@@ -279,7 +276,7 @@ fn StepChip(idx: usize, label: String, current: RwSignal<usize>) -> impl IntoVie
             );
             let marker = if is_done { "✓".to_string() } else { format!("{}", idx + 1) };
             view! {
-                <button on:click=on_click.clone() style=style>
+                <button on:click=on_click style=style>
                     <span style="font-weight: 500; min-width: 16px;">{ marker }</span>
                     <span>{ label.clone() }</span>
                 </button>
@@ -636,7 +633,9 @@ fn EmergencyStep(w: WizardState) -> impl IntoView {
 #[component]
 fn LightSourceStep(w: WizardState) -> impl IntoView {
     let on_kind = move |e: crate::components::edit_util::EditEvent| {
-        let Some(sel_value) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(sel_value) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         let kind = match sel_value.as_str() {
             "Fixed" => WizardLightSourceKind::Fixed,
             "Changeable" => WizardLightSourceKind::Changeable,
@@ -709,9 +708,10 @@ fn EmitterStep(w: WizardState) -> impl IntoView {
     let placeholder_mc = vec!["lightsource_1".to_string()];
     let placeholder_sensor = vec![];
 
-    let on_submit: Arc<dyn Fn(EmitterDraft) + Send + Sync> = Arc::new(move |draft: EmitterDraft| {
-        w.emitter_draft.set(Some(draft));
-    });
+    let on_submit: Arc<dyn Fn(EmitterDraft) + Send + Sync> =
+        Arc::new(move |draft: EmitterDraft| {
+            w.emitter_draft.set(Some(draft));
+        });
     let on_cancel: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
         w.emitter_draft.set(None);
     });

@@ -68,7 +68,6 @@ pub fn L3dPanel(
     // state, and render loop alive across edits — no flicker, no
     // context-loss risk.
     {
-        let canvas_ref = canvas_ref.clone();
         let bytes_first = bytes.clone();
         let renderer = renderer.clone();
         Effect::new(move |prev: Option<bool>| {
@@ -76,7 +75,7 @@ pub fn L3dPanel(
                 return true;
             }
             let bytes = bytes_first.clone();
-            let canvas_ref = canvas_ref.clone();
+            let canvas_ref = canvas_ref;
             let renderer = renderer.clone();
             spawn_local(async move {
                 let delay = 100 + (viewer_id * 50) as i32;
@@ -191,7 +190,9 @@ pub fn L3dPanel(
     };
 
     // Account for device pixel ratio — canvas backing store is dpr× the CSS size.
-    let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+    let dpr = web_sys::window()
+        .map(|w| w.device_pixel_ratio())
+        .unwrap_or(1.0);
     let canvas_w = (width as f64 * dpr) as u32;
     let canvas_h = (height as f64 * dpr) as u32;
     let canvas_style = format!("width: {}px; height: {}px; cursor: grab;", width, height);

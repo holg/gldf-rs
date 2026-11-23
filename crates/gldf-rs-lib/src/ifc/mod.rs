@@ -39,8 +39,8 @@ mod step_writer;
 mod types;
 
 pub use bim_properties::{
-    extract_product_bim_properties, property_name_for_bsdd, resolve_imported_property,
-    BimProperty, BimPset, BimValueKind, ImportedBimProperty,
+    extract_product_bim_properties, property_name_for_bsdd, resolve_imported_property, BimProperty,
+    BimPset, BimValueKind, ImportedBimProperty,
 };
 pub use gldf_generator::GldfGenerator;
 pub use ifc_import::{
@@ -534,7 +534,7 @@ impl GldfToIfc {
             num_g_angles: ldt.num_g_planes as i32,
             dc: ldt.c_plane_distance,
             dg: ldt.g_plane_distance,
-            total_flux: ldt.total_luminous_flux(),
+            total_flux: ldt.luminous_flux(),
             dr: ldt.direct_ratios,
             luminaire_name: ldt.luminaire_name.clone(),
             // Store complete raw LDT content for exact roundtrip
@@ -1095,9 +1095,7 @@ impl GldfToIfc {
         fixture_type: EntityRef,
         owner_history: EntityRef,
     ) {
-        use crate::ifc::bim_properties::{
-            extract_product_bim_properties, BimPset, BimValueKind,
-        };
+        use crate::ifc::bim_properties::{extract_product_bim_properties, BimPset, BimValueKind};
         use std::collections::BTreeMap;
 
         let props = extract_product_bim_properties(gldf);
@@ -1106,8 +1104,9 @@ impl GldfToIfc {
         }
 
         // Group by Pset bucket, preserving a stable order.
-        let mut by_pset: BTreeMap<&'static str, Vec<(String, Option<String>, String)>> =
-            BTreeMap::new();
+        // (property name, description, STEP value expression)
+        type PsetEntry = (String, Option<String>, String);
+        let mut by_pset: BTreeMap<&'static str, Vec<PsetEntry>> = BTreeMap::new();
 
         for p in &props {
             // Render the STEP value expression by IFC type.
@@ -1389,9 +1388,8 @@ mod tests {
             return;
         };
 
-        let ifc =
-            GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
-                .expect("IFC export");
+        let ifc = GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
+            .expect("IFC export");
 
         // SLV Tria 2 declares ElectricalSafetyClass=III + IP20, so the
         // Pset_GLDF_Electrical bucket must appear with the safety-class
@@ -1435,9 +1433,8 @@ mod tests {
             return;
         };
 
-        let ifc =
-            GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
-                .expect("IFC export");
+        let ifc = GldfToIfc::export_with_mesh_and_files(&loaded.gldf, None, &loaded.files)
+            .expect("IFC export");
         let imported = import_ifc(&ifc).expect("IFC import");
         let da = &imported.descriptive_attributes;
 

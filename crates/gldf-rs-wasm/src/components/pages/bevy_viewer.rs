@@ -8,7 +8,7 @@
 //!
 //! # Per-variant flow
 //!
-//! Each [`Variant`] can carry its own [`HousingColor`] under
+//! Each [`Variant`] can carry its own [`HousingColor`](gldf_rs::gldf::product_definitions::HousingColor) under
 //! `DescriptiveAttributes.Marketing.HousingColors`. A dropdown at
 //! the top of the page lists every variant in the document; picking
 //! one (a) sets the active variant signal, (b) pushes that variant's
@@ -143,8 +143,18 @@ pub fn BevyViewerPage() -> impl IntoView {
     // placeholder div with the same height so the layout doesn't
     // collapse.
     let state_for_text = use_gldf();
-    let title_signal = move || ui_t("gldf.bevy_viewer.title", &state_for_text.with(|s| s.ui_language.clone()));
-    let desc_signal = move || ui_t("gldf.bevy_viewer.description", &state_for_text.with(|s| s.ui_language.clone()));
+    let title_signal = move || {
+        ui_t(
+            "gldf.bevy_viewer.title",
+            &state_for_text.with(|s| s.ui_language.clone()),
+        )
+    };
+    let desc_signal = move || {
+        ui_t(
+            "gldf.bevy_viewer.description",
+            &state_for_text.with(|s| s.ui_language.clone()),
+        )
+    };
 
     view! {
         <div class="editor-section bevy-viewer-page" style="display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 120px);">
@@ -351,11 +361,7 @@ struct BevyPayload {
 /// payload. Returns `None` when there's no L3D to show — the page
 /// then clears localStorage so the viewer doesn't render stale data.
 fn build_payload(state: &crate::state::GldfState, variant_idx: usize) -> Option<BevyPayload> {
-    let variants = state
-        .product
-        .product_definitions
-        .variants
-        .as_ref()?;
+    let variants = state.product.product_definitions.variants.as_ref()?;
     let variant = variants.variant.get(variant_idx)?;
 
     // 1. L3D bytes via the variant's ModelGeometryReference chain.
@@ -433,33 +439,60 @@ fn build_payload(state: &crate::state::GldfState, variant_idx: usize) -> Option<
     //    push `None` so Bevy falls back to its default scene-type
     //    placement.
     let mounting_config_json = variant.mountings.as_ref().and_then(|m| {
-        let (mounting_type, recessed_depth_mm, pendant_length_mm, mounting_height_mm,
-             pole_height_mm, is_surface_mounted, is_free_standing) =
-            if let Some(c) = m.ceiling.as_ref() {
-                let recessed = c.recessed.as_ref().map(|r| r.recessed_depth);
-                let pendant = c.pendant.as_ref().map(|p| p.pendant_length);
-                let surface = c.surface_mounted.is_some();
-                (Some("ceiling"), recessed, pendant, None, None, surface, false)
-            } else if let Some(w) = m.wall.as_ref() {
-                let rd = w.recessed.as_ref().map(|r| r.recessed_depth);
-                let surface = w.surface_mounted.is_some();
-                (Some("wall"), rd, None, Some(w.mounting_height), None, surface, false)
-            } else if let Some(g) = m.ground.as_ref() {
-                // Pole height: try PoleTop first, then PoleIntegrated;
-                // honours both attribute and legacy-element forms via
-                // `get_pole_height` helpers.
-                let pole = g.pole_top.as_ref()
-                    .and_then(gldf_rs::gldf::product_definitions::PoleTop::get_pole_height)
-                    .or_else(|| g.pole_integrated.as_ref()
-                        .and_then(gldf_rs::gldf::product_definitions::PoleIntegrated::get_pole_height));
-                let surface = g.surface_mounted.is_some();
-                let free = g.free_standing.is_some();
-                (Some("ground"), None, None, None, pole, surface, free)
-            } else if m.working_plane.is_some() {
-                (Some("working_plane"), None, None, None, None, false, false)
-            } else {
-                (None, None, None, None, None, false, false)
-            };
+        let (
+            mounting_type,
+            recessed_depth_mm,
+            pendant_length_mm,
+            mounting_height_mm,
+            pole_height_mm,
+            is_surface_mounted,
+            is_free_standing,
+        ) = if let Some(c) = m.ceiling.as_ref() {
+            let recessed = c.recessed.as_ref().map(|r| r.recessed_depth);
+            let pendant = c.pendant.as_ref().map(|p| p.pendant_length);
+            let surface = c.surface_mounted.is_some();
+            (
+                Some("ceiling"),
+                recessed,
+                pendant,
+                None,
+                None,
+                surface,
+                false,
+            )
+        } else if let Some(w) = m.wall.as_ref() {
+            let rd = w.recessed.as_ref().map(|r| r.recessed_depth);
+            let surface = w.surface_mounted.is_some();
+            (
+                Some("wall"),
+                rd,
+                None,
+                Some(w.mounting_height),
+                None,
+                surface,
+                false,
+            )
+        } else if let Some(g) = m.ground.as_ref() {
+            // Pole height: try PoleTop first, then PoleIntegrated;
+            // honours both attribute and legacy-element forms via
+            // `get_pole_height` helpers.
+            let pole = g
+                .pole_top
+                .as_ref()
+                .and_then(gldf_rs::gldf::product_definitions::PoleTop::get_pole_height)
+                .or_else(|| {
+                    g.pole_integrated.as_ref().and_then(
+                        gldf_rs::gldf::product_definitions::PoleIntegrated::get_pole_height,
+                    )
+                });
+            let surface = g.surface_mounted.is_some();
+            let free = g.free_standing.is_some();
+            (Some("ground"), None, None, None, pole, surface, free)
+        } else if m.working_plane.is_some() {
+            (Some("working_plane"), None, None, None, None, false, false)
+        } else {
+            (None, None, None, None, None, false, false)
+        };
 
         let mt = mounting_type?;
         // Build a manual JSON value so the lib doesn't need to know the

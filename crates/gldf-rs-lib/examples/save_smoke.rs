@@ -65,7 +65,10 @@ fn main() -> anyhow::Result<()> {
     //    gldf-search-side smoke once we re-extract the corpus.
     let src_len = std::fs::metadata(&src)?.len();
     let dst_len = std::fs::metadata(&tmp)?.len();
-    println!("size: {src_len} B -> {dst_len} B (delta {})", dst_len as i64 - src_len as i64);
+    println!(
+        "size: {src_len} B -> {dst_len} B (delta {})",
+        dst_len as i64 - src_len as i64
+    );
 
     std::fs::remove_file(&tmp).ok();
     Ok(())

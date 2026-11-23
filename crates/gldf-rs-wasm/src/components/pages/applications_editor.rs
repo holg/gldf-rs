@@ -24,8 +24,18 @@ pub fn ApplicationsEditorPage() -> impl IntoView {
         }
     };
 
-    let title_signal = move || ui_t("gldf.applications.title", &state.with(|s| s.ui_language.clone()));
-    let desc_signal = move || ui_t("gldf.applications.description", &state.with(|s| s.ui_language.clone()));
+    let title_signal = move || {
+        ui_t(
+            "gldf.applications.title",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
+    let desc_signal = move || {
+        ui_t(
+            "gldf.applications.description",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
 
     view! {
         <div class="editor-section applications-editor">

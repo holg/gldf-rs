@@ -97,15 +97,18 @@ pub struct LeoPlacement {
 /// Kept for the single-light FFI path; multi-emitter luminaires (twin
 /// spotlights etc.) should use [`collect_all_leos`] to get every emitter.
 pub fn first_leo_shape(buf: &FileBufGldf) -> LeoPlacement {
-    collect_all_leos(buf).into_iter().next().unwrap_or(LeoPlacement {
-        shape: LeoShape::Point,
-        position_cm: [0.0; 3],
-        part_name: String::new(),
-        // Identity basis: emission = −Z (straight down), the safe default.
-        axis_x: [1.0, 0.0, 0.0],
-        axis_y: [0.0, 1.0, 0.0],
-        axis_z: [0.0, 0.0, 1.0],
-    })
+    collect_all_leos(buf)
+        .into_iter()
+        .next()
+        .unwrap_or(LeoPlacement {
+            shape: LeoShape::Point,
+            position_cm: [0.0; 3],
+            part_name: String::new(),
+            // Identity basis: emission = −Z (straight down), the safe default.
+            axis_x: [1.0, 0.0, 0.0],
+            axis_y: [0.0, 1.0, 0.0],
+            axis_z: [0.0, 0.0, 1.0],
+        })
 }
 
 /// Collect EVERY Light Emitting Object in the GLDF's first L3D, in tree
@@ -197,6 +200,200 @@ fn collect_leos(geo: &Geometry, parent_world: &Mat4, out: &mut Vec<LeoPlacement>
     }
 }
 
+/// Rotation limits of one joint axis (degrees), from the L3D `<XAxis min max step/>`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct L3dAxisLimit {
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+}
+
+/// One node of the L3D part tree: a `Geometry` (part with an optional
+/// mesh) or a `Joint` (articulation between a parent geometry and its
+/// child geometries). Transforms are in the L3D frame (right-handed Z-up,
+/// translations in METRES — structure.xml units); the part mesh is in the
+/// node's own frame, already scaled to centimetres.
+#[derive(Debug, Clone)]
+pub struct L3dNode {
+    pub name: String,
+    pub parent: Option<usize>,
+    pub is_joint: bool,
+    /// parent_world · local (translation in metres).
+    pub world: Mat4,
+    /// Local rest transform relative to the parent node (translation in metres).
+    pub local: Mat4,
+    /// The same rest pose as authored: `<Position>` (metres) and `<Rotation>`
+    /// (degrees, applied X then Y then Z as in `build_transform`).
+    pub local_pos_m: [f32; 3],
+    pub local_rot_deg: [f32; 3],
+    /// Joint axis limits [x, y, z]; `None` = that axis does not rotate.
+    pub axes: [Option<L3dAxisLimit>; 3],
+    /// Joint `DefaultRotation` (degrees), if declared.
+    pub default_rotation_deg: Option<[f32; 3]>,
+    /// This part's mesh in node-local frame (cm). None for joints and parts
+    /// whose asset is missing.
+    pub mesh: Option<GldfMeshData>,
+}
+
+/// A LEO together with the index of the geometry node it belongs to, so a
+/// consumer that animates joints can attach the light to the moving part.
+#[derive(Debug, Clone)]
+pub struct L3dLeoNode {
+    pub node: usize,
+    pub placement: LeoPlacement,
+}
+
+/// The whole articulated structure of the GLDF's first L3D.
+#[derive(Debug, Clone, Default)]
+pub struct L3dStructure {
+    pub nodes: Vec<L3dNode>,
+    pub leos: Vec<L3dLeoNode>,
+}
+
+/// Walk the first L3D of `buf` into an [`L3dStructure`]: every geometry and
+/// joint as a node (parent links, rest transforms, axis limits), each part's
+/// mesh in its own frame, and every LEO with its owning node. Node 0 is the
+/// root geometry. Same traversal as [`build_first_mesh_for_variant`] /
+/// [`collect_all_leos`], just not flattened.
+pub fn collect_l3d_structure(buf: &FileBufGldf) -> Result<L3dStructure> {
+    let l3d_bytes = get_first_l3d_with_ldt(buf)
+        .and_then(|m| m.l3d_content)
+        .or_else(|| first_l3d_in_buffer(buf))
+        .ok_or(ExportError::NoGeometry)?;
+    let l3d = l3d_rs::from_buffer(&l3d_bytes);
+    let luminaire = Luminaire::from_xml(&l3d.file.structure)
+        .map_err(|e| ExportError::Internal(format!("L3D structure parse failed: {e}")))?;
+    let defs = &luminaire.geometry_definitions.geometry_file_definition;
+    let assets: Vec<(&str, &[u8])> = l3d
+        .file
+        .assets
+        .iter()
+        .map(|a| (a.name.as_str(), a.content.as_slice()))
+        .collect();
+
+    let mut out = L3dStructure::default();
+    collect_structure(
+        &luminaire.structure.geometry,
+        None,
+        &MAT4_IDENTITY,
+        defs,
+        &assets,
+        &mut out,
+    )?;
+    if out.nodes.is_empty() {
+        return Err(ExportError::NoGeometry);
+    }
+    Ok(out)
+}
+
+fn collect_structure(
+    geo: &Geometry,
+    parent: Option<usize>,
+    parent_world: &Mat4,
+    defs: &[GeometryFileDefinition],
+    assets: &[(&str, &[u8])],
+    out: &mut L3dStructure,
+) -> Result<()> {
+    let local = build_transform(&geo.position, &geo.rotation);
+    let world = mat4_mul(parent_world, &local);
+
+    // The part's own mesh, in its own frame, scaled to cm.
+    let mut mesh = None;
+    let geom_id = &geo.geometry_reference.geometry_id;
+    if let Some(def) = defs.iter().find(|d| &d.id == geom_id) {
+        let path = format!("{}/{}", def.id, def.filename);
+        let unit_scale = get_scale(&def.units) * METERS_TO_UE_CM;
+        if let Some((_, bytes)) = assets.iter().find(|(name, _)| *name == path) {
+            let part = parse_obj(bytes)?;
+            let mut scaled = GldfMeshData::default();
+            append_transformed(&part, &mat4_scale(unit_scale), &mut scaled);
+            if !scaled.positions.is_empty() {
+                mesh = Some(scaled);
+            }
+        }
+    }
+    let node_idx = out.nodes.len();
+    out.nodes.push(L3dNode {
+        name: geo.part_name.clone(),
+        parent,
+        is_joint: false,
+        world,
+        local,
+        local_pos_m: [geo.position.x, geo.position.y, geo.position.z],
+        local_rot_deg: [geo.rotation.x, geo.rotation.y, geo.rotation.z],
+        axes: [None, None, None],
+        default_rotation_deg: None,
+        mesh,
+    });
+
+    // LEOs of this geometry (same math as collect_leos).
+    if let Some(leos) = &geo.light_emitting_objects {
+        for leo in &leos.light_emitting_object {
+            let leo_local = build_transform(&leo.position, &leo.rotation);
+            let leo_world = mat4_mul(&world, &leo_local);
+            let world_m = transform_point(&leo_world, [0.0, 0.0, 0.0]);
+            let shape = if let Some(rect) = leo.rectangle.as_ref() {
+                LeoShape::Rectangle {
+                    width_m: rect.size_x as f32,
+                    height_m: rect.size_y as f32,
+                }
+            } else if let Some(circle) = leo.circle.as_ref() {
+                LeoShape::Circle {
+                    diameter_m: circle.diameter as f32,
+                }
+            } else {
+                LeoShape::Point
+            };
+            out.leos.push(L3dLeoNode {
+                node: node_idx,
+                placement: LeoPlacement {
+                    shape,
+                    position_cm: [
+                        world_m[0] * METERS_TO_UE_CM,
+                        world_m[1] * METERS_TO_UE_CM,
+                        world_m[2] * METERS_TO_UE_CM,
+                    ],
+                    part_name: leo.part_name.clone(),
+                    axis_x: normalize3(transform_dir(&leo_world, [1.0, 0.0, 0.0])),
+                    axis_y: normalize3(transform_dir(&leo_world, [0.0, 1.0, 0.0])),
+                    axis_z: normalize3(transform_dir(&leo_world, [0.0, 0.0, 1.0])),
+                },
+            });
+        }
+    }
+
+    if let Some(joints) = &geo.joints {
+        for joint in &joints.joint {
+            let joint_local = build_transform(&joint.position, &joint.rotation);
+            let joint_world = mat4_mul(&world, &joint_local);
+            let lim = |a: &Option<l3d_rs::l3d::structure::Axis>| {
+                a.as_ref().map(|x| L3dAxisLimit {
+                    min: x.min as f32,
+                    max: x.max as f32,
+                    step: x.step as f32,
+                })
+            };
+            let joint_idx = out.nodes.len();
+            out.nodes.push(L3dNode {
+                name: joint.part_name.clone(),
+                parent: Some(node_idx),
+                is_joint: true,
+                world: joint_world,
+                local: joint_local,
+                local_pos_m: [joint.position.x, joint.position.y, joint.position.z],
+                local_rot_deg: [joint.rotation.x, joint.rotation.y, joint.rotation.z],
+                axes: [lim(&joint.x_axis), lim(&joint.y_axis), lim(&joint.z_axis)],
+                default_rotation_deg: joint.default_rotation.as_ref().map(|r| [r.x, r.y, r.z]),
+                mesh: None,
+            });
+            for child in &joint.geometries.geometry {
+                collect_structure(child, Some(joint_idx), &joint_world, defs, assets, out)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Parsed OBJ mesh in L3D source frame (mm, right-handed Z-up).
 #[derive(Debug, Clone, Default)]
 pub struct GldfMeshData {
@@ -241,10 +438,7 @@ impl GldfMeshData {
 /// (`variant_id` is accepted for API symmetry with
 /// `photometry::build_ies_outputs_for_variant`; geometry is
 /// variant-invariant in v0 but Phase 3 may wire per-variant parts.)
-pub fn build_first_mesh_for_variant(
-    buf: &FileBufGldf,
-    _variant_id: &str,
-) -> Result<GldfMeshData> {
+pub fn build_first_mesh_for_variant(buf: &FileBufGldf, _variant_id: &str) -> Result<GldfMeshData> {
     let l3d_bytes = get_first_l3d_with_ldt(buf)
         .and_then(|m| m.l3d_content)
         .or_else(|| first_l3d_in_buffer(buf))

@@ -70,9 +70,8 @@ pub fn IfcViewerPage() -> impl IntoView {
         })
     });
 
-    let active_source = Signal::derive(move || {
-        external.get().unwrap_or_else(|| default_source.get())
-    });
+    let active_source =
+        Signal::derive(move || external.get().unwrap_or_else(|| default_source.get()));
 
     let on_file = move |e: crate::components::edit_util::EditEvent| {
         #[cfg(target_arch = "wasm32")]
@@ -311,10 +310,13 @@ fn LightSourceNode(idx: usize, ls: gldf_rs::ifc::ImportedLightSource) -> impl In
 fn PropertiesNode(props: gldf_rs::ifc::ImportedProperties) -> impl IntoView {
     // ImportedProperties carries many Option<>s; show only the populated ones.
     let rows: Vec<(&'static str, String)> = [
-        ("Sources",        props.number_of_sources.map(|v| v.to_string())),
-        ("Total wattage",  props.total_wattage.map(|v| format!("{v} W"))),
-        ("Mounting",       props.mounting_type.clone()),
-        ("CCT",            props.color_temperature.map(|v| format!("{v} K"))),
+        ("Sources", props.number_of_sources.map(|v| v.to_string())),
+        (
+            "Total wattage",
+            props.total_wattage.map(|v| format!("{v} W")),
+        ),
+        ("Mounting", props.mounting_type.clone()),
+        ("CCT", props.color_temperature.map(|v| format!("{v} K"))),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|s| (k, s)))
@@ -385,9 +387,8 @@ fn download_ifc_text(text: &str) {
 
 #[cfg(target_arch = "wasm32")]
 fn download_ifc_text(text: &str) {
-    let uint8 = js_sys::Uint8Array::new(
-        &unsafe { js_sys::Uint8Array::view(text.as_bytes()) }.into(),
-    );
+    let uint8 =
+        js_sys::Uint8Array::new(&unsafe { js_sys::Uint8Array::view(text.as_bytes()) }.into());
     let array = js_sys::Array::new();
     array.push(&uint8.buffer());
     let opts = web_sys::BlobPropertyBag::new();

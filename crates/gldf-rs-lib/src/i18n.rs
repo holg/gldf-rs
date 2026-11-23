@@ -1,6 +1,6 @@
 //! i18n contract for gldf-rs.
 //!
-//! This module defines only the [`Translator`] trait — the contract
+//! This module defines only the [`Translator`](crate::i18n::Translator) trait — the contract
 //! that frontends (gldf-rs-wasm, gldf-rs-tui, gldf-rs-cli, gldf-rs-python)
 //! implement to translate the `gldf.*` keys this crate emits. The
 //! actual translation data lives in a separate crate
@@ -29,7 +29,7 @@
 //!
 //! # Default implementation
 //!
-//! [`NoOpTranslator`] returns `None` for every key. Useful in tests
+//! [`NoOpTranslator`](crate::i18n::NoOpTranslator) returns `None` for every key. Useful in tests
 //! and as a sentinel when the consumer hasn't wired translations.
 //! Callers should treat `None` as "fall back to whatever string the
 //! library provides alongside the key" (e.g. `RalEntry::fallback_name`).

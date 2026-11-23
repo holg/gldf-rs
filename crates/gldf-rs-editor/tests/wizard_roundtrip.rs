@@ -40,8 +40,8 @@ fn full_wizard_run_roundtrips_through_gldf_bytes() {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     };
@@ -142,8 +142,8 @@ fn wizard_with_geometry_lands_l3d_in_embedded_files() {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     };
@@ -244,8 +244,8 @@ fn wizard_with_geometry_lands_l3d_in_embedded_files() {
 /// GLDF that ever added an empty-name LightSource became corrupt.
 #[test]
 fn empty_value_locale_roundtrips_via_bytes() {
-    use gldf_rs::gldf::header::{Locale, LocaleFoo};
     use gldf_rs::gldf::general_definitions::FixedLightSource;
+    use gldf_rs::gldf::header::{Locale, LocaleFoo};
     use gldf_rs::EditableGldf;
 
     // Direct fixture: a single Fixed light source whose name has an
@@ -327,8 +327,8 @@ fn wizard_with_geometry_binds_variant_geometry_even_without_emitter() {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     };
@@ -420,8 +420,8 @@ fn wizard_with_geometry_but_no_emitter_still_lands_l3d() {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     };
@@ -433,12 +433,18 @@ fn wizard_with_geometry_but_no_emitter_still_lands_l3d() {
     // The L3D bytes must be in embedded_files even though no Emitter
     // was created. (Variant.Geometry binding is allowed to fall back to
     // None — the user can wire it manually later from the Variants page.)
-    let l3d_present = state.product.general_definitions.files.file.iter().any(|f| {
-        f.content_type == "geo/l3d"
-            && state.embedded_files.contains_key(&f.id)
-            && state.embedded_files.get(&f.id).map(|b| b.as_slice())
-                == Some(b"stub-l3d\n".as_slice())
-    });
+    let l3d_present = state
+        .product
+        .general_definitions
+        .files
+        .file
+        .iter()
+        .any(|f| {
+            f.content_type == "geo/l3d"
+                && state.embedded_files.contains_key(&f.id)
+                && state.embedded_files.get(&f.id).map(|b| b.as_slice())
+                    == Some(b"stub-l3d\n".as_slice())
+        });
     assert!(
         l3d_present,
         "L3D bytes were lost when emitter_draft was None. \
@@ -484,7 +490,10 @@ fn wizard_writes_ceiling_recessed_mountings() {
     let v = &variants.variant[0];
     let m = v.mountings.as_ref().expect("Mountings block written");
     let ceiling = m.ceiling.as_ref().expect("Ceiling branch written");
-    let recessed = ceiling.recessed.as_ref().expect("Recessed sub-block written");
+    let recessed = ceiling
+        .recessed
+        .as_ref()
+        .expect("Recessed sub-block written");
     assert_eq!(recessed.recessed_depth, 50);
     assert!(ceiling.surface_mounted.is_none());
     assert!(ceiling.pendant.is_none());

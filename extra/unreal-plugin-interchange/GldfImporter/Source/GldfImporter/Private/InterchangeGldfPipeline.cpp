@@ -34,9 +34,11 @@ void UInterchangeGldfPipeline::ExecutePipeline(
     // self-contained, draggable luminaire.
     //
     // Resolvable class path for FindObject<UClass> used by
-    // UInterchangeActorFactoryNode::GetObjectClass().
-    static const FString LuminaireClassPath =
-        TEXT("/Script/GldfImporter.GldfLuminaireActor");
+    // UInterchangeActorFactoryNode::GetObjectClass(). Derived from the class,
+    // never hard-coded: when the actor moved from the GldfImporter module to
+    // GldfRuntime a stale literal made every import silently fall back to a
+    // plain AActor (no lights, no variants).
+    const FString LuminaireClassPath = AGldfLuminaireActor::StaticClass()->GetPathName();
 
     int32 Retyped = 0;
     BaseNodeContainer->IterateNodesOfType<UInterchangeActorFactoryNode>(

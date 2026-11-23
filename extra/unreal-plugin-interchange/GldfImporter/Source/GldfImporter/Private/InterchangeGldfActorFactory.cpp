@@ -1,6 +1,7 @@
 #include "InterchangeGldfActorFactory.h"
 
 #include "GldfLuminaireActor.h"
+#include "Engine/StaticMesh.h"
 
 #include "InterchangeActorFactoryNode.h"
 #include "InterchangeTextureLightProfileFactoryNode.h"
@@ -191,6 +192,17 @@ void UInterchangeGldfActorFactory::ApplyLightAndVariants(
     }
 
     Luminaire.Variants.Reset(static_cast<int32>(VariantCount));
+    {
+        auto ReadProduct = [&](uint32 Field) {
+            FString Out;
+            if (char* Raw = gldf_unreal_product_string(Handle, Field)) { Out = FString(UTF8_TO_TCHAR(Raw)); gldf_unreal_string_free(Raw); }
+            return Out;
+        };
+        Luminaire.Manufacturer = ReadProduct(GLDF_PRODUCT_FIELD_MANUFACTURER);
+        Luminaire.ProductName = ReadProduct(GLDF_PRODUCT_FIELD_NAME);
+        Luminaire.ProductNumber = ReadProduct(GLDF_PRODUCT_FIELD_NUMBER);
+        Luminaire.SourceFile = FPaths::GetCleanFilename(SourcePath);
+    }
     // The set of LEO partNames that some variant actually drives with a light
     // (so we skip non-light LEOs like a sensor when building components).
     TSet<FString> LitEmitterNames;
@@ -208,6 +220,31 @@ void UInterchangeGldfActorFactory::ApplyLightAndVariants(
             gldf_unreal_string_free(NameRaw);
         }
 
+        // Mounting (per variant in GLDF): drives AGldfLuminaireActor::SnapToSurface.
+        GldfMountingInfo M{};
+        if (gldf_unreal_variant_mounting(Handle, vi, &M) == 0)
+        {
+            switch (M.kind)
+            {
+            case GLDF_MOUNTING_CEILING:       V.Mounting.Kind = EGldfMountingKind::Ceiling; break;
+            case GLDF_MOUNTING_WALL:          V.Mounting.Kind = EGldfMountingKind::Wall; break;
+            case GLDF_MOUNTING_GROUND:        V.Mounting.Kind = EGldfMountingKind::Ground; break;
+            case GLDF_MOUNTING_WORKING_PLANE: V.Mounting.Kind = EGldfMountingKind::WorkingPlane; break;
+            default:                          V.Mounting.Kind = EGldfMountingKind::None; break;
+            }
+            V.Mounting.bSurfaceMounted = M.surface_mounted != 0;
+            V.Mounting.bFreeStanding = M.free_standing != 0;
+            V.Mounting.bPoleTop = M.pole_top != 0;
+            V.Mounting.bPoleIntegrated = M.pole_integrated != 0;
+            V.Mounting.RecessedDepthMm = M.recessed_depth_present ? M.recessed_depth_mm : -1;
+            V.Mounting.PendantLengthMm = M.pendant_length_present ? M.pendant_length_mm : -1;
+            V.Mounting.MountingHeightMm = M.mounting_height_present ? M.mounting_height_mm : -1;
+            V.Mounting.PoleHeightMm = M.pole_height_present ? M.pole_height_mm : -1;
+        }
+
+        if (char* Raw = gldf_unreal_variant_string(Handle, vi, GLDF_VARIANT_FIELD_PRODUCT_NUMBER)) { V.ProductNumber = FString(UTF8_TO_TCHAR(Raw)); gldf_unreal_string_free(Raw); }
+        if (char* Raw = gldf_unreal_variant_string(Handle, vi, GLDF_VARIANT_FIELD_GTIN)) { V.Gtin = FString(UTF8_TO_TCHAR(Raw)); gldf_unreal_string_free(Raw); }
+
         const int32 EmitterCount = gldf_unreal_variant_emitter_count(Handle, vi);
         for (int32 ei = 0; ei < EmitterCount; ++ei)
         {
@@ -220,11 +257,23 @@ void UInterchangeGldfActorFactory::ApplyLightAndVariants(
             {
                 if (Info.lumens_present != 0) { P.Lumens = Info.lumens; }
                 if (Info.cct_present != 0)    { P.Cct = Info.cct; }
+                if (Info.watts_present != 0)  { V.Watts += static_cast<float>(Info.watts); }
             }
 
             const FString PhotometryId =
                 ReadEmitterString(Handle, vi, ei, GLDF_VARIANT_FIELD_PHOTOMETRY_ID);
             P.IesProfile = ResolveIesProfile(NodeContainer, DisplayName, PhotometryId);
+
+            // Keep the IES text on the actor: the runtime illuminance grid feeds
+            // it to the eulumdat core (no editor / Interchange needed in games).
+            {
+                const uint8* IesPtr = nullptr; uint32 IesLen = 0;
+                if (gldf_unreal_variant_emitter_ies(Handle, vi, static_cast<uint32>(ei), &IesPtr, &IesLen) == 0 && IesPtr && IesLen > 0)
+                {
+                    P.IesBytes.SetNumUninitialized(IesLen);
+                    FMemory::Memcpy(P.IesBytes.GetData(), IesPtr, IesLen);
+                }
+            }
 
             if (!P.EmitterName.IsEmpty())
             {
@@ -372,7 +421,11 @@ void UInterchangeGldfActorFactory::ApplyLightAndVariants(
 
             // Emitter center: cm in the right-handed Z-up frame; negate Y to
             // match the mesh's UE basis flip (PositionToUEBasis).
-            const FVector Loc(Shape.pos_x, -Shape.pos_y, Shape.pos_z);
+            FVector Loc(Shape.pos_x, -Shape.pos_y, Shape.pos_z);
+
+            // (Lights that would shine through their own housing are moved
+            // outside it by AGldfLuminaireActor::AdjustLightsOutsideHousing —
+            // the mesh has no bounds yet at this point of the import.)
             Light->SetMobility(EComponentMobility::Movable);
             Light->SetRelativeRotation(FQuat(RotM));
             Light->SetRelativeLocation(Loc);

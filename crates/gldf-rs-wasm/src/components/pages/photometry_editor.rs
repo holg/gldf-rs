@@ -38,6 +38,14 @@ pub fn PhotometryReadPage() -> impl IntoView {
     photometry_page(false)
 }
 
+/// A photometry entry with its calculated fields, diagnostic probe and raw bytes.
+type PhotometryRow = (
+    Photometry,
+    Option<CalculatedFields>,
+    PhotometryProbe,
+    Option<Vec<u8>>,
+);
+
 /// Edit view — declared GLDF values as editable inputs + calculated comparison + Use-calc button.
 #[component]
 pub fn PhotometryEditorPage() -> impl IntoView {
@@ -77,14 +85,16 @@ fn photometry_page(editable: bool) -> impl IntoView {
                 // <File> definition say? Surfaced via a `<details>` block on
                 // each row so we can diagnose missing-Calc cases without
                 // round-tripping through a rebuild.
-                let with_calc: Vec<(Photometry, Option<CalculatedFields>, PhotometryProbe, Option<Vec<u8>>)> = entries
+                let with_calc: Vec<PhotometryRow> = entries
                     .into_iter()
                     .map(|p| {
                         use crate::components::photometry_decode::{
                             decode_photometry_bytes, parse_photometry_with_fallback,
                         };
-                        let mut probe = PhotometryProbe::default();
-                        probe.file_id = p.photometry_file_reference.as_ref().map(|r| r.file_id.clone());
+                        let mut probe = PhotometryProbe {
+                            file_id: p.photometry_file_reference.as_ref().map(|r| r.file_id.clone()),
+                            ..Default::default()
+                        };
                         let raw_bytes: Option<Vec<u8>> = probe
                             .file_id
                             .as_ref()
@@ -247,10 +257,12 @@ fn PhotometryRow(
     let on_rename_id: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = id_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenamePhotometry {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenamePhotometry {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
     let on_remove = move |_| {
@@ -259,41 +271,93 @@ fn PhotometryRow(
             &state.with(|s| s.ui_language.clone()),
         );
         let msg = template.replace("{id}", &id_for_remove);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        if crate::components::edit_util::confirm(&msg) {
             let id_now = id_for_remove.clone();
             state.update(|s| s.apply(GldfAction::RemovePhotometry { id: id_now }));
         }
     };
-    let file_ref = photometry.photometry_file_reference.as_ref().map(|r| r.file_id.clone());
+    let file_ref = photometry
+        .photometry_file_reference
+        .as_ref()
+        .map(|r| r.file_id.clone());
     let desc = photometry.descriptive_photometry.clone();
     let ugr = desc.as_ref().and_then(|d| d.ugr4_h8_h705020_lq.clone());
 
     // GLDF-declared values as Option<String>. Empty → "-" placeholder.
     let gldf_cie = desc.as_ref().and_then(|d| d.cie_flux_code.clone());
-    let gldf_lor = desc.as_ref().and_then(|d| d.light_output_ratio).map(|v| v.to_string());
-    let gldf_eff = desc.as_ref().and_then(|d| d.luminous_efficacy).map(|v| v.to_string());
-    let gldf_dff = desc.as_ref().and_then(|d| d.downward_flux_fraction).map(|v| v.to_string());
-    let gldf_dlor = desc.as_ref().and_then(|d| d.downward_light_output_ratio).map(|v| v.to_string());
-    let gldf_ulor = desc.as_ref().and_then(|d| d.upward_light_output_ratio).map(|v| v.to_string());
-    let gldf_cutoff = desc.as_ref().and_then(|d| d.cut_off_angle).map(|v| v.to_string());
-    let gldf_lum = desc.as_ref().and_then(|d| d.luminaire_luminance).map(|v| v.to_string());
+    let gldf_lor = desc
+        .as_ref()
+        .and_then(|d| d.light_output_ratio)
+        .map(|v| v.to_string());
+    let gldf_eff = desc
+        .as_ref()
+        .and_then(|d| d.luminous_efficacy)
+        .map(|v| v.to_string());
+    let gldf_dff = desc
+        .as_ref()
+        .and_then(|d| d.downward_flux_fraction)
+        .map(|v| v.to_string());
+    let gldf_dlor = desc
+        .as_ref()
+        .and_then(|d| d.downward_light_output_ratio)
+        .map(|v| v.to_string());
+    let gldf_ulor = desc
+        .as_ref()
+        .and_then(|d| d.upward_light_output_ratio)
+        .map(|v| v.to_string());
+    let gldf_cutoff = desc
+        .as_ref()
+        .and_then(|d| d.cut_off_angle)
+        .map(|v| v.to_string());
+    let gldf_lum = desc
+        .as_ref()
+        .and_then(|d| d.luminaire_luminance)
+        .map(|v| v.to_string());
     let gldf_ux = ugr.as_ref().and_then(|u| u.x).map(|v| v.to_string());
     let gldf_uy = ugr.as_ref().and_then(|u| u.y).map(|v| v.to_string());
     let gldf_code = desc.as_ref().and_then(|d| d.photometric_code.clone());
-    let gldf_bug = desc.as_ref().and_then(|d| d.light_distribution_bug_rating.clone());
+    let gldf_bug = desc
+        .as_ref()
+        .and_then(|d| d.light_distribution_bug_rating.clone());
 
     // Calculated values as display strings.
     let calc_cie = calculated.as_ref().and_then(|c| c.cie_flux_code.clone());
-    let calc_lor = calculated.as_ref().and_then(|c| c.light_output_ratio).map(|v| format!("{:.3}", v));
-    let calc_eff = calculated.as_ref().and_then(|c| c.luminous_efficacy).map(|v| format!("{:.1}", v));
-    let calc_dff = calculated.as_ref().and_then(|c| c.downward_flux_fraction).map(|v| format!("{:.3}", v));
-    let calc_dlor = calculated.as_ref().and_then(|c| c.downward_light_output_ratio).map(|v| format!("{:.3}", v));
-    let calc_ulor = calculated.as_ref().and_then(|c| c.upward_light_output_ratio).map(|v| format!("{:.3}", v));
-    let calc_cutoff = calculated.as_ref().and_then(|c| c.cut_off_angle).map(|v| format!("{:.1}", v));
-    let calc_lum = calculated.as_ref().and_then(|c| c.luminaire_luminance).map(|v| v.to_string());
-    let calc_ux = calculated.as_ref().and_then(|c| c.ugr_x).map(|v| format!("{:.1}", v));
-    let calc_uy = calculated.as_ref().and_then(|c| c.ugr_y).map(|v| format!("{:.1}", v));
+    let calc_lor = calculated
+        .as_ref()
+        .and_then(|c| c.light_output_ratio)
+        .map(|v| format!("{:.3}", v));
+    let calc_eff = calculated
+        .as_ref()
+        .and_then(|c| c.luminous_efficacy)
+        .map(|v| format!("{:.1}", v));
+    let calc_dff = calculated
+        .as_ref()
+        .and_then(|c| c.downward_flux_fraction)
+        .map(|v| format!("{:.3}", v));
+    let calc_dlor = calculated
+        .as_ref()
+        .and_then(|c| c.downward_light_output_ratio)
+        .map(|v| format!("{:.3}", v));
+    let calc_ulor = calculated
+        .as_ref()
+        .and_then(|c| c.upward_light_output_ratio)
+        .map(|v| format!("{:.3}", v));
+    let calc_cutoff = calculated
+        .as_ref()
+        .and_then(|c| c.cut_off_angle)
+        .map(|v| format!("{:.1}", v));
+    let calc_lum = calculated
+        .as_ref()
+        .and_then(|c| c.luminaire_luminance)
+        .map(|v| v.to_string());
+    let calc_ux = calculated
+        .as_ref()
+        .and_then(|c| c.ugr_x)
+        .map(|v| format!("{:.1}", v));
+    let calc_uy = calculated
+        .as_ref()
+        .and_then(|c| c.ugr_y)
+        .map(|v| format!("{:.1}", v));
     let calc_code = calculated.as_ref().and_then(|c| c.photometric_code.clone());
     let calc_bug = calculated.as_ref().and_then(|c| c.bug_rating.clone());
 
@@ -304,7 +368,9 @@ fn PhotometryRow(
     // Never overwrites an existing declared value: the GLDF file's own
     // values are authoritative as authored.
     let on_use_calc = move |_| {
-        let Some(c) = calc_for_button.clone() else { return };
+        let Some(c) = calc_for_button.clone() else {
+            return;
+        };
         state.update(|s| {
             let descriptive = s
                 .product
@@ -315,9 +381,16 @@ fn PhotometryRow(
                 .and_then(|p| p.descriptive_photometry.clone());
             macro_rules! fill_if_empty_str {
                 ($accessor:ident, $action:ident, $calc:expr) => {
-                    if descriptive.as_ref().and_then(|d| d.$accessor.clone()).is_none() {
+                    if descriptive
+                        .as_ref()
+                        .and_then(|d| d.$accessor.clone())
+                        .is_none()
+                    {
                         if let Some(v) = $calc.clone() {
-                            s.apply(GldfAction::$action { index: idx, value: Some(v) });
+                            s.apply(GldfAction::$action {
+                                index: idx,
+                                value: Some(v),
+                            });
                         }
                     }
                 };
@@ -326,72 +399,179 @@ fn PhotometryRow(
                 ($accessor:ident, $action:ident, $calc:expr) => {
                     if descriptive.as_ref().and_then(|d| d.$accessor).is_none() {
                         if let Some(v) = $calc {
-                            s.apply(GldfAction::$action { index: idx, value: Some(v) });
+                            s.apply(GldfAction::$action {
+                                index: idx,
+                                value: Some(v),
+                            });
                         }
                     }
                 };
             }
             fill_if_empty_str!(cie_flux_code, SetPhotometryCieFluxCode, c.cie_flux_code);
-            fill_if_empty!(light_output_ratio, SetPhotometryLightOutputRatio, c.light_output_ratio);
-            fill_if_empty!(luminous_efficacy, SetPhotometryLuminousEfficacy, c.luminous_efficacy);
-            fill_if_empty!(downward_flux_fraction, SetPhotometryDownwardFluxFraction, c.downward_flux_fraction);
-            fill_if_empty!(downward_light_output_ratio, SetPhotometryDownwardLOR, c.downward_light_output_ratio);
-            fill_if_empty!(upward_light_output_ratio, SetPhotometryUpwardLOR, c.upward_light_output_ratio);
+            fill_if_empty!(
+                light_output_ratio,
+                SetPhotometryLightOutputRatio,
+                c.light_output_ratio
+            );
+            fill_if_empty!(
+                luminous_efficacy,
+                SetPhotometryLuminousEfficacy,
+                c.luminous_efficacy
+            );
+            fill_if_empty!(
+                downward_flux_fraction,
+                SetPhotometryDownwardFluxFraction,
+                c.downward_flux_fraction
+            );
+            fill_if_empty!(
+                downward_light_output_ratio,
+                SetPhotometryDownwardLOR,
+                c.downward_light_output_ratio
+            );
+            fill_if_empty!(
+                upward_light_output_ratio,
+                SetPhotometryUpwardLOR,
+                c.upward_light_output_ratio
+            );
             fill_if_empty!(cut_off_angle, SetPhotometryCutOffAngle, c.cut_off_angle);
-            fill_if_empty!(luminaire_luminance, SetPhotometryLuminaireLuminance, c.luminaire_luminance);
+            fill_if_empty!(
+                luminaire_luminance,
+                SetPhotometryLuminaireLuminance,
+                c.luminaire_luminance
+            );
             // UGR x/y nest under ugr4_h8_h705020_lq; if the whole struct is
             // missing we treat both as empty.
-            let ugr = descriptive.as_ref().and_then(|d| d.ugr4_h8_h705020_lq.as_ref());
+            let ugr = descriptive
+                .as_ref()
+                .and_then(|d| d.ugr4_h8_h705020_lq.as_ref());
             if ugr.and_then(|u| u.x).is_none() {
-                if let Some(v) = c.ugr_x { s.apply(GldfAction::SetPhotometryUgrX { index: idx, value: Some(v) }); }
+                if let Some(v) = c.ugr_x {
+                    s.apply(GldfAction::SetPhotometryUgrX {
+                        index: idx,
+                        value: Some(v),
+                    });
+                }
             }
             if ugr.and_then(|u| u.y).is_none() {
-                if let Some(v) = c.ugr_y { s.apply(GldfAction::SetPhotometryUgrY { index: idx, value: Some(v) }); }
+                if let Some(v) = c.ugr_y {
+                    s.apply(GldfAction::SetPhotometryUgrY {
+                        index: idx,
+                        value: Some(v),
+                    });
+                }
             }
-            fill_if_empty_str!(photometric_code, SetPhotometryPhotometricCode, c.photometric_code);
-            fill_if_empty_str!(light_distribution_bug_rating, SetPhotometryBugRating, c.bug_rating);
+            fill_if_empty_str!(
+                photometric_code,
+                SetPhotometryPhotometricCode,
+                c.photometric_code
+            );
+            fill_if_empty_str!(
+                light_distribution_bug_rating,
+                SetPhotometryBugRating,
+                c.bug_rating
+            );
         });
     };
 
     // String-on-change → action dispatch. One per field.
     let on_cie = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetPhotometryCieFluxCode { index: idx, value: optional_string(v) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryCieFluxCode {
+                index: idx,
+                value: optional_string(v),
+            })
+        });
     };
     let on_lor = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryLightOutputRatio { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryLightOutputRatio {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_eff = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryLuminousEfficacy { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryLuminousEfficacy {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_dff = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryDownwardFluxFraction { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryDownwardFluxFraction {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_dlor = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryDownwardLOR { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryDownwardLOR {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_ulor = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryUpwardLOR { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryUpwardLOR {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_cutoff = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryCutOffAngle { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryCutOffAngle {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_luminance = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryLuminaireLuminance { index: idx, value: event_i32(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryLuminaireLuminance {
+                index: idx,
+                value: event_i32(&e),
+            })
+        });
     };
     let on_ugr_x = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryUgrX { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryUgrX {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_ugr_y = move |e: crate::components::edit_util::EditEvent| {
-        state.update(|s| s.apply(GldfAction::SetPhotometryUgrY { index: idx, value: event_f64(&e) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryUgrY {
+                index: idx,
+                value: event_f64(&e),
+            })
+        });
     };
     let on_code = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetPhotometryPhotometricCode { index: idx, value: optional_string(v) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryPhotometricCode {
+                index: idx,
+                value: optional_string(v),
+            })
+        });
     };
     let on_bug = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetPhotometryBugRating { index: idx, value: optional_string(v) }));
+        state.update(|s| {
+            s.apply(GldfAction::SetPhotometryBugRating {
+                index: idx,
+                value: optional_string(v),
+            })
+        });
     };
 
     view! {
@@ -480,7 +660,10 @@ fn CalcLegend(has_calculated: bool) -> impl IntoView {
 fn ProbeBlock(probe: PhotometryProbe) -> impl IntoView {
     let summary = match (probe.file_id.is_some(), probe.in_embedded, probe.parse_ok) {
         (false, _, _) => "No file_id on photometry".to_string(),
-        (true, false, _) => format!("file_id `{}` NOT in embedded_files", probe.file_id.clone().unwrap_or_default()),
+        (true, false, _) => format!(
+            "file_id `{}` NOT in embedded_files",
+            probe.file_id.clone().unwrap_or_default()
+        ),
         (true, true, false) => "Bytes present but eulumdat parse failed".to_string(),
         (true, true, true) => "Bytes present, parse ok".to_string(),
     };
@@ -536,7 +719,11 @@ fn DualField(
         "padding: 4px 6px; border: 1px dashed var(--border-color); border-radius: 4px; background: var(--bg-secondary);"
     };
 
-    let gldf_display = if has_gldf { gldf_value.clone() } else { "-".to_string() };
+    let gldf_display = if has_gldf {
+        gldf_value.clone()
+    } else {
+        "-".to_string()
+    };
 
     view! {
         <div class="photometry-field-dual" style="display: grid; grid-template-columns: 200px 1fr 1fr; gap: 8px; align-items: center;">
@@ -548,7 +735,7 @@ fn DualField(
                             type=input_type
                             step=step
                             prop:value=gldf_value
-                            on:change=move |e| on_change(e)
+                            on:change=on_change
                             placeholder=placeholder
                             style="width: 100%; padding: 2px 4px; font-size: 12px; background: transparent; border: none; color: var(--text-primary);"
                         />

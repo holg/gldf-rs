@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.0] - 2026-11-23
+
+Everything since 0.4.0 in one release: the feature branch was merged into
+`main` as a whole.
+
+### Added
+
+- **Editor API (`gldf-rs-editor`)**: one `GldfAction` → `GldfState` reducer shared by the web editor, the `gldf-edit` terminal UI, `gldf-cli` and the Python bindings; product wizard (incl. driver step), variant editor with mountings and product series, marketing editor (housing colours, markets, RAL ↔ name), `.mtl` sync for L3D.
+- **GLDF builder API** in the library: spectra, photometry, variants; `load_gldf_from_buf_all` cross-references file ids from the XML.
+- **Selectable rc-3 / rc-4 XSD validation** with the rc.4 schema and tests.
+- **Sensors**: each sensor file shows its detection areas (plan, table per motion type, height, SensXML planning shapes, warnings) through `eulumdat::sensor::SensorFile`; `SensorObject` mounts from l3d_rs.
+- **Batch processing**: LDT / IES / ULD + template → GLDF / IFC, with an egui batch app.
+- **gldf-bevy**: native scene loading from a `.gldf`, command bridge for Lisp scene commands.
+- **gldf-unreal** (not published): exporter, C ABI, Interchange translator plugin for Unreal Engine.
+- Web editor: GLDF builder, SPD viewer, IFC viewer, URL deep links, validation banner, mobile layout.
+- New crates on crates.io: `gldf-rs-i18n`, `gldf-rs-editor`.
+
+- **Validation in every desktop frontend**: `gldf-cli validate --schema rc3|rc4` (and `batch --validate --schema …`), a *Validation* page in `gldf-editor-egui` with an rc-3/rc-4 switch, and a *Validation* section in the `gldf-edit` TUI (`t` toggles the schema). All three render the new frontend-neutral `gldf_rs_editor::validation_report` (engine + canonical + XSD, behind the editor crate's `xsd` feature) — the same bucketing as the web banner.
+
+### Changed
+
+- **eulumdat 0.8, l3d_rs 0.2.4, Bevy 0.19** (published versions; the Bevy fork is retired). Local builds take the sibling checkouts through `[patch.crates-io]`.
+- **Luminous flux and wattage of an LDT** in the GLDF metadata, the IFC export, the Bevy lights and the stadium plugin now come from the primary lamp set (`luminous_flux()` / `wattage()`); results differ only for files with more than one lamp set.
+- **Desktop GUI stack bumped**: eframe/egui 0.33 → 0.36 (`App::ui`, unified `egui::Panel`), three-d 0.18 → 0.19, rfd 0.15 → 0.17, ratatui 0.29 → 0.30 (+ ratatui-explorer 0.3, crossterm 0.29), resvg 0.45 → 0.48. `wasm-bindgen` pin moved to `=0.2.126` (required by eframe 0.36's js-sys); a manual `wasm-bindgen` CLI must match.
+- **Release workflow** builds the binaries that actually exist (`gldf-editor-egui`, `gldf-l3d-viewer`, `gldf-cli`, `gldf-edit`, `gldf-bevy-viewer`); the stale `gldf-viewer-egui` target is gone.
+
 ## [0.4.0] - 2026-05-19
 
 ### Added

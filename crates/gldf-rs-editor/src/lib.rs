@@ -23,19 +23,25 @@ pub mod emitter_draft;
 pub mod script;
 pub mod state;
 pub mod ui_language;
+#[cfg(feature = "xsd")]
+pub mod validation;
 pub mod wizard;
 
 pub use action::{GldfAction, LightEmitterKind, ModelEmitterBinding, Scope};
-pub use batch::{process_one, BatchOptions, BatchOutput, BatchTemplate, TemplateDraft};
 #[cfg(not(target_arch = "wasm32"))]
 pub use batch::{collect_inputs, run_batch, BatchEvent, BatchJob, FileReport};
+pub use batch::{process_one, BatchOptions, BatchOutput, BatchTemplate, TemplateDraft};
 pub use emitter_draft::EmitterDraft;
-pub use script::{apply_script, expand_file_refs, FileResolver, MemoryResolver};
 #[cfg(not(target_arch = "wasm32"))]
 pub use script::FsResolver;
+pub use script::{apply_script, expand_file_refs, FileResolver, MemoryResolver};
 pub use state::{collect_languages, GldfState};
 pub use ui_language::{
     initial_ui_language, normalise_ui_language, ui_language_native_name, LangStore, NullLangStore,
     UiLanguageStore, SUPPORTED_UI_LANGUAGES,
 };
-pub use wizard::{apply_wizard, text as wizard_text, WizardDraft, WizardLightSourceKind, WizardStep};
+#[cfg(feature = "xsd")]
+pub use validation::{validation_report, ValidationReport, ValidationRow};
+pub use wizard::{
+    apply_wizard, text as wizard_text, WizardDraft, WizardLightSourceKind, WizardStep,
+};

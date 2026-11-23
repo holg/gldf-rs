@@ -251,10 +251,19 @@ fn resolve_lightsource_export_input<'a>(
     })
 }
 
+/// (manufacturer, CCT, CRI, rated input power, spectrum id) of a light source.
+type LightSourceMetadata = (
+    Option<String>,
+    Option<i32>,
+    Option<i32>,
+    Option<f64>,
+    Option<String>,
+);
+
 fn resolve_lightsource_metadata(
     general: &GeneralDefinitions,
     ls_id: &str,
-) -> Option<(Option<String>, Option<i32>, Option<i32>, Option<f64>, Option<String>)> {
+) -> Option<LightSourceMetadata> {
     let lss = general.light_sources.as_ref()?;
     if let Some(ls) = lss.fixed_light_source.iter().find(|s| s.id == ls_id) {
         return Some(metadata_from_fixed(ls));
@@ -262,15 +271,17 @@ fn resolve_lightsource_metadata(
     if let Some(ls) = lss.changeable_light_source.iter().find(|s| s.id == ls_id) {
         return Some(metadata_from_changeable(ls));
     }
-    if let Some(ls) = lss.multi_channel_light_source.iter().find(|s| s.id == ls_id) {
+    if let Some(ls) = lss
+        .multi_channel_light_source
+        .iter()
+        .find(|s| s.id == ls_id)
+    {
         return Some(metadata_from_multi_channel(ls));
     }
     None
 }
 
-fn metadata_from_fixed(
-    ls: &FixedLightSource,
-) -> (Option<String>, Option<i32>, Option<i32>, Option<f64>, Option<String>) {
+fn metadata_from_fixed(ls: &FixedLightSource) -> LightSourceMetadata {
     let (cct, cri) = ls
         .color_information
         .as_ref()
@@ -281,13 +292,13 @@ fn metadata_from_fixed(
         cct,
         cri,
         ls.rated_input_power,
-        ls.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()),
+        ls.spectrum_reference
+            .as_ref()
+            .map(|r| r.spectrum_id.clone()),
     )
 }
 
-fn metadata_from_changeable(
-    ls: &ChangeableLightSource,
-) -> (Option<String>, Option<i32>, Option<i32>, Option<f64>, Option<String>) {
+fn metadata_from_changeable(ls: &ChangeableLightSource) -> LightSourceMetadata {
     let (cct, cri) = ls
         .color_information
         .as_ref()
@@ -298,13 +309,13 @@ fn metadata_from_changeable(
         cct,
         cri,
         ls.rated_input_power,
-        ls.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()),
+        ls.spectrum_reference
+            .as_ref()
+            .map(|r| r.spectrum_id.clone()),
     )
 }
 
-fn metadata_from_multi_channel(
-    ls: &MultiChannelLightSource,
-) -> (Option<String>, Option<i32>, Option<i32>, Option<f64>, Option<String>) {
+fn metadata_from_multi_channel(ls: &MultiChannelLightSource) -> LightSourceMetadata {
     // MultiChannel has per-channel spectra; surfacing channel 0's
     // spectrum is the pragmatic default. Per-channel exports are a
     // future extension (see the export plan).
@@ -313,7 +324,13 @@ fn metadata_from_multi_channel(
         .channel
         .first()
         .map(|c| c.spectrum_reference.spectrum_id.clone());
-    (ls.manufacturer.clone(), None, None, Some(ls.rated_input_power), spectrum_id)
+    (
+        ls.manufacturer.clone(),
+        None,
+        None,
+        Some(ls.rated_input_power),
+        spectrum_id,
+    )
 }
 
 fn find_photometry_for_lightsource(general: &GeneralDefinitions, ls_id: &str) -> Option<String> {
@@ -326,7 +343,10 @@ fn find_photometry_for_lightsource(general: &GeneralDefinitions, ls_id: &str) ->
                 if fle.light_source_reference.fixed_light_source_id.as_deref() == Some(ls_id) {
                     return Some(fle.photometry_reference.photometry_id.clone());
                 }
-                if fle.light_source_reference.changeable_light_source_id.as_deref()
+                if fle
+                    .light_source_reference
+                    .changeable_light_source_id
+                    .as_deref()
                     == Some(ls_id)
                 {
                     return Some(fle.photometry_reference.photometry_id.clone());
@@ -341,11 +361,7 @@ fn find_photometry_for_lightsource(general: &GeneralDefinitions, ls_id: &str) ->
     // ChangeableLightEmitter just picks a slot for it). Use that
     // direct reference when present.
     if let Some(lss) = general.light_sources.as_ref() {
-        if let Some(cls) = lss
-            .changeable_light_source
-            .iter()
-            .find(|s| s.id == ls_id)
-        {
+        if let Some(cls) = lss.changeable_light_source.iter().find(|s| s.id == ls_id) {
             if let Some(p) = cls.photometry_reference.as_ref() {
                 return Some(p.photometry_id.clone());
             }
@@ -365,7 +381,8 @@ fn fetch_file_bytes(
     // Secondary lookup: load_gldf_from_buf_all keys files by zip path
     // (e.g. "ldc/luminaire.ldt"). Map file_id → File → zip path.
     let f: &File = general.files.file.iter().find(|f| f.id == file_id)?;
-    let zip_path = crate::editable::EditableGldf::get_zip_path_for_file(&f.content_type, &f.file_name);
+    let zip_path =
+        crate::editable::EditableGldf::get_zip_path_for_file(&f.content_type, &f.file_name);
     embedded_files.get(&zip_path).cloned()
 }
 
@@ -384,13 +401,10 @@ fn parse_and_overlay_eulumdat(input: &LightSourceExportInput<'_>) -> Result<Eulu
     //     ldc/iesxml File entry holds TM-33 content.
     //   * IES → IesParser::parse.
     //   * Default → Eulumdat::parse (LDT).
-    let trimmed = content
-        .trim_start_matches('\u{feff}')
-        .trim_start();
+    let trimmed = content.trim_start_matches('\u{feff}').trim_start();
     let mut ldt = if trimmed.starts_with('<') {
-        let doc = eulumdat::atla::xml::parse(&content).map_err(|e| {
-            anyhow!("parse TM-33 XML for LightSource '{}': {e}", input.ls_id)
-        })?;
+        let doc = eulumdat::atla::xml::parse(&content)
+            .map_err(|e| anyhow!("parse TM-33 XML for LightSource '{}': {e}", input.ls_id))?;
         (&doc).into()
     } else if input.is_ies {
         eulumdat::IesParser::parse(&content)
@@ -492,9 +506,7 @@ fn overlay_emitter(emitters: &mut Vec<AtlaEmitter>, input: &LightSourceExportInp
             // Lossy UTF-8: headers are ASCII; this only matters for
             // rare comment lines with non-ASCII characters.
             let text = String::from_utf8_lossy(bytes);
-            let trimmed = text
-                .trim_start_matches('\u{feff}')
-                .trim_start();
+            let trimmed = text.trim_start_matches('\u{feff}').trim_start();
             // Two file shapes can land here:
             //   * `.spd` (Luxeon / two-column / Signify CSV) — feed
             //     to spd_loader::parse, take loaded.spd.
@@ -542,7 +554,10 @@ fn build_ifc_stub_product(product: &GldfProduct, ls_id: &str) -> Result<GldfProd
                 .find(|e| {
                     e.fixed_light_emitter.iter().any(|fle| {
                         fle.light_source_reference.fixed_light_source_id.as_deref() == Some(ls_id)
-                            || fle.light_source_reference.changeable_light_source_id.as_deref()
+                            || fle
+                                .light_source_reference
+                                .changeable_light_source_id
+                                .as_deref()
                                 == Some(ls_id)
                     })
                 })
@@ -565,19 +580,16 @@ fn build_ifc_stub_product(product: &GldfProduct, ls_id: &str) -> Result<GldfProd
     if let Some(ps) = g.photometries.as_mut() {
         ps.photometry.retain(|p| p.id == photometry_id);
     }
-    let keep_spectrum: Option<String> = g
-        .light_sources
-        .as_ref()
-        .and_then(|lss| {
-            lss.fixed_light_source
-                .iter()
-                .find_map(|s| s.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()))
-                .or_else(|| {
-                    lss.changeable_light_source
-                        .iter()
-                        .find_map(|s| s.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()))
-                })
-        });
+    let keep_spectrum: Option<String> = g.light_sources.as_ref().and_then(|lss| {
+        lss.fixed_light_source
+            .iter()
+            .find_map(|s| s.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()))
+            .or_else(|| {
+                lss.changeable_light_source
+                    .iter()
+                    .find_map(|s| s.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()))
+            })
+    });
     if let Some(ss) = g.spectrums.as_mut() {
         if let Some(sid) = keep_spectrum.as_ref() {
             ss.spectrum.retain(|s| &s.id == sid);
@@ -595,7 +607,11 @@ fn build_ifc_stub_product(product: &GldfProduct, ls_id: &str) -> Result<GldfProd
         .photometries
         .as_ref()
         .and_then(|ps| ps.photometry.first())
-        .and_then(|p| p.photometry_file_reference.as_ref().map(|r| r.file_id.clone()));
+        .and_then(|p| {
+            p.photometry_file_reference
+                .as_ref()
+                .map(|r| r.file_id.clone())
+        });
     if let Some(fid) = keep_file_id {
         g.files
             .file
@@ -635,8 +651,7 @@ mod tests {
 
     fn load_fixture(path: &str) -> (GldfProduct, HashMap<String, Vec<u8>>) {
         let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("read {path}: {e}"));
-        let bundle =
-            GldfProduct::load_gldf_from_buf_all(bytes).expect("load_gldf_from_buf_all");
+        let bundle = GldfProduct::load_gldf_from_buf_all(bytes).expect("load_gldf_from_buf_all");
         // Mirror the WASM EditableGldf path: index embedded files by
         // file id (the export module's primary lookup key) plus fall
         // back to zip path.

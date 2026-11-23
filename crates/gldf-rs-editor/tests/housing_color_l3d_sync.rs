@@ -10,16 +10,14 @@
 //! every state-driven refresh), the housing is the new colour.
 
 use gldf_rs::gldf::general_definitions::files::File as GldfFile;
-use gldf_rs::gldf::general_definitions::geometries::{
-    GeometryFileReference, ModelGeometry,
-};
+use gldf_rs::gldf::general_definitions::geometries::{GeometryFileReference, ModelGeometry};
 use gldf_rs::gldf::general_definitions::{Files, Geometries};
-use gldf_rs::gldf::LocaleFoo;
 use gldf_rs::gldf::product_definitions::{
     DescriptiveAttributes, Geometry, HousingColor, HousingColors, Marketing,
     ModelGeometryReference, Variant, Variants,
 };
 use gldf_rs::gldf::GldfProduct;
+use gldf_rs::gldf::LocaleFoo;
 use gldf_rs_editor::{GldfAction, GldfState, Scope};
 use l3d_rs::l3d::{BufFile, L3dFile};
 use std::collections::HashMap;

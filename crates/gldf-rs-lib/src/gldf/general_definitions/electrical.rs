@@ -349,7 +349,11 @@ impl serde::Serialize for Equipments {
 /// Use on any `Option<Equipments>` field that should drop empty.
 pub fn is_equipments_empty(eqs: &Option<Equipments>) -> bool {
     eqs.as_ref()
-        .map(|e| e.equipment.iter().all(|x| x.light_source_reference.is_none()))
+        .map(|e| {
+            e.equipment
+                .iter()
+                .all(|x| x.light_source_reference.is_none())
+        })
         .unwrap_or(true)
 }
 

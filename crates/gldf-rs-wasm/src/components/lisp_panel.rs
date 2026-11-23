@@ -449,8 +449,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
         let Some(win) = web_sys::window() else {
             return wasm_bindgen::JsValue::NULL;
         };
-        let Ok(prop) = js_sys::Reflect::get(&win, &wasm_bindgen::JsValue::from_str(fn_name))
-        else {
+        let Ok(prop) = js_sys::Reflect::get(&win, &wasm_bindgen::JsValue::from_str(fn_name)) else {
             return wasm_bindgen::JsValue::NULL;
         };
         let Ok(func) = prop.dyn_into::<js_sys::Function>() else {
@@ -465,8 +464,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
         let Some(win) = web_sys::window() else {
             return wasm_bindgen::JsValue::NULL;
         };
-        let Ok(prop) = js_sys::Reflect::get(&win, &wasm_bindgen::JsValue::from_str(fn_name))
-        else {
+        let Ok(prop) = js_sys::Reflect::get(&win, &wasm_bindgen::JsValue::from_str(fn_name)) else {
             return wasm_bindgen::JsValue::NULL;
         };
         let Ok(func) = prop.dyn_into::<js_sys::Function>() else {
@@ -489,12 +487,13 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
     }
 
     // (GET-AMBIENT) — returns the current brightness as a Real.
-    interp.register_fn("GET-AMBIENT", |_ctx: &mut ForeignContext, _args: &[Expr]| {
-        let v = call_window_get("gldf_bevy_get_ambient");
-        v.as_f64()
-            .map(|f| Expr::Real(f))
-            .unwrap_or(Expr::Nil)
-    });
+    interp.register_fn(
+        "GET-AMBIENT",
+        |_ctx: &mut ForeignContext, _args: &[Expr]| {
+            let v = call_window_get("gldf_bevy_get_ambient");
+            v.as_f64().map(Expr::Real).unwrap_or(Expr::Nil)
+        },
+    );
 
     // (GET-ROOM-SIZE) — returns a list (width length height) in metres.
     interp.register_fn(
@@ -504,7 +503,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
             if obj.is_null() || obj.is_undefined() {
                 return Expr::Nil;
             }
-            Expr::List(vec![
+            Expr::list(vec![
                 Expr::Real(get_f64(&obj, "width")),
                 Expr::Real(get_f64(&obj, "length")),
                 Expr::Real(get_f64(&obj, "height")),
@@ -521,7 +520,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
             if obj.is_null() || obj.is_undefined() {
                 return Expr::Nil;
             }
-            Expr::List(vec![
+            Expr::list(vec![
                 Expr::Real(get_f64(&obj, "r")),
                 Expr::Real(get_f64(&obj, "g")),
                 Expr::Real(get_f64(&obj, "b")),
@@ -560,7 +559,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
             if obj.is_null() || obj.is_undefined() {
                 return Expr::Nil;
             }
-            Expr::List(vec![
+            Expr::list(vec![
                 Expr::Real(get_f64(&obj, "er")),
                 Expr::Real(get_f64(&obj, "eg")),
                 Expr::Real(get_f64(&obj, "eb")),
@@ -586,7 +585,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
         let fx = get_f64(&obj, "fx");
         let fy = get_f64(&obj, "fy");
         let fz = get_f64(&obj, "fz");
-        Expr::List(vec![
+        Expr::list(vec![
             Expr::Real(ex),
             Expr::Real(ey),
             Expr::Real(ez),
@@ -608,10 +607,7 @@ fn register_room_getters(interp: &mut acadlisp::Interpreter) {
 /// see the same document the user is editing. Without this sync the
 /// Lisp side starts empty and every `(GLDF-VARIANT-SET 1)` fails with
 /// "out of range (0..0)".
-fn run_lisp(
-    code: &str,
-    product: Option<gldf_rs::GldfProduct>,
-) -> (String, String) {
+fn run_lisp(code: &str, product: Option<gldf_rs::GldfProduct>) -> (String, String) {
     let (out, result) = INTERP.with(|cell| {
         let interp = &mut *cell.borrow_mut();
         if let Some(state) = interp.user_data.downcast_mut::<GldfState>() {
@@ -670,10 +666,7 @@ fn required_file_names(cmds: &[SceneCommand]) -> std::collections::BTreeSet<Stri
 }
 
 /// Recursively gather every `{"@file": "<name>"}` string in a JSON value.
-fn collect_at_file_refs(
-    value: &serde_json::Value,
-    out: &mut std::collections::BTreeSet<String>,
-) {
+fn collect_at_file_refs(value: &serde_json::Value, out: &mut std::collections::BTreeSet<String>) {
     match value {
         serde_json::Value::Object(map) => {
             if let Some(serde_json::Value::String(name)) = map.get("@file") {
@@ -748,9 +741,7 @@ fn apply_editor_commands(
                 // expects a Vec<u8> sequence ("invalid type: map").
                 match serde_json::from_str::<serde_json::Value>(draft_json) {
                     Ok(mut value) => {
-                        if let Err(e) =
-                            gldf_rs_editor::expand_file_refs(&mut value, &resolver)
-                        {
+                        if let Err(e) = gldf_rs_editor::expand_file_refs(&mut value, &resolver) {
                             errors.push(format!("wizard @file: {e}"));
                         } else {
                             match serde_json::from_value::<WizardDraft>(value) {
@@ -777,9 +768,7 @@ fn apply_editor_commands(
         }
     }
 
-    let mut summary = format!(
-        "; editor: {actions_applied} action(s)"
-    );
+    let mut summary = format!("; editor: {actions_applied} action(s)");
     if wizards_applied > 0 {
         summary.push_str(&format!(", {wizards_applied} wizard draft(s)"));
     }
@@ -1295,8 +1284,7 @@ pub fn LispPanel(open: RwSignal<bool>, #[prop(into)] is_3d_view: Signal<bool>) -
                     still_missing.join(", ")
                 ));
             });
-            let want: std::collections::BTreeSet<String> =
-                still_missing.into_iter().collect();
+            let want: std::collections::BTreeSet<String> = still_missing.into_iter().collect();
             open_file_picker(move |dropped| {
                 let mut all = picked.clone();
                 for (k, v) in dropped {

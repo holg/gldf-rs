@@ -7,18 +7,14 @@ use gldf_rs_editor::{GldfAction, GldfState, Scope};
 use std::collections::HashMap;
 
 fn main() {
-    let gldf_bytes = std::fs::read("tests/data/SLV - Tria 2.gldf")
-        .expect("SLV Tria 2 fixture missing");
+    let gldf_bytes =
+        std::fs::read("tests/data/SLV - Tria 2.gldf").expect("SLV Tria 2 fixture missing");
 
     let bundle = GldfProduct::load_gldf_from_buf_all(gldf_bytes).expect("load");
     let mut embedded_files: HashMap<String, Vec<u8>> = HashMap::new();
     for f in bundle.files {
         if let Some(content) = f.content {
-            let key = f
-                .file_id
-                .or_else(|| f.path)
-                .or_else(|| f.name)
-                .expect("file has key");
+            let key = f.file_id.or(f.path).or(f.name).expect("file has key");
             embedded_files.insert(key, content);
         }
     }

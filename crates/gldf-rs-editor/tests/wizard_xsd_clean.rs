@@ -36,8 +36,8 @@ fn minimal_draft() -> WizardDraft {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     }

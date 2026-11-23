@@ -43,15 +43,10 @@ pub fn LocaleFooEditor(
     // Compact-view (single active-language) editor. If the active language
     // isn't present yet, the first edit appends it.
     let on_change_compact = {
-        let on_change = on_change.clone();
         move |new_text: String| {
             let lang = active_lang.get();
             let mut new_value = current.get();
-            match new_value
-                .locale
-                .iter()
-                .position(|l| l.language == lang)
-            {
+            match new_value.locale.iter().position(|l| l.language == lang) {
                 Some(i) => new_value.locale[i].value = new_text,
                 None => new_value.locale.push(Locale {
                     language: lang,
@@ -121,7 +116,7 @@ pub fn LocaleFooEditor(
             </div>
 
             {move || if expanded.get() {
-                let on_change = on_change.clone();
+                let on_change = on_change;
                 view! {
                     <div class="locale-foo-expanded">
                         <ExpandedRows current=current on_change=on_change multiline=multiline />
@@ -143,11 +138,11 @@ fn ExpandedRows(
     let rows = move || {
         let snapshot = current.get();
         let total = snapshot.locale.len();
-        let on_change = on_change.clone();
+        let on_change = on_change;
         (0..total).map(|idx| {
-            let on_change_lang = on_change.clone();
-            let on_change_value = on_change.clone();
-            let on_change_remove = on_change.clone();
+            let on_change_lang = on_change;
+            let on_change_value = on_change;
+            let on_change_remove = on_change;
 
             let on_lang = move |e: crate::components::edit_util::EditEvent| {
                 let Some(new_lang) = read_input_value(&e) else { return };
@@ -252,7 +247,8 @@ where
                 rows="4"
                 style="flex: 1; min-width: 0;"
             />
-        }.into_any()
+        }
+        .into_any()
     } else {
         view! {
             <input
@@ -263,7 +259,8 @@ where
                 placeholder=placeholder
                 style="flex: 1; min-width: 0;"
             />
-        }.into_any()
+        }
+        .into_any()
     }
 }
 

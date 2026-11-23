@@ -454,10 +454,7 @@ impl GldfGenerator {
                     ));
                 }
                 if let Some(pf) = da.power_factor {
-                    xml.push_str(&format!(
-                        "          <PowerFactor>{}</PowerFactor>\n",
-                        pf
-                    ));
+                    xml.push_str(&format!("          <PowerFactor>{}</PowerFactor>\n", pf));
                 }
                 if let Some(clo) = da.constant_light_output {
                     xml.push_str(&format!(

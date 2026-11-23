@@ -165,7 +165,12 @@ mod tests {
         let outcome = apply_inline_spectrum(&mut prod, &mut em);
         assert_eq!(outcome.inlined, 1);
         assert_eq!(outcome.files_removed, vec!["spd1"]);
-        let specs = &prod.general_definitions.spectrums.as_ref().unwrap().spectrum;
+        let specs = &prod
+            .general_definitions
+            .spectrums
+            .as_ref()
+            .unwrap()
+            .spectrum;
         assert_eq!(specs[0].intensity.len(), 3);
         assert_eq!(specs[0].intensity[0].wavelength, Some(380));
         assert_eq!(specs[0].intensity[0].value, Some(0.5));
@@ -216,7 +221,12 @@ mod tests {
         let mut em = HashMap::new();
         let outcome = apply_inline_spectrum(&mut prod, &mut em);
         assert!(outcome.is_noop());
-        assert!(prod.general_definitions.spectrums.as_ref().unwrap().spectrum[0]
+        assert!(prod
+            .general_definitions
+            .spectrums
+            .as_ref()
+            .unwrap()
+            .spectrum[0]
             .spectrum_file_reference
             .is_some());
     }

@@ -69,10 +69,7 @@ impl<'a> FileResolver for MemoryResolver<'a> {
 /// Walk the parsed action JSON and replace any
 /// `{"<field>": {"@file": "<path>"}}` with the file's contents (as a
 /// JSON number array, which is what serde expects for `Vec<u8>` fields).
-pub fn expand_file_refs(
-    value: &mut serde_json::Value,
-    resolver: &dyn FileResolver,
-) -> Result<()> {
+pub fn expand_file_refs(value: &mut serde_json::Value, resolver: &dyn FileResolver) -> Result<()> {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
@@ -88,12 +85,8 @@ pub fn expand_file_refs(
             for k in file_ref_keys {
                 let path = map[&k]["@file"].as_str().unwrap().to_string();
                 let bytes = resolver.resolve(&path)?;
-                map[&k] = Value::Array(
-                    bytes
-                        .into_iter()
-                        .map(|b| Value::Number(b.into()))
-                        .collect(),
-                );
+                map[&k] =
+                    Value::Array(bytes.into_iter().map(|b| Value::Number(b.into())).collect());
             }
             for v in map.values_mut() {
                 expand_file_refs(v, resolver)?;
@@ -120,8 +113,7 @@ pub fn apply_script(
     let mut value: serde_json::Value =
         serde_json::from_str(script_json).context("parse script JSON")?;
     expand_file_refs(&mut value, resolver).context("expand @file refs")?;
-    let actions: Vec<GldfAction> =
-        serde_json::from_value(value).context("parse actions")?;
+    let actions: Vec<GldfAction> = serde_json::from_value(value).context("parse actions")?;
     for action in actions {
         state.apply(action);
         if let Some(err) = &state.last_error {

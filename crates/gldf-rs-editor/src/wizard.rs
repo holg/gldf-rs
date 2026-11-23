@@ -165,7 +165,7 @@ impl WizardStep {
     }
 
     /// One-based step number for UI display (`"1"`, `"2"`, …). Together
-    /// with [`label`] this is what every frontend uses as the step
+    /// with [`Self::label`] this is what every frontend uses as the step
     /// heading. Lives in the lib so WASM, TUI, and CLI render the
     /// same numbering.
     pub fn number(&self) -> u8 {
@@ -344,11 +344,15 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
     }
     let created_with = draft.header_created_with.trim();
     if !created_with.is_empty() {
-        state.apply(GldfAction::SetCreatedWithApplication(created_with.to_string()));
+        state.apply(GldfAction::SetCreatedWithApplication(
+            created_with.to_string(),
+        ));
     }
     let default_lang = draft.header_default_language.trim();
     if !default_lang.is_empty() {
-        state.apply(GldfAction::SetDefaultLanguage(Some(default_lang.to_string())));
+        state.apply(GldfAction::SetDefaultLanguage(Some(
+            default_lang.to_string(),
+        )));
     }
 
     // Photometry
@@ -425,27 +429,33 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
 
     match draft.ls_kind {
         WizardLightSourceKind::Fixed => {
-            let mut ls = FixedLightSource::default();
-            ls.name = name_locale;
-            ls.manufacturer = manufacturer_opt;
-            ls.rated_input_power = power;
+            let ls = FixedLightSource {
+                name: name_locale,
+                manufacturer: manufacturer_opt,
+                rated_input_power: power,
+                ..Default::default()
+            };
             state.apply(GldfAction::AddFixedLightSource {
                 payload: Box::new(ls),
             });
         }
         WizardLightSourceKind::Changeable => {
-            let mut ls = ChangeableLightSource::default();
-            ls.name = name_locale;
-            ls.manufacturer = manufacturer_opt;
+            let ls = ChangeableLightSource {
+                name: name_locale,
+                manufacturer: manufacturer_opt,
+                ..Default::default()
+            };
             state.apply(GldfAction::AddChangeableLightSource {
                 payload: Box::new(ls),
             });
         }
         WizardLightSourceKind::MultiChannel => {
-            let mut ls = MultiChannelLightSource::default();
-            ls.name = name_locale;
-            ls.manufacturer = manufacturer_opt;
-            ls.rated_input_power = power.unwrap_or(0.0);
+            let ls = MultiChannelLightSource {
+                name: name_locale,
+                manufacturer: manufacturer_opt,
+                rated_input_power: power.unwrap_or(0.0),
+                ..Default::default()
+            };
             state.apply(GldfAction::AddMultiChannelLightSource {
                 payload: Box::new(ls),
             });
@@ -467,9 +477,7 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
         let last_ls_id = |kind: WizardLightSourceKind| -> Option<String> {
             let ls = state.product.general_definitions.light_sources.as_ref()?;
             match kind {
-                WizardLightSourceKind::Fixed => {
-                    ls.fixed_light_source.last().map(|l| l.id.clone())
-                }
+                WizardLightSourceKind::Fixed => ls.fixed_light_source.last().map(|l| l.id.clone()),
                 WizardLightSourceKind::Changeable => {
                     ls.changeable_light_source.last().map(|l| l.id.clone())
                 }
@@ -741,9 +749,7 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
         // matching the LightSource kind). Skip if there's no emitter
         // (the user skipped that step) or no ControlGear (mint above
         // failed). Index 0 is the wizard's only emitter-child.
-        if let (Some(eid), Some(cg_id)) =
-            (emitter_id.as_ref(), control_gear_id.as_ref())
-        {
+        if let (Some(eid), Some(cg_id)) = (emitter_id.as_ref(), control_gear_id.as_ref()) {
             state.apply(GldfAction::SetEmitterControlGearReference {
                 emitter_id: eid.clone(),
                 kind: light_source_kind,
@@ -767,7 +773,9 @@ pub fn apply_wizard(state: &mut GldfState, draft: &WizardDraft) {
 /// the same way. This keeps the wizard's draft parameter count low (one
 /// string + four ints), which matters for the TUI's keyboard-driven
 /// form and the CLI's JSON draft.
-fn build_mountings_from_draft(draft: &WizardDraft) -> Option<gldf_rs::gldf::product_definitions::Mountings> {
+fn build_mountings_from_draft(
+    draft: &WizardDraft,
+) -> Option<gldf_rs::gldf::product_definitions::Mountings> {
     use gldf_rs::gldf::product_definitions::{
         Ceiling, FreeStanding, Ground, Mountings, Pendant, PoleTop, Recessed, SurfaceMounted, Wall,
         WorkingPlane,
@@ -812,8 +820,10 @@ fn build_mountings_from_draft(draft: &WizardDraft) -> Option<gldf_rs::gldf::prod
             });
         }
         "wall" => {
-            let mut w = Wall::default();
-            w.mounting_height = mount_h.unwrap_or(2000);
+            let mut w = Wall {
+                mounting_height: mount_h.unwrap_or(2000),
+                ..Default::default()
+            };
             if let Some(d) = depth {
                 w.recessed = Some(Recessed {
                     recessed_depth: d,

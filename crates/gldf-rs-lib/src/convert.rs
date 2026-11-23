@@ -86,7 +86,7 @@ impl LdtMetadata {
                 None
             },
             lumens: {
-                let flux = ldt.total_luminous_flux();
+                let flux = ldt.luminous_flux();
                 if flux > 0.0 {
                     Some(flux)
                 } else {
@@ -94,7 +94,7 @@ impl LdtMetadata {
                 }
             },
             watts: {
-                let watts = ldt.total_wattage();
+                let watts = ldt.wattage();
                 if watts > 0.0 {
                     Some(watts)
                 } else {
@@ -398,8 +398,7 @@ pub fn tm33_to_gldf(data: &[u8], filename: &str) -> Result<FileBufGldf, String> 
     };
     use eulumdat::atla::xml as atla_xml;
 
-    let content = std::str::from_utf8(data)
-        .map_err(|e| format!("TM-33: not UTF-8 ({})", e))?;
+    let content = std::str::from_utf8(data).map_err(|e| format!("TM-33: not UTF-8 ({})", e))?;
     let doc = atla_xml::parse(content).map_err(|e| format!("TM-33 parse: {:?}", e))?;
     let emitter_opt = doc.emitters.first();
 
@@ -483,9 +482,7 @@ pub fn tm33_to_gldf(data: &[u8], filename: &str) -> Result<FileBufGldf, String> 
         .unwrap_or_else(|| "TM-33 LightSource".to_string());
     let ls_description = doc.header.catalog_number.clone();
     let rated_input_power = emitter_opt.and_then(|e| e.input_watts);
-    let cct = emitter_opt
-        .and_then(|e| e.cct)
-        .map(|c| c.round() as i32);
+    let cct = emitter_opt.and_then(|e| e.cct).map(|c| c.round() as i32);
     let cri = emitter_opt
         .and_then(|e| e.color_rendering.as_ref())
         .and_then(|cr| cr.ra)
@@ -684,14 +681,12 @@ mod tests {
                 return;
             }
         };
-        let bundle = tm33_to_gldf(&data, "golden_lightsource_2.tm33.xml")
-            .expect("tm33_to_gldf");
+        let bundle = tm33_to_gldf(&data, "golden_lightsource_2.tm33.xml").expect("tm33_to_gldf");
         let g = &bundle.gldf;
 
         // Header manufacturer surfaced.
         assert!(
-            !g.header.manufacturer.is_empty()
-                && g.header.manufacturer != "Unknown",
+            !g.header.manufacturer.is_empty() && g.header.manufacturer != "Unknown",
             "header manufacturer not surfaced: {:?}",
             g.header.manufacturer
         );
@@ -760,7 +755,9 @@ mod tests {
             .expect("light_sources")
             .fixed_light_source[0];
         assert_eq!(
-            fls.spectrum_reference.as_ref().map(|r| r.spectrum_id.as_str()),
+            fls.spectrum_reference
+                .as_ref()
+                .map(|r| r.spectrum_id.as_str()),
             Some(spectrum.id.as_str()),
             "FixedLightSource.SpectrumReference not wired to the Spectrum"
         );

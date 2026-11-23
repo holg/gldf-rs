@@ -38,3 +38,7 @@ gldf-rs = { workspace = true, features = ["eulumdat", "l3d", "xsd"] }
 default = []
 # Accept DIALux .uld files as batch inputs (converted via light-convert).
 uld = ["dep:light-convert"]
+# Frontend-neutral validation report (engine + canonical + rc-3/rc-4 XSD
+# via uppsala). Native frontends (egui, TUI) turn it on; kept optional so
+# script-only consumers don't pay for the validator.
+xsd = ["gldf-rs/xsd"]

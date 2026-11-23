@@ -5,10 +5,10 @@
 //!
 //! The transform is line-by-line, not parse-into-mesh-then-emit:
 //!
-//! * `v x y z`   → scale + negate y (positions, [`coords::point_l3d_to_ue`])
+//! * `v x y z`   → scale + negate y (positions, [`crate::coords::point_l3d_to_ue`])
 //! * `vn x y z`  → negate y only (normals are directions; no scale)
 //! * `f a b c …` → reverse polygon vertex order (every winding flips because
-//!                 the transform is orientation-reversing — `det(M) < 0`)
+//!   the transform is orientation-reversing — `det(M) < 0`)
 //! * `mtllib`, `usemtl`, `vt`, `g`, `o`, `s`, `#`, blanks → passthrough
 //!
 //! Anything we don't recognise is also passed through verbatim — better to
@@ -23,9 +23,8 @@ use glam::DVec3;
 /// OBJ as a UTF-8 string. Lines that don't parse as numbers fall through
 /// unchanged (with a debug-only stderr note in tests).
 pub fn rewrite_obj_to_ue(obj_bytes: &[u8], units: UnitSystem) -> Result<String> {
-    let input = std::str::from_utf8(obj_bytes).map_err(|e| {
-        crate::error::ExportError::Internal(format!("OBJ is not valid UTF-8: {e}"))
-    })?;
+    let input = std::str::from_utf8(obj_bytes)
+        .map_err(|e| crate::error::ExportError::Internal(format!("OBJ is not valid UTF-8: {e}")))?;
 
     // Preallocate ~= input size; rewrite barely changes line lengths.
     let mut out = String::with_capacity(input.len());

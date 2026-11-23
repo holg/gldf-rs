@@ -74,8 +74,7 @@ fn EquipmentCard(equipment: Equipment, editable: bool) -> impl IntoView {
     let on_remove = move |_| {
         let id = id_for_remove.clone();
         let msg = format!("Remove equipment '{}'?", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveEquipment { id }));
         }
     };
@@ -140,7 +139,10 @@ fn EquipmentCard(equipment: Equipment, editable: bool) -> impl IntoView {
 }
 
 #[component]
-fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 'static + Clone) -> impl IntoView {
+fn EquipmentEditForm(
+    equipment: Equipment,
+    on_done: impl Fn() + Send + Sync + 'static + Clone,
+) -> impl IntoView {
     let state = use_gldf();
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let id = equipment.id.clone();
@@ -167,12 +169,14 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
     let s_cg = RwSignal::new(init_cg);
     let s_power = RwSignal::new(equipment.rated_input_power.to_string());
     let s_eblf = RwSignal::new(
-        equipment.emergency_ballast_lumen_factor
+        equipment
+            .emergency_ballast_lumen_factor
             .map(|v| v.to_string())
             .unwrap_or_default(),
     );
     let s_erlf = RwSignal::new(
-        equipment.emergency_rated_luminous_flux
+        equipment
+            .emergency_rated_luminous_flux
             .map(|v| v.to_string())
             .unwrap_or_default(),
     );
@@ -183,7 +187,12 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
                 .general_definitions
                 .light_sources
                 .as_ref()
-                .map(|ls| ls.fixed_light_source.iter().map(|f| f.id.clone()).collect::<Vec<_>>())
+                .map(|ls| {
+                    ls.fixed_light_source
+                        .iter()
+                        .map(|f| f.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -193,7 +202,12 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
                 .general_definitions
                 .light_sources
                 .as_ref()
-                .map(|ls| ls.changeable_light_source.iter().map(|c| c.id.clone()).collect::<Vec<_>>())
+                .map(|ls| {
+                    ls.changeable_light_source
+                        .iter()
+                        .map(|c| c.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -203,7 +217,12 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
                 .general_definitions
                 .control_gears
                 .as_ref()
-                .map(|c| c.control_gear.iter().map(|g| g.id.clone()).collect::<Vec<_>>())
+                .map(|c| {
+                    c.control_gear
+                        .iter()
+                        .map(|g| g.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -237,11 +256,19 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
         };
         let light_source_id = {
             let id = s_ls.get();
-            if id.is_empty() { None } else { Some(id) }
+            if id.is_empty() {
+                None
+            } else {
+                Some(id)
+            }
         };
         let control_gear_id = {
             let id = s_cg.get();
-            if id.is_empty() { None } else { Some(id) }
+            if id.is_empty() {
+                None
+            } else {
+                Some(id)
+            }
         };
         let rated_input_power = s_power.with(|t| t.trim().parse::<f64>().unwrap_or(0.0));
         let emergency_ballast_lumen_factor = s_eblf.with(|t| t.trim().parse::<f64>().ok());
@@ -266,8 +293,16 @@ fn EquipmentEditForm(equipment: Equipment, on_done: impl Fn() + Send + Sync + 's
     // is bounded. (Larger refactor punted: switch TextField to
     // `Into<String>`.)
     let l_power = Box::leak("Rated input power (W)".to_string().into_boxed_str());
-    let l_eblf = Box::leak("Emergency ballast lumen factor".to_string().into_boxed_str());
-    let l_erlf = Box::leak("Emergency rated luminous flux (lm)".to_string().into_boxed_str());
+    let l_eblf = Box::leak(
+        "Emergency ballast lumen factor"
+            .to_string()
+            .into_boxed_str(),
+    );
+    let l_erlf = Box::leak(
+        "Emergency rated luminous flux (lm)"
+            .to_string()
+            .into_boxed_str(),
+    );
     // The above three keys aren't translated yet (they didn't make this
     // cut's key budget — emergency-ballast parameters are a smaller XSD
     // niche). The save/cancel buttons + the three select labels above

@@ -54,10 +54,13 @@ namespace UE::GldfImporter::Private
     // here, instead of relying on an import-settings scale that the
     // programmatic ImportScene path (web panel / DownloadAndPlace) never
     // applies.
+    // The Rust payload bakes the L3D unit scale into the merged mesh and hands
+    // over CENTIMETRES (mesh_payload.rs: unit → metres → UE cm), the same
+    // frame the LEO positions use. Only the handedness flip is applied here —
+    // an extra mm→cm factor made every luminaire body 10× too small.
     static FVector3f PositionToUEBasis(const FVector3f& V)
     {
-        constexpr float MmToCm = 0.1f;
-        return FVector3f(V.X * MmToCm, -V.Y * MmToCm, V.Z * MmToCm);
+        return FVector3f(V.X, -V.Y, V.Z);
     }
     static FVector3f DirectionToUEBasis(const FVector3f& V)
     {

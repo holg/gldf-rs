@@ -93,8 +93,10 @@ pub fn VariantsPage() -> impl IntoView {
                             // resolution_count vs slots_with_bytes split
                             // shows whether photometry IDs resolve but the
                             // bytes lookup misses (e.g. file id mismatch).
-                            let mut probe = VariantProbe::default();
-                            probe.has_geometry = v.geometry.is_some();
+                            let mut probe = VariantProbe {
+                                has_geometry: v.geometry.is_some(),
+                                ..Default::default()
+                            };
                             if let Some(ref geom) = v.geometry {
                                 probe.emitter_ref_count += geom.emitter_reference.len();
                                 if geom.simple_geometry_reference.is_some() {
@@ -215,10 +217,7 @@ fn VariantCard(
             if let Some(r) = c.recessed.as_ref() {
                 let mut s = format!("Ceiling · Recessed {} mm", r.recessed_depth);
                 if let Some(rc) = r.rectangular_cutout.as_ref() {
-                    s.push_str(&format!(
-                        " · cutout {}×{} mm",
-                        rc.width, rc.length
-                    ));
+                    s.push_str(&format!(" · cutout {}×{} mm", rc.width, rc.length));
                 } else if let Some(cc) = r.circular_cutout.as_ref() {
                     s.push_str(&format!(" · ⌀ {} mm cutout", cc.diameter));
                 }
@@ -258,7 +257,11 @@ fn VariantCard(
         if m.working_plane.is_some() {
             parts.push("Working plane".to_string());
         }
-        if parts.is_empty() { None } else { Some(parts.join(" · ")) }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" · "))
+        }
     });
 
     let id_for_anchor = format!("variant-{}", id);

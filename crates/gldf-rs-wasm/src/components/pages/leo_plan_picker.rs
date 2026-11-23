@@ -95,12 +95,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
                 .map(|m| {
                     m.emitter_reference
                         .iter()
-                        .map(|e| {
-                            (
-                                e.emitter_object_external_name.clone(),
-                                e.emitter_id.clone(),
-                            )
-                        })
+                        .map(|e| (e.emitter_object_external_name.clone(), e.emitter_id.clone()))
                         .collect::<Vec<(String, String)>>()
                 })
                 .unwrap_or_default()
@@ -322,7 +317,7 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
     let cols = Signal::derive(move || {
         let n = leos.get().len().max(1);
         // up to 3 per row, fewer when there are fewer LEOs
-        n.min(3).max(1)
+        n.clamp(1, 3)
     });
     let view_box = Signal::derive(move || {
         let n = leos.get().len().max(1);
@@ -449,11 +444,13 @@ pub fn LeoPlanPicker(idx: usize, geometry_id: String) -> impl IntoView {
         // time a different LEO is selected (the panel re-renders), so the
         // defaults always reflect the current catalog.
         let new_photometry = RwSignal::new(
-            photos.first().map(|c| c.photometry_id.clone()).unwrap_or_default(),
+            photos
+                .first()
+                .map(|c| c.photometry_id.clone())
+                .unwrap_or_default(),
         );
-        let new_light_source = RwSignal::new(
-            lss.first().map(|(id, _)| id.clone()).unwrap_or_default(),
-        );
+        let new_light_source =
+            RwSignal::new(lss.first().map(|(id, _)| id.clone()).unwrap_or_default());
         let new_flux = RwSignal::new(1600_i32);
         let can_create = Signal::derive(move || {
             !new_photometry.get().is_empty() && !new_light_source.get().is_empty()

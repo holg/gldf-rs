@@ -39,7 +39,7 @@ pub enum LightEmitterKind {
     Sensor,
 }
 
-/// One row of a [`SetVariantGeometryModel`] action — binds an Emitter
+/// One row of a [`GldfAction::SetVariantGeometryModel`] action — binds an Emitter
 /// to a named object inside the 3D model. The optional model-type
 /// marker (`l3d` / `m3d` / `r3d`) disambiguates when a variant ships
 /// multiple 3D model formats; most files leave it empty.
@@ -73,14 +73,20 @@ pub enum GldfAction {
     /// `EditableGldf::add_photometry_file` so every binding shares one
     /// implementation. On error, `last_error` is set and `is_modified` stays as
     /// it was.
-    AddPhotometryFile { bytes: Vec<u8>, filename: String },
+    AddPhotometryFile {
+        bytes: Vec<u8>,
+        filename: String,
+    },
     /// Drop-and-link: embed a sensor data sheet (`.sensxml` / `.sensldt`)
     /// and mint a fresh `<Sensor>` linked to it. Mirrors AddPhotometryFile
     /// but writes to `GeneralDefinitions/Sensors` instead of `Photometries`
     /// and uses the correct `sensor/*` content type so the Files page
     /// doesn't need a follow-up retype dispatch. Delegates to
     /// `EditableGldf::add_sensor_file`.
-    AddSensorFile { bytes: Vec<u8>, filename: String },
+    AddSensorFile {
+        bytes: Vec<u8>,
+        filename: String,
+    },
     /// Drop-and-link: embed a spectrum file (`.spd`) linked to a light source.
     /// Delegates to `EditableGldf::add_spectrum_file`. Errors (e.g. unknown
     /// light-source id) surface via `last_error`.
@@ -108,29 +114,47 @@ pub enum GldfAction {
     },
     /// Add a product variant by name (English locale). Delegates to
     /// `EditableGldf::add_variant_simple`.
-    AddVariantSimple { name: String },
+    AddVariantSimple {
+        name: String,
+    },
     /// Rename a Variant id. Variant refs are auto-generated; only the
     /// id changes, no cascade needed.
-    RenameVariant { old_id: String, new_id: String },
+    RenameVariant {
+        old_id: String,
+        new_id: String,
+    },
     /// Remove a Variant by id. Delegates to `GldfProduct::remove_variant`.
-    RemoveVariant { id: String },
+    RemoveVariant {
+        id: String,
+    },
     /// Deep-clone an existing Variant. The new variant gets a fresh
     /// auto-generated id and "(copy)" appended to its Name; everything
     /// else (GTIN, mountings, geometry, DescriptiveAttributes, etc.) is
     /// duplicated verbatim. The most common multi-SKU workflow is
     /// "clone, then change CCT/length/whatever".
-    DuplicateVariant { src_idx: usize },
+    DuplicateVariant {
+        src_idx: usize,
+    },
     /// Set / clear the GTIN attribute on the n-th Variant.
-    SetVariantGTIN { index: usize, gtin: Option<String> },
+    SetVariantGTIN {
+        index: usize,
+        gtin: Option<String>,
+    },
     /// Set / clear the `@sortOrder` attribute on the n-th Variant.
     /// XSD: lower numbers are shown first; missing falls back to
     /// document order.
-    SetVariantSortOrder { index: usize, sort_order: Option<i32> },
+    SetVariantSortOrder {
+        index: usize,
+        sort_order: Option<i32>,
+    },
     /// Move the n-th Variant up or down in the document order. `delta`
     /// is -1 / +1 in normal use. No-op if the move would go out of
     /// bounds. Note: document order is the canonical fallback when
     /// `sortOrder` is missing; sortOrder is a hint, not a guarantee.
-    MoveVariant { index: usize, delta: i32 },
+    MoveVariant {
+        index: usize,
+        delta: i32,
+    },
     /// Set / clear the variant `<Symbol fileId="…"/>` — a 2D CAD graphic
     /// (SVG/DXF). The referenced File must already exist under
     /// GeneralDefinitions/Files; the reducer does not validate (the
@@ -139,7 +163,7 @@ pub enum GldfAction {
         index: usize,
         file_id: Option<String>,
     },
-    /// Replace Variant[idx].Geometry with a list of bare EmitterReferences
+    /// Replace `Variant[idx].Geometry` with a list of bare EmitterReferences
     /// (no 3D geometry attached). The variant's Geometry's other
     /// `xs:choice` branches (simple, model) are cleared. The XSD
     /// requires *at least one* binding for a valid GLDF; an empty list
@@ -148,7 +172,7 @@ pub enum GldfAction {
         variant_idx: usize,
         emitter_ids: Vec<String>,
     },
-    /// Replace Variant[idx].Geometry with a SimpleGeometryReference.
+    /// Replace `Variant[idx].Geometry` with a SimpleGeometryReference.
     /// Clears the other choice branches. Both ids must reference
     /// existing entries (geometry under `GeneralDefinitions/Geometries`,
     /// emitter under `GeneralDefinitions/Emitters`); the reducer does
@@ -158,7 +182,7 @@ pub enum GldfAction {
         geometry_id: String,
         emitter_id: String,
     },
-    /// Replace Variant[idx].Geometry with a ModelGeometryReference.
+    /// Replace `Variant[idx].Geometry` with a ModelGeometryReference.
     /// `bindings` lists each emitter slot inside the 3D model, with
     /// the named object inside the model and an optional model-type
     /// disambiguator (l3d / m3d / r3d).
@@ -167,8 +191,10 @@ pub enum GldfAction {
         geometry_id: String,
         bindings: Vec<ModelEmitterBinding>,
     },
-    /// Clear Variant[idx].Geometry to None.
-    ClearVariantGeometry { variant_idx: usize },
+    /// Clear `Variant[idx].Geometry` to None.
+    ClearVariantGeometry {
+        variant_idx: usize,
+    },
     /// One-shot L3D import: stores the bytes as an embedded `<File>`
     /// with `contentType="application/x-gldf-l3d"`, auto-registers a
     /// matching `<ModelGeometry>` entry, and the new geometry id can
@@ -198,7 +224,9 @@ pub enum GldfAction {
     /// `general_definitions.geometries.simple_geometry`. Any variant
     /// `SimpleGeometryReference` pointing at this id will dangle;
     /// surfaced by the Linkage page.
-    RemoveSimpleGeometry { id: String },
+    RemoveSimpleGeometry {
+        id: String,
+    },
     /// Drop an `.spd` file: embed bytes as a `<File>` and auto-register
     /// a matching `<Spectrum>` entry. Unlike `AddSpectrumFile` this
     /// does NOT bind to a light source — the user picks the binding
@@ -219,17 +247,29 @@ pub enum GldfAction {
     /// Rename a FixedLightSource id (e.g. the auto-created "lightsource_1"
     /// from the start-page IES drop) and update every emitter + equipment
     /// reference. Delegates to `GldfProduct::rename_fixed_light_source`.
-    RenameFixedLightSource { old_id: String, new_id: String },
+    RenameFixedLightSource {
+        old_id: String,
+        new_id: String,
+    },
     /// Rename a ChangeableLightSource id (cascades into Equipment refs).
     /// Delegates to `GldfProduct::rename_changeable_light_source`.
-    RenameChangeableLightSource { old_id: String, new_id: String },
+    RenameChangeableLightSource {
+        old_id: String,
+        new_id: String,
+    },
     /// Rename an Emitter id, cascading into every
     /// `Variant/Geometry/EmitterReference` (bare and nested forms).
     /// Delegates to `GldfProduct::rename_emitter`.
-    RenameEmitter { old_id: String, new_id: String },
+    RenameEmitter {
+        old_id: String,
+        new_id: String,
+    },
     /// Rename a MultiChannelLightSource id (cascades into every
     /// `Emitter/MultiChannelLightEmitter/LightSourceReference`).
-    RenameMultiChannelLightSource { old_id: String, new_id: String },
+    RenameMultiChannelLightSource {
+        old_id: String,
+        new_id: String,
+    },
     /// Append a fully-formed MultiChannelLightSource to the catalog. If
     /// `payload.id` is empty, an auto id is generated.
     AddMultiChannelLightSource {
@@ -250,7 +290,10 @@ pub enum GldfAction {
         channel: Box<gldf_rs::gldf::general_definitions::lightsources::MultiChannelChannel>,
     },
     /// Remove the n-th Channel from the named MultiChannelLightSource.
-    RemoveMultiChannelChannel { ls_id: String, index: usize },
+    RemoveMultiChannelChannel {
+        ls_id: String,
+        index: usize,
+    },
     /// Replace the n-th Channel in place.
     UpdateMultiChannelChannel {
         ls_id: String,
@@ -260,11 +303,15 @@ pub enum GldfAction {
     /// Append a fully-formed `FixedLightSource` to the catalog. If `payload.id`
     /// is empty a unique id is generated via `generate_unique_id("lightsource")`.
     /// Delegates to `GldfProduct::add_fixed_light_source`.
-    AddFixedLightSource { payload: Box<gldf_rs::gldf::general_definitions::lightsources::FixedLightSource> },
+    AddFixedLightSource {
+        payload: Box<gldf_rs::gldf::general_definitions::lightsources::FixedLightSource>,
+    },
     /// Append a fully-formed `ChangeableLightSource` to the catalog. If
     /// `payload.id` is empty a unique id is generated. Delegates to
     /// `GldfProduct::add_changeable_light_source`.
-    AddChangeableLightSource { payload: Box<gldf_rs::gldf::general_definitions::lightsources::ChangeableLightSource> },
+    AddChangeableLightSource {
+        payload: Box<gldf_rs::gldf::general_definitions::lightsources::ChangeableLightSource>,
+    },
     /// Replace a FixedLightSource in place. `id` selects the slot; the
     /// payload's own `id` field is overwritten with `id` so the slot
     /// identity stays stable and existing references keep resolving.
@@ -282,7 +329,9 @@ pub enum GldfAction {
     /// in both lists. Surfaces the `last_error` if the id is unknown.
     /// Does NOT scrub dangling references; the Linkage map will surface
     /// those as orphans for the user to resolve.
-    RemoveLightSource { id: String },
+    RemoveLightSource {
+        id: String,
+    },
     /// Append a new empty `<Emitter>` to GeneralDefinitions/Emitters with
     /// an auto-generated id. The emitter has no LightEmitter children yet
     /// — the schema actually requires at least one, but we let the user
@@ -315,7 +364,9 @@ pub enum GldfAction {
     },
     /// Remove an Emitter by id. Variants that bind this emitter will
     /// dangle — surface via Linkage. Delegates to `remove_emitter`.
-    RemoveEmitter { id: String },
+    RemoveEmitter {
+        id: String,
+    },
     /// Create an `<Emitter>` with an EXPLICIT id whose single
     /// FixedLightEmitter binds the photometry + light source and carries
     /// the given RatedLuminousFlux — all atomically. Unlike
@@ -437,7 +488,10 @@ pub enum GldfAction {
     /// Photometry / Spectrum drop flows still go through their typed
     /// actions because they also create the wrapper entry (`<Photometry>`
     /// / `<Spectrum>`) and (for spectrum) the link to a light source.
-    AddFileWithBytes { bytes: Vec<u8>, filename: String },
+    AddFileWithBytes {
+        bytes: Vec<u8>,
+        filename: String,
+    },
     /// Drop-and-link a product picture: embed the image bytes as a
     /// `<File>` (content_type inferred from the extension) AND add a
     /// matching `ProductMetaData/Pictures/Image` reference with the
@@ -454,25 +508,50 @@ pub enum GldfAction {
     /// Sensor / ProductMetaData pictures / Variant pictures+symbol).
     /// Also moves the bytes in `embedded_files` so the bundle stays
     /// internally consistent. Delegates to `GldfProduct::rename_file`.
-    RenameFile { old_id: String, new_id: String },
+    RenameFile {
+        old_id: String,
+        new_id: String,
+    },
     /// Rename a Photometry by id; cascades to every PhotometryReference.
-    RenamePhotometry { old_id: String, new_id: String },
+    RenamePhotometry {
+        old_id: String,
+        new_id: String,
+    },
     /// Remove a `<Photometry>` entry by id. Does NOT touch the underlying
     /// `<File>` it points to — drop or repurpose that separately on the
     /// Files page. Use when an auto-imported Photometry block is no longer
     /// appropriate (e.g. the file was reclassified as a sensor payload).
-    RemovePhotometry { id: String },
+    RemovePhotometry {
+        id: String,
+    },
     // --- Sensors (GeneralDefinitions/Sensors/Sensor) ---
     AddSensor,
-    RemoveSensor { index: usize },
-    RenameSensor { old_id: String, new_id: String },
-    SetSensorFileId { index: usize, file_id: Option<String> },
+    RemoveSensor {
+        index: usize,
+    },
+    RenameSensor {
+        old_id: String,
+        new_id: String,
+    },
+    SetSensorFileId {
+        index: usize,
+        file_id: Option<String>,
+    },
     /// Replace the full DetectorCharacteristic list (XSD enum, max 3).
-    SetSensorDetectorCharacteristics { index: usize, values: Vec<String> },
+    SetSensorDetectorCharacteristics {
+        index: usize,
+        values: Vec<String>,
+    },
     /// Replace the full DetectionMethod list (XSD enum, max 6).
-    SetSensorDetectionMethods { index: usize, values: Vec<String> },
+    SetSensorDetectionMethods {
+        index: usize,
+        values: Vec<String>,
+    },
     /// Replace the full DetectorType list (XSD enum, max 4).
-    SetSensorDetectorTypes { index: usize, values: Vec<String> },
+    SetSensorDetectorTypes {
+        index: usize,
+        values: Vec<String>,
+    },
     /// Remove a file by id
     RemoveFile(String),
     /// Update a file's properties
@@ -793,7 +872,9 @@ pub enum GldfAction {
     /// caller to surface. Non-actionable cases (no RAL, unknown RAL,
     /// no L3D) are silent no-ops on purpose — they're routine mid-edit
     /// states, not user-visible problems.
-    EnsureL3dMtlForVariant { variant_idx: usize },
+    EnsureL3dMtlForVariant {
+        variant_idx: usize,
+    },
     /// Replace the n-th Variant's `<Mountings>` block. Passing `None`
     /// clears it. The XSD allows any combination of the four top-level
     /// branches (Ceiling / Wall / Ground / WorkingPlane), so the action

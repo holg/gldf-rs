@@ -49,7 +49,7 @@ fn wizard_overlay_produces_state_matching_cli_run() {
 
     // Step 4: Emitter — keep "include = yes", focus emitter name, type.
     next_field(&mut overlay); // focus -> name
-    // The default name is "Primary"; replace with something different.
+                              // The default name is "Primary"; replace with something different.
     for _ in 0.."Primary".len() {
         overlay.on_key(key(KeyCode::Backspace));
     }

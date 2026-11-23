@@ -9,12 +9,12 @@
 //!
 //! Two surfaces:
 //!
-//! * [`check`] — pure inspection. Walks a `GldfProduct` and its
+//! * [`check`](crate::dialux_compat::check) — pure inspection. Walks a `GldfProduct` and its
 //!   embedded asset bytes and returns a `Vec<DialuxCompatHint>` for
 //!   anything that would trip DIALux. Use this on the read side
 //!   (validation banner, CLI `dialux-check`).
 //!
-//! * [`sanitize`] — opt-in transforms. Pure functions that take raw
+//! * [`sanitize`](crate::dialux_compat::sanitize) — opt-in transforms. Pure functions that take raw
 //!   bytes / strings and return a DIALux-safe version. Use these on
 //!   the write side, gated by [`crate::editable::ExportOptions`].
 //!

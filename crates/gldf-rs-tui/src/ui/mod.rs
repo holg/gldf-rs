@@ -80,7 +80,9 @@ fn draw_welcome(frame: &mut Frame, area: Rect) {
         Line::raw(""),
         Line::styled(
             "  gldf-edit",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ),
         Line::raw("  Terminal frontend for the gldf-rs editor"),
         Line::raw(""),
@@ -89,21 +91,27 @@ fn draw_welcome(frame: &mut Frame, area: Rect) {
         Line::from(vec![
             Span::styled(
                 "  N",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("       Run the New GLDF wizard"),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl-S",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  Save current state (after the wizard)"),
         ]),
         Line::from(vec![
             Span::styled(
                 "  q / Esc",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" Quit"),
         ]),
@@ -160,7 +168,11 @@ fn draw_quit_confirm(frame: &mut Frame, area: Rect, selected: usize) {
     let inner = block.inner(modal);
     frame.render_widget(block, modal);
 
-    let labels = [("S", "Save & quit"), ("D", "Discard & quit"), ("C", "Cancel")];
+    let labels = [
+        ("S", "Save & quit"),
+        ("D", "Discard & quit"),
+        ("C", "Cancel"),
+    ];
     let mut buttons: Vec<Span> = Vec::new();
     for (i, (key, label)) in labels.iter().enumerate() {
         let active = i == selected;
@@ -226,6 +238,7 @@ fn draw_statusbar(frame: &mut Frame, app: &App, area: Rect) {
             Section::Files | Section::Linkage => {
                 "q quit · ↑↓ section · n/p row · e rename · d delete · Shift-←↑↓→ orbit · Ctrl-S save"
             }
+            Section::Validation => "q quit · ↑↓ section · t toggle rc-3/rc-4 schema · Ctrl-S save",
             _ => "q quit · ↑↓ section · Ctrl-S save · N new GLDF",
         }
     } else {

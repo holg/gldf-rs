@@ -18,7 +18,6 @@ use crate::components::{
 };
 use crate::i18n::ui::t as ui_t;
 use crate::state::{use_gldf, GldfAction};
-use std::sync::Arc;
 use gldf_rs::gldf::general_definitions::electrical::Voltage;
 use gldf_rs::gldf::general_definitions::lightsources::{
     ChangeableLightSource, ColorInformation, FixedLightSource, LightSourceMaintenance,
@@ -26,6 +25,7 @@ use gldf_rs::gldf::general_definitions::lightsources::{
 };
 use gldf_rs::gldf::header::{Locale, LocaleFoo};
 use leptos::prelude::*;
+use std::sync::Arc;
 
 #[component]
 pub fn LightSourcesPage(#[prop(default = false)] editable: bool) -> impl IntoView {
@@ -160,19 +160,23 @@ fn FixedCard(ls: FixedLightSource, editable: bool) -> impl IntoView {
     let on_edit = move |_| is_editing.set(true);
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
-        let msg = format!("Remove light source '{}'? Any Emitter or Equipment reference to it will dangle.", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        let msg = format!(
+            "Remove light source '{}'? Any Emitter or Equipment reference to it will dangle.",
+            id
+        );
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
     };
     let on_rename: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = ls_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameFixedLightSource {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameFixedLightSource {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
 
@@ -330,19 +334,23 @@ fn ChangeableCard(ls: ChangeableLightSource, editable: bool) -> impl IntoView {
     let on_edit = move |_| is_editing.set(true);
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
-        let msg = format!("Remove light source '{}'? Any Equipment reference to it will dangle.", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        let msg = format!(
+            "Remove light source '{}'? Any Equipment reference to it will dangle.",
+            id
+        );
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
     };
     let on_rename: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = ls_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameChangeableLightSource {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameChangeableLightSource {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
 
@@ -475,18 +483,19 @@ fn MultiChannelCard(ls: MultiChannelLightSource, editable: bool) -> impl IntoVie
     let on_remove = move |_| {
         let id = ls_for_remove.clone();
         let msg = format!("Remove multi-channel light source '{}'? Any MultiChannelLightEmitter referencing it will dangle.", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveLightSource { id }));
         }
     };
     let on_rename: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = ls_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameMultiChannelLightSource {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameMultiChannelLightSource {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
 
@@ -654,7 +663,12 @@ fn ChannelRow(
                 .general_definitions
                 .spectrums
                 .as_ref()
-                .map(|ss| ss.spectrum.iter().map(|sp| sp.id.clone()).collect::<Vec<_>>())
+                .map(|ss| {
+                    ss.spectrum
+                        .iter()
+                        .map(|sp| sp.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -664,7 +678,12 @@ fn ChannelRow(
                 .general_definitions
                 .photometries
                 .as_ref()
-                .map(|ps| ps.photometry.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                .map(|ps| {
+                    ps.photometry
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -678,10 +697,12 @@ fn ChannelRow(
     };
     let on_cancel = move |_| is_editing.set(false);
     let on_remove = move |_| {
-        state.update(|s| s.apply(GldfAction::RemoveMultiChannelChannel {
-            ls_id: ls_id_for_remove.clone(),
-            index,
-        }));
+        state.update(|s| {
+            s.apply(GldfAction::RemoveMultiChannelChannel {
+                ls_id: ls_id_for_remove.clone(),
+                index,
+            })
+        });
     };
     let on_save = move |_| {
         use gldf_rs::gldf::general_definitions::lightsources::{
@@ -707,11 +728,13 @@ fn ChannelRow(
             photometry_id: s_photo.get(),
         };
         new_channel.rated_luminous_flux = s_flux.get().trim().parse::<i32>().unwrap_or(0);
-        state.update(|s| s.apply(GldfAction::UpdateMultiChannelChannel {
-            ls_id: ls_id_for_save.clone(),
-            index,
-            channel: Box::new(new_channel),
-        }));
+        state.update(|s| {
+            s.apply(GldfAction::UpdateMultiChannelChannel {
+                ls_id: ls_id_for_save.clone(),
+                index,
+                channel: Box::new(new_channel),
+            })
+        });
         is_editing.set(false);
     };
 
@@ -756,12 +779,12 @@ fn ChannelRow(
                             <input
                                 type="text"
                                 prop:value=move || s_name.get()
-                                on:input=on_name_input.clone()
+                                on:input=on_name_input
                                 style="width: 100%; padding: 2px 4px; font-size: 11px;"
                             />
                         </td>
                         <td style="padding: 4px;">
-                            <select on:change=on_spectrum_change.clone() style="width: 100%; font-size: 11px;">
+                            <select on:change=on_spectrum_change style="width: 100%; font-size: 11px;">
                                 {if s_ids.is_empty() {
                                     view! { <option value="">{ "(none)" }</option> }.into_any()
                                 } else {
@@ -776,7 +799,7 @@ fn ChannelRow(
                             </select>
                         </td>
                         <td style="padding: 4px;">
-                            <select on:change=on_photo_change.clone() style="width: 100%; font-size: 11px;">
+                            <select on:change=on_photo_change style="width: 100%; font-size: 11px;">
                                 {if p_ids.is_empty() {
                                     view! { <option value="">{ "(none)" }</option> }.into_any()
                                 } else {
@@ -795,7 +818,7 @@ fn ChannelRow(
                                 type="number"
                                 min="0"
                                 prop:value=move || s_flux.get()
-                                on:input=on_flux_input.clone()
+                                on:input=on_flux_input
                                 style="width: 80px; padding: 2px 4px; font-size: 11px;"
                             />
                         </td>
@@ -805,7 +828,7 @@ fn ChannelRow(
                                 style="padding: 2px 6px; font-size: 11px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                             >{ "Save" }</button>
                             <button
-                                on:click=on_cancel.clone()
+                                on:click=on_cancel
                                 style="padding: 2px 6px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                             >{ "Cancel" }</button>
                         </td>
@@ -859,7 +882,12 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                 .general_definitions
                 .spectrums
                 .as_ref()
-                .map(|ss| ss.spectrum.iter().map(|sp| sp.id.clone()).collect::<Vec<_>>())
+                .map(|ss| {
+                    ss.spectrum
+                        .iter()
+                        .map(|sp| sp.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -869,7 +897,12 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                 .general_definitions
                 .photometries
                 .as_ref()
-                .map(|ps| ps.photometry.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                .map(|ps| {
+                    ps.photometry
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -922,14 +955,18 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
         let channel = MultiChannelChannel {
             display_name,
             spectrum_reference: ChannelSpectrumReference { spectrum_id: spec },
-            photometry_reference: ChannelPhotometryReference { photometry_id: photo },
+            photometry_reference: ChannelPhotometryReference {
+                photometry_id: photo,
+            },
             rated_luminous_flux: flux,
             color_information: None,
         };
-        state.update(|s| s.apply(GldfAction::AddMultiChannelChannel {
-            ls_id: ls_id_for_submit.clone(),
-            channel: Box::new(channel),
-        }));
+        state.update(|s| {
+            s.apply(GldfAction::AddMultiChannelChannel {
+                ls_id: ls_id_for_submit.clone(),
+                channel: Box::new(channel),
+            })
+        });
         is_open.set(false);
         s_name.set(String::new());
         s_flux.set(String::from("0"));
@@ -970,13 +1007,13 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                         <input
                             type="text"
                             placeholder="e.g. Warm / Cool / Red"
-                            on:input=on_name_input.clone()
+                            on:input=on_name_input
                             style="padding: 2px 4px; font-size: 11px;"
                         />
                     </label>
                     <label style="display: grid; grid-template-columns: 140px 1fr; gap: 6px; align-items: center; font-size: 11px;">
                         <span style="color: var(--text-tertiary);">{ "Spectrum" }</span>
-                        <select on:change=on_spectrum_change.clone() style="font-size: 11px;">
+                        <select on:change=on_spectrum_change style="font-size: 11px;">
                             {if no_spec {
                                 view! { <option value="">{ "(no Spectrum declared)" }</option> }.into_any()
                             } else {
@@ -991,7 +1028,7 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                     </label>
                     <label style="display: grid; grid-template-columns: 140px 1fr; gap: 6px; align-items: center; font-size: 11px;">
                         <span style="color: var(--text-tertiary);">{ "Photometry" }</span>
-                        <select on:change=on_photo_change.clone() style="font-size: 11px;">
+                        <select on:change=on_photo_change style="font-size: 11px;">
                             {if no_photo {
                                 view! { <option value="">{ "(no Photometry declared)" }</option> }.into_any()
                             } else {
@@ -1010,7 +1047,7 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                             type="number"
                             min="0"
                             prop:value=move || s_flux.get()
-                            on:input=on_flux_input.clone()
+                            on:input=on_flux_input
                             style="padding: 2px 4px; font-size: 11px; width: 120px;"
                         />
                     </label>
@@ -1021,7 +1058,7 @@ fn AddChannelForm(ls_id: String) -> impl IntoView {
                             style="padding: 3px 10px; font-size: 11px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                         >{ "+ Add Channel" }</button>
                         <button
-                            on:click=on_cancel.clone()
+                            on:click=on_cancel
                             style="padding: 3px 10px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                         >{ "Cancel" }</button>
                     </div>
@@ -1060,7 +1097,10 @@ fn MultiChannelEditForm(
     let manufacturer = ls.manufacturer.clone().unwrap_or_default();
     let gtin = ls.gtin.clone().unwrap_or_default();
     let power = ls.rated_input_power.to_string();
-    let position = ls.light_source_position_of_usage.clone().unwrap_or_default();
+    let position = ls
+        .light_source_position_of_usage
+        .clone()
+        .unwrap_or_default();
 
     let s_name = RwSignal::new(name_first);
     let s_desc = RwSignal::new(desc_first);
@@ -1090,10 +1130,12 @@ fn MultiChannelEditForm(
         new_ls.rated_input_power = s_power.get().trim().parse::<f64>().unwrap_or(0.0);
         new_ls.light_source_position_of_usage = empty_to_none(s_pos.get());
 
-        state.update(|s| s.apply(GldfAction::UpdateMultiChannelLightSource {
-            id: id_for_save.clone(),
-            payload: Box::new(new_ls),
-        }));
+        state.update(|s| {
+            s.apply(GldfAction::UpdateMultiChannelLightSource {
+                id: id_for_save.clone(),
+                payload: Box::new(new_ls),
+            })
+        });
         on_done();
     };
 
@@ -1110,11 +1152,7 @@ fn MultiChannelEditForm(
                 .general_definitions
                 .light_sources
                 .as_ref()
-                .and_then(|l| {
-                    l.multi_channel_light_source
-                        .iter()
-                        .find(|m| m.id == target)
-                })
+                .and_then(|l| l.multi_channel_light_source.iter().find(|m| m.id == target))
                 .map(|mc| mc.channels.channel.clone())
                 .unwrap_or_default()
         })
@@ -1184,7 +1222,10 @@ fn MultiChannelEditForm(
 /// labels, active power tables, light source images) are preserved verbatim
 /// when we Save — the user can still see them but not edit them here.
 #[component]
-fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'static + Clone) -> impl IntoView {
+fn FixedEditForm(
+    ls: FixedLightSource,
+    on_done: impl Fn() + Send + Sync + 'static + Clone,
+) -> impl IntoView {
     let state = use_gldf();
     let original = ls.clone();
     let id_for_save = ls.id.clone();
@@ -1192,22 +1233,86 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
     let current_spectrum = ls.spectrum_reference.clone().map(|sr| sr.spectrum_id);
 
     let name_first = first_locale_value(&ls.name);
-    let desc_first = ls.description.as_ref().map(first_locale_value).unwrap_or_default();
+    let desc_first = ls
+        .description
+        .as_ref()
+        .map(first_locale_value)
+        .unwrap_or_default();
     let manufacturer = ls.manufacturer.clone().unwrap_or_default();
     let gtin = ls.gtin.clone().unwrap_or_default();
-    let power = ls.rated_input_power.map(|p| p.to_string()).unwrap_or_default();
-    let voltage = ls.rated_input_voltage.as_ref().and_then(|v| v.fixed_voltage).map(|v| v.to_string()).unwrap_or_default();
-    let cct = ls.color_information.as_ref().and_then(|c| c.correlated_color_temperature).map(|v| v.to_string()).unwrap_or_default();
-    let cri = ls.color_information.as_ref().and_then(|c| c.color_rendering_index).map(|v| v.to_string()).unwrap_or_default();
-    let cct_low = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.lower).map(|v| v.to_string()).unwrap_or_default();
-    let cct_high = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.upper).map(|v| v.to_string()).unwrap_or_default();
-    let initial_tol = ls.color_information.as_ref().and_then(|c| c.initial_color_tolerance.clone()).unwrap_or_default();
-    let maintained_tol = ls.color_information.as_ref().and_then(|c| c.maintained_color_tolerance.clone()).unwrap_or_default();
-    let tlci = ls.color_information.as_ref().and_then(|c| c.tlci).map(|v| v.to_string()).unwrap_or_default();
-    let melanopic = ls.color_information.as_ref().and_then(|c| c.melanopic_factor).map(|v| v.to_string()).unwrap_or_default();
-    let lifetime = ls.light_source_maintenance.as_ref().and_then(|m| m.lifetime).map(|v| v.to_string()).unwrap_or_default();
-    let lamp_type = ls.light_source_maintenance.as_ref().and_then(|m| m.cie97_lamp_type.clone()).unwrap_or_default();
-    let position = ls.light_source_position_of_usage.clone().unwrap_or_default();
+    let power = ls
+        .rated_input_power
+        .map(|p| p.to_string())
+        .unwrap_or_default();
+    let voltage = ls
+        .rated_input_voltage
+        .as_ref()
+        .and_then(|v| v.fixed_voltage)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cct = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.correlated_color_temperature)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cri = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_rendering_index)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cct_low = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_temperature_adjusting_range.as_ref())
+        .and_then(|r| r.lower)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cct_high = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_temperature_adjusting_range.as_ref())
+        .and_then(|r| r.upper)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let initial_tol = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.initial_color_tolerance.clone())
+        .unwrap_or_default();
+    let maintained_tol = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.maintained_color_tolerance.clone())
+        .unwrap_or_default();
+    let tlci = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.tlci)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let melanopic = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.melanopic_factor)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let lifetime = ls
+        .light_source_maintenance
+        .as_ref()
+        .and_then(|m| m.lifetime)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let lamp_type = ls
+        .light_source_maintenance
+        .as_ref()
+        .and_then(|m| m.cie97_lamp_type.clone())
+        .unwrap_or_default();
+    let position = ls
+        .light_source_position_of_usage
+        .clone()
+        .unwrap_or_default();
     let zhaga = ls.zhaga_standard.unwrap_or(false);
 
     let s_name = RwSignal::new(name_first);
@@ -1240,7 +1345,10 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
         new_ls.description = if desc_text.trim().is_empty() {
             None
         } else {
-            Some(upsert_locale_value(new_ls.description.unwrap_or_default(), &desc_text))
+            Some(upsert_locale_value(
+                new_ls.description.unwrap_or_default(),
+                &desc_text,
+            ))
         };
         new_ls.manufacturer = empty_to_none(s_manuf.get());
         new_ls.gtin = empty_to_none(s_gtin.get());
@@ -1257,7 +1365,11 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
             &s_tlci.get(),
             &s_melanopic.get(),
         );
-        new_ls.light_source_maintenance = build_maintenance(new_ls.light_source_maintenance, &s_life.get(), &s_lamp.get());
+        new_ls.light_source_maintenance = build_maintenance(
+            new_ls.light_source_maintenance,
+            &s_life.get(),
+            &s_lamp.get(),
+        );
         new_ls.light_source_position_of_usage = empty_to_none(s_pos.get());
         new_ls.zhaga_standard = Some(s_zhaga.get());
 
@@ -1309,7 +1421,10 @@ fn FixedEditForm(ls: FixedLightSource, on_done: impl Fn() + Send + Sync + 'stati
 /// Inline editor for a ChangeableLightSource — shorter than the Fixed form
 /// because ChangeableLightSource has fewer first-class fields in the schema.
 #[component]
-fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Sync + 'static + Clone) -> impl IntoView {
+fn ChangeableEditForm(
+    ls: ChangeableLightSource,
+    on_done: impl Fn() + Send + Sync + 'static + Clone,
+) -> impl IntoView {
     let state = use_gldf();
     let original = ls.clone();
     let id_for_save = ls.id.clone();
@@ -1318,18 +1433,71 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
     let current_spectrum = ls.spectrum_reference.clone().map(|sr| sr.spectrum_id);
 
     let name_first = first_locale_value(&ls.name);
-    let desc_first = ls.description.as_ref().map(first_locale_value).unwrap_or_default();
+    let desc_first = ls
+        .description
+        .as_ref()
+        .map(first_locale_value)
+        .unwrap_or_default();
     let manufacturer = ls.manufacturer.clone().unwrap_or_default();
-    let cct = ls.color_information.as_ref().and_then(|c| c.correlated_color_temperature).map(|v| v.to_string()).unwrap_or_default();
-    let cri = ls.color_information.as_ref().and_then(|c| c.color_rendering_index).map(|v| v.to_string()).unwrap_or_default();
-    let cct_low = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.lower).map(|v| v.to_string()).unwrap_or_default();
-    let cct_high = ls.color_information.as_ref().and_then(|c| c.color_temperature_adjusting_range.as_ref()).and_then(|r| r.upper).map(|v| v.to_string()).unwrap_or_default();
-    let initial_tol = ls.color_information.as_ref().and_then(|c| c.initial_color_tolerance.clone()).unwrap_or_default();
-    let maintained_tol = ls.color_information.as_ref().and_then(|c| c.maintained_color_tolerance.clone()).unwrap_or_default();
-    let tlci = ls.color_information.as_ref().and_then(|c| c.tlci).map(|v| v.to_string()).unwrap_or_default();
-    let melanopic = ls.color_information.as_ref().and_then(|c| c.melanopic_factor).map(|v| v.to_string()).unwrap_or_default();
-    let lifetime = ls.light_source_maintenance.as_ref().and_then(|m| m.lifetime).map(|v| v.to_string()).unwrap_or_default();
-    let lamp_type = ls.light_source_maintenance.as_ref().and_then(|m| m.cie97_lamp_type.clone()).unwrap_or_default();
+    let cct = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.correlated_color_temperature)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cri = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_rendering_index)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cct_low = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_temperature_adjusting_range.as_ref())
+        .and_then(|r| r.lower)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let cct_high = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.color_temperature_adjusting_range.as_ref())
+        .and_then(|r| r.upper)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let initial_tol = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.initial_color_tolerance.clone())
+        .unwrap_or_default();
+    let maintained_tol = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.maintained_color_tolerance.clone())
+        .unwrap_or_default();
+    let tlci = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.tlci)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let melanopic = ls
+        .color_information
+        .as_ref()
+        .and_then(|c| c.melanopic_factor)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let lifetime = ls
+        .light_source_maintenance
+        .as_ref()
+        .and_then(|m| m.lifetime)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let lamp_type = ls
+        .light_source_maintenance
+        .as_ref()
+        .and_then(|m| m.cie97_lamp_type.clone())
+        .unwrap_or_default();
 
     let s_name = RwSignal::new(name_first);
     let s_desc = RwSignal::new(desc_first);
@@ -1356,7 +1524,10 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
         new_ls.description = if desc_text.trim().is_empty() {
             None
         } else {
-            Some(upsert_locale_value(new_ls.description.unwrap_or_default(), &desc_text))
+            Some(upsert_locale_value(
+                new_ls.description.unwrap_or_default(),
+                &desc_text,
+            ))
         };
         new_ls.manufacturer = empty_to_none(s_manuf.get());
         new_ls.color_information = build_color_info(
@@ -1370,7 +1541,11 @@ fn ChangeableEditForm(ls: ChangeableLightSource, on_done: impl Fn() + Send + Syn
             &s_tlci.get(),
             &s_melanopic.get(),
         );
-        new_ls.light_source_maintenance = build_maintenance(new_ls.light_source_maintenance, &s_life.get(), &s_lamp.get());
+        new_ls.light_source_maintenance = build_maintenance(
+            new_ls.light_source_maintenance,
+            &s_life.get(),
+            &s_lamp.get(),
+        );
 
         state.update(|s| {
             s.apply(GldfAction::UpdateChangeableLightSource {
@@ -1422,7 +1597,9 @@ fn TextRow(
     #[prop(default = "")] testid: &'static str,
 ) -> impl IntoView {
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         value.set(v);
     };
     view! {
@@ -1442,7 +1619,9 @@ fn TextRow(
 #[component]
 fn BoolRow(label: &'static str, value: RwSignal<bool>) -> impl IntoView {
     let on_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(c) = crate::components::edit_util::event_checked(&e) else { return };
+        let Some(c) = crate::components::edit_util::event_checked(&e) else {
+            return;
+        };
         value.set(c);
     };
     view! {
@@ -1459,7 +1638,10 @@ fn BoolRow(label: &'static str, value: RwSignal<bool>) -> impl IntoView {
 }
 
 fn first_locale_value(lf: &LocaleFoo) -> String {
-    lf.locale.first().map(|l| l.value.clone()).unwrap_or_default()
+    lf.locale
+        .first()
+        .map(|l| l.value.clone())
+        .unwrap_or_default()
 }
 
 /// Insert/overwrite the first Locale's `value`; if no locales exist, push a
@@ -1516,11 +1698,10 @@ fn build_voltage(prior: Option<Voltage>, text: &str) -> Option<Voltage> {
             v.voltage_range = None;
             Some(v)
         }
-        (None, Some(f)) => {
-            let mut v = Voltage::default();
-            v.fixed_voltage = Some(f);
-            Some(v)
-        }
+        (None, Some(f)) => Some(Voltage {
+            fixed_voltage: Some(f),
+            ..Default::default()
+        }),
     }
 }
 
@@ -1593,14 +1774,21 @@ fn PhotometryPicker(light_source_id: String, current: Option<String>) -> impl In
                 .general_definitions
                 .photometries
                 .as_ref()
-                .map(|ps| ps.photometry.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                .map(|ps| {
+                    ps.photometry
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
 
     let ls_id_for_pick = light_source_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(val) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         let photometry_id = if val.is_empty() { None } else { Some(val) };
         let ls_id = ls_id_for_pick.clone();
         state.update(|s| {
@@ -1663,14 +1851,21 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
                 .general_definitions
                 .spectrums
                 .as_ref()
-                .map(|ss| ss.spectrum.iter().map(|sp| sp.id.clone()).collect::<Vec<_>>())
+                .map(|ss| {
+                    ss.spectrum
+                        .iter()
+                        .map(|sp| sp.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
 
     let ls_id_for_pick = light_source_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(val) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         let spectrum_id = if val.is_empty() { None } else { Some(val) };
         let ls_id = ls_id_for_pick.clone();
         state.update(|s| {
@@ -1734,7 +1929,11 @@ fn SpectrumPicker(light_source_id: String, current: Option<String>) -> impl Into
 
 #[component]
 fn PropertyRow(label: &'static str, value: String, code: bool) -> impl IntoView {
-    let value_class = if code { "property-value code" } else { "property-value" };
+    let value_class = if code {
+        "property-value code"
+    } else {
+        "property-value"
+    };
     view! {
         <div class="property">
             <span class="property-label">{ label }</span>
@@ -1791,7 +1990,12 @@ fn FixedLightSourcePhotometryUsage(light_source_id: String) -> impl IntoView {
                 .general_definitions
                 .photometries
                 .as_ref()
-                .map(|ps| ps.photometry.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                .map(|ps| {
+                    ps.photometry
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -1857,6 +2061,9 @@ fn FixedLightSourcePhotometryUsage(light_source_id: String) -> impl IntoView {
     }
 }
 
+/// (emitter id, child index, photometry id, rotation, photometry bytes)
+type PhotometryBinding = (String, usize, String, Option<String>, Vec<u8>);
+
 /// Render the LightSource's photometric + spectral signatures inline on
 /// the card. This is the **sole rendering point** for these in the
 /// editor — the XSD's reference graph makes LightSource the natural
@@ -1884,7 +2091,7 @@ fn FixedLightSourceRenders(light_source_id: String) -> impl IntoView {
     view! {
         <div class="light-source-renders" style="margin-top: 10px;">
             {move || state.with(|s| {
-                let mut bindings: Vec<(String, usize, String, Option<String>, Vec<u8>)> = Vec::new();
+                let mut bindings: Vec<PhotometryBinding> = Vec::new();
                 if let Some(emitters) = s.product.general_definitions.emitters.as_ref() {
                     for em in &emitters.emitter {
                         for (idx, fle) in em.fixed_light_emitter.iter().enumerate() {

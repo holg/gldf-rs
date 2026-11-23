@@ -26,6 +26,7 @@ public class GldfImporter : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "GldfRuntime",             // AGldfLuminaireActor lives in the runtime module
             "InterchangeCore",         // UInterchangeTranslatorBase + UInterchangePipelineBase
             "InterchangeEngine",       // UInterchangeManager
             "InterchangeNodes",        // UInterchangeTextureLightProfileNode + UInterchangeMeshNode
@@ -45,62 +46,7 @@ public class GldfImporter : ModuleRules
             "IESFile",               // FIESConverter (used in GetLightProfilePayloadData)
         });
 
-        // ── bundled Rust staticlib + header (plugin-local ThirdParty) ──────
-        // PluginDirectory == .../GldfImporter/ ; ModuleDirectory is
-        // .../GldfImporter/Source/GldfImporter/. Use the plugin dir so this
-        // works no matter where the plugin is dropped (incl. via symlink).
-        string ThirdParty = Path.Combine(PluginDirectory, "ThirdParty", "GldfUnreal");
-        string CrateInclude = Path.Combine(ThirdParty, "include");
-
-        // Per-platform lib subdir + name.
-        string PlatformDir;
-        string LibName;
-        if (Target.Platform == UnrealTargetPlatform.Mac)
-        {
-            PlatformDir = "Mac"; LibName = "libgldf_unreal.a";
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            PlatformDir = "Linux"; LibName = "libgldf_unreal.a";
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Win64)
-        {
-            PlatformDir = "Win64"; LibName = "gldf_unreal.lib";
-        }
-        else
-        {
-            throw new BuildException(
-                "GldfImporter: unsupported platform " + Target.Platform.ToString()
-            );
-        }
-
-        string LibPath = Path.Combine(ThirdParty, "lib", PlatformDir, LibName);
-        if (!File.Exists(LibPath))
-        {
-            throw new BuildException(
-                "GldfImporter: bundled Rust staticlib not found at " + LibPath + ".\n"
-                + "All platforms cross-build from macOS — run\n"
-                + "  extra/unreal-plugin-interchange/build_thirdparty_libs.sh\n"
-                + "in the gldf-rs workspace to rebuild and refresh ThirdParty/."
-            );
-        }
-
-        PublicIncludePaths.Add(CrateInclude);
-        PublicAdditionalLibraries.Add(LibPath);
-
-        // Transitive system libs the Rust staticlib needs.
-        if (Target.Platform == UnrealTargetPlatform.Mac)
-        {
-            PublicFrameworks.AddRange(new string[] {
-                "CoreFoundation",
-                "Security",
-            });
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            PublicSystemLibraries.AddRange(new string[] {
-                "pthread", "dl", "m",
-            });
-        }
+        // The Rust staticlib + header come from GldfRuntime (public dependency),
+        // which links them so the photometric core is also available in games.
     }
 }

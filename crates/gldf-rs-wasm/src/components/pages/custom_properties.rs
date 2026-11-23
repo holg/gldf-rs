@@ -13,7 +13,12 @@ use leptos::prelude::*;
 pub fn CustomPropertiesPage() -> impl IntoView {
     let state = use_gldf();
 
-    let title_signal = move || ui_t("gldf.custom_properties.title", &state.with(|s| s.ui_language.clone()));
+    let title_signal = move || {
+        ui_t(
+            "gldf.custom_properties.title",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
 
     view! {
         <div class="editor-section custom-properties-editor">
@@ -103,7 +108,11 @@ fn render_property(property: Property) -> impl IntoView {
             }
         })
         .collect();
-    let name = if names.is_empty() { "(unnamed)".to_string() } else { names.join(" / ") };
+    let name = if names.is_empty() {
+        "(unnamed)".to_string()
+    } else {
+        names.join(" / ")
+    };
     let property_id = property.id.clone();
     let property_source = property.property_source.clone();
     let has_source = !property_source.is_empty();
@@ -115,7 +124,8 @@ fn render_property(property: Property) -> impl IntoView {
                 <span class="label">{ "File reference:" }</span>
                 <span class="value code">{ fid }</span>
             </div>
-        }.into_any()
+        }
+        .into_any()
     } else {
         render_value(&property.value).into_any()
     };
@@ -142,7 +152,9 @@ fn render_value(raw: &str) -> impl IntoView {
         serde_json::from_str::<serde_json::Value>(trimmed)
             .ok()
             .and_then(|v| serde_json::to_string_pretty(&v).ok())
-    } else { None };
+    } else {
+        None
+    };
     let raw = raw.to_string();
     match pretty {
         Some(json) => view! { <pre class="property-value json" style="background: var(--bg-primary); padding: 6px; overflow: auto; font-size: 11px;">{ json }</pre> }.into_any(),

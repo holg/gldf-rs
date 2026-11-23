@@ -6,7 +6,7 @@
 //! - `.spd`           → `SpdPanel` (spectrum + colorimetry)
 //! - `.l3d`           → `L3dPanel` (three-d WebGL viewer)
 //! - `.tm33.xml` / IESTM33-22 / LuminaireOpticalData XML
-//!                    → `Tm33Panel` (photometry + SPD in one)
+//!   → `Tm33Panel` (photometry + SPD in one)
 //! - `.jpg` / `.png`  → `<img>` (base64 data-url)
 //! - everything else  → truncated UTF-8 text preview
 //!
@@ -232,15 +232,21 @@ fn render_file_content(file_name: &str, content_type: &str, content: &[u8]) -> i
         view! { <LdtPanel bytes=content.to_vec() /> }.into_any()
     } else if lower.ends_with(".spd") {
         view! { <SpdPanel bytes=content.to_vec() /> }.into_any()
-    } else if lower.ends_with(".jpg")
-        || lower.ends_with(".jpeg")
-        || lower.ends_with(".png")
-    {
-        let mime = if lower.ends_with(".png") { "png" } else { "jpeg" };
-        let data_url = format!("data:image/{};base64,{}", mime, BASE64_STANDARD.encode(content));
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") {
+        let mime = if lower.ends_with(".png") {
+            "png"
+        } else {
+            "jpeg"
+        };
+        let data_url = format!(
+            "data:image/{};base64,{}",
+            mime,
+            BASE64_STANDARD.encode(content)
+        );
         view! {
             <img src=data_url style="max-width: 100%; max-height: 500px; border-radius: 4px;" />
-        }.into_any()
+        }
+        .into_any()
     } else {
         let truncated = String::from_utf8_lossy(&content[..content.len().min(20000)]).to_string();
         let truncation_note = if content.len() > 20000 {

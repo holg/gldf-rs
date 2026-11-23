@@ -319,10 +319,9 @@ pub struct ImageReference {
 /// `FixedLightSource`; the differences:
 /// - `RatedInputPower` is required (i.e. `f64`, not `Option<f64>`)
 /// - `RatedLuminousFlux` is required (`i32`, not `Option`)
-/// - No `GTIN`, `EnergyLabels`, `SpectrumReference` directly — wait,
-///   actually the XSD does have them; this struct previously omitted
-///   nearly every field, which silently dropped them on round-trip.
-/// The full field set was added so files like full_demo.gldf survive
+///
+/// `GTIN`, `EnergyLabels`, `SpectrumReference` and the other optional
+/// elements are all kept, so files like full_demo.gldf survive
 /// parse → serialize without losing data.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChangeableLightSource {
@@ -628,7 +627,11 @@ pub struct MultiChannelLightSource {
     pub name: LocaleFoo,
 
     /// Translatable description.
-    #[serde(rename = "Description", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "Description",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub description: Option<LocaleFoo>,
 
     /// Manufacturer name.

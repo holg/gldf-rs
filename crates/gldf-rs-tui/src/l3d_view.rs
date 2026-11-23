@@ -124,7 +124,7 @@ impl L3dScene {
             for model in models {
                 let positions = &model.mesh.positions;
                 let indices = &model.mesh.indices;
-                for tri in indices.chunks_exact(3) {
+                for tri in indices.as_chunks::<3>().0 {
                     let p: [V3; 3] = std::array::from_fn(|k| {
                         let i = tri[k] as usize * 3;
                         let local = V3::new(positions[i], positions[i + 1], positions[i + 2]);

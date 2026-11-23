@@ -8,7 +8,11 @@
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::{layout::Rect, widgets::Clear, Frame};
+use ratatui::{
+    layout::Rect,
+    widgets::{Clear, FrameExt},
+    Frame,
+};
 use ratatui_explorer::{FileExplorer, Input};
 use std::path::PathBuf;
 
@@ -41,12 +45,12 @@ impl FilePicker {
             KeyCode::Esc => PickerOutcome::Cancelled,
             KeyCode::Enter => {
                 let current = self.explorer.current();
-                if current.is_dir() {
+                if current.is_dir {
                     // Descend; ratatui-explorer's `Right` handler does this.
                     let _ = self.explorer.handle(Input::Right);
                     PickerOutcome::Continue
                 } else {
-                    PickerOutcome::Picked(current.path().clone())
+                    PickerOutcome::Picked(current.path.clone())
                 }
             }
             // Forward navigation keys to the explorer.

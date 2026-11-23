@@ -38,7 +38,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let mut app = App::new();
     if let Some(path) = cli.file.as_ref() {
-        app.load_file(path).with_context(|| format!("loading {}", path.display()))?;
+        app.load_file(path)
+            .with_context(|| format!("loading {}", path.display()))?;
     }
     if cli.dump {
         // No TUI: print the loaded product as JSON and exit.

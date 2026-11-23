@@ -94,7 +94,7 @@ pub struct ExportOptions {
     /// (the TM-33 writer lives behind that flag); off by default and
     /// silently skipped in eulumdat-less builds.
     /// Implemented in
-    /// [`crate::export::tm33_merge::apply_tm33_merge`].
+    /// `crate::export::tm33_merge::apply_tm33_merge` (feature `eulumdat`).
     pub merge_into_tm33: bool,
 }
 
@@ -425,8 +425,7 @@ impl EditableGldf {
         // (line 22 in EULUMDAT). LDT stores it as a percentage, GLDF
         // expects 0..1.
         if dp.downward_flux_fraction.is_none() && ldt.downward_flux_fraction > 0.0 {
-            dp.downward_flux_fraction =
-                Some(round_to(pct_to_ratio(ldt.downward_flux_fraction), 4));
+            dp.downward_flux_fraction = Some(round_to(pct_to_ratio(ldt.downward_flux_fraction), 4));
             wrote = true;
         }
         // cie_flux_code — Display impl rounds to bankers' integers.
@@ -478,7 +477,12 @@ impl EditableGldf {
         let old_file_id = photometry
             .photometry_file_reference
             .as_ref()
-            .ok_or_else(|| anyhow!("Photometry '{}' has no file reference to replace", photometry_id))?
+            .ok_or_else(|| {
+                anyhow!(
+                    "Photometry '{}' has no file reference to replace",
+                    photometry_id
+                )
+            })?
             .file_id
             .clone();
 
@@ -539,7 +543,9 @@ impl EditableGldf {
             .light_sources
             .as_ref()
             .map(|ls| {
-                ls.fixed_light_source.iter().any(|s| s.id == light_source_id)
+                ls.fixed_light_source
+                    .iter()
+                    .any(|s| s.id == light_source_id)
                     || ls
                         .changeable_light_source
                         .iter()
@@ -611,11 +617,13 @@ impl EditableGldf {
         })?;
 
         let sensor_id = self.product.generate_unique_id("sensor");
-        let mut sensor = Sensor::default();
-        sensor.id = sensor_id.clone();
-        sensor.sensor_file_reference = Some(SensorFileReference {
-            file_id: file_id.clone(),
-        });
+        let sensor = Sensor {
+            id: sensor_id.clone(),
+            sensor_file_reference: Some(SensorFileReference {
+                file_id: file_id.clone(),
+            }),
+            ..Default::default()
+        };
         self.product.add_sensor(sensor)?;
 
         self.add_embedded_file(&file_id, bytes);
@@ -804,11 +812,8 @@ impl EditableGldf {
         if opts.merge_into_tm33 {
             let mut prod = product_owned.take().unwrap_or_else(|| self.product.clone());
             let mut owned_em = embedded.into_owned();
-            let _outcome = crate::export::tm33_merge::apply_tm33_merge(
-                &mut prod,
-                &mut owned_em,
-            )
-            .context("apply TM-33 merge")?;
+            let _outcome = crate::export::tm33_merge::apply_tm33_merge(&mut prod, &mut owned_em)
+                .context("apply TM-33 merge")?;
             product_owned = Some(prod);
             embedded = std::borrow::Cow::Owned(owned_em);
         }
@@ -818,10 +823,8 @@ impl EditableGldf {
             // Drops the corresponding File entries + bytes.
             let mut prod = product_owned.take().unwrap_or_else(|| self.product.clone());
             let mut owned_em = embedded.into_owned();
-            let _outcome = crate::export::inline_spectrum::apply_inline_spectrum(
-                &mut prod,
-                &mut owned_em,
-            );
+            let _outcome =
+                crate::export::inline_spectrum::apply_inline_spectrum(&mut prod, &mut owned_em);
             product_owned = Some(prod);
             embedded = std::borrow::Cow::Owned(owned_em);
         }
@@ -829,9 +832,7 @@ impl EditableGldf {
         // `product_ref` and `embedded` are the bytes/model the rest
         // of this fn writes from. Avoid moving `product_owned` into
         // closures so subsequent transforms can keep reading.
-        let product_ref: &GldfProduct = product_owned
-            .as_ref()
-            .unwrap_or(&self.product);
+        let product_ref: &GldfProduct = product_owned.as_ref().unwrap_or(&self.product);
 
         if opts.dialux_compat {
             // Strip `#` comment lines from every spectrum/text payload.
@@ -1047,12 +1048,11 @@ mod tests {
             file_name: "spec.spd".to_string(),
         });
         let dirty = b"# header\n380\t0.5\n385\t0.6\n";
-        e.embedded_files
-            .insert("spd1".to_string(), dirty.to_vec());
+        e.embedded_files.insert("spd1".to_string(), dirty.to_vec());
 
         let read_back = |buf: &[u8]| -> Vec<u8> {
-            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(buf.to_vec()))
-                .expect("open zip");
+            let mut zip =
+                zip::ZipArchive::new(std::io::Cursor::new(buf.to_vec())).expect("open zip");
             let mut f = zip.by_name("spectrum/spec.spd").expect("entry");
             let mut out = Vec::new();
             f.read_to_end(&mut out).unwrap();
@@ -1099,8 +1099,7 @@ mod tests {
     #[test]
     fn test_add_spectrum_photometry_variant_roundtrip() {
         let ies = std::fs::read(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/data/test.ies"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/test.ies"),
         )
         .expect("test.ies fixture");
 
@@ -1128,7 +1127,9 @@ mod tests {
         let _phot2 = editable
             .add_photometry_file(ies.clone(), "second.ies")
             .expect("add_photometry_file");
-        let variant_id = editable.add_variant_simple("Wide beam").expect("add_variant_simple");
+        let variant_id = editable
+            .add_variant_simple("Wide beam")
+            .expect("add_variant_simple");
 
         // Round-trip through the zip.
         let bytes = editable.save_to_buf().expect("save_to_buf");
@@ -1176,14 +1177,22 @@ mod tests {
             .find(|s| s.id == "lightsource_1")
             .expect("light source");
         assert_eq!(
-            fixed.spectrum_reference.as_ref().map(|r| r.spectrum_id.as_str()),
+            fixed
+                .spectrum_reference
+                .as_ref()
+                .map(|r| r.spectrum_id.as_str()),
             Some(spectrum_id.as_str()),
             "light source links our spectrum"
         );
 
         // 3. Two photometries + the new variant present.
         assert_eq!(
-            p.general_definitions.photometries.as_ref().unwrap().photometry.len(),
+            p.general_definitions
+                .photometries
+                .as_ref()
+                .unwrap()
+                .photometry
+                .len(),
             2
         );
         assert!(p
@@ -1201,7 +1210,10 @@ mod tests {
             xml.contains("https://gldf.io/xsd/gldf/1.0.0-rc.3/gldf.xsd"),
             "canonical noNamespaceSchemaLocation"
         );
-        assert!(!xml.contains("GldfSchema.xsd"), "no bundled local schema ref");
+        assert!(
+            !xml.contains("GldfSchema.xsd"),
+            "no bundled local schema ref"
+        );
     }
 
     /// `rename_fixed_light_source` updates the source id and every reference
@@ -1212,8 +1224,7 @@ mod tests {
     #[test]
     fn test_rename_and_replace() {
         let ies = std::fs::read(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/data/test.ies"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/test.ies"),
         )
         .expect("test.ies fixture");
         let buf_gldf = crate::ldt_to_gldf(&ies, "test.ies").expect("ldt_to_gldf");
@@ -1274,10 +1285,12 @@ mod tests {
             .is_ok());
         editable
             .product
-            .add_fixed_light_source(crate::gldf::general_definitions::lightsources::FixedLightSource {
-                id: "second".to_string(),
-                ..Default::default()
-            })
+            .add_fixed_light_source(
+                crate::gldf::general_definitions::lightsources::FixedLightSource {
+                    id: "second".to_string(),
+                    ..Default::default()
+                },
+            )
             .expect("add second");
         assert!(editable
             .product
@@ -1305,7 +1318,11 @@ mod tests {
             .photometry
             .iter()
             .find(|p| p.id == photometry_id)
-            .and_then(|p| p.photometry_file_reference.as_ref().map(|r| r.file_id.clone()))
+            .and_then(|p| {
+                p.photometry_file_reference
+                    .as_ref()
+                    .map(|r| r.file_id.clone())
+            })
             .expect("photometry has a file ref");
 
         let fake_ies_bytes = b"IESNA:LM-63-1995\nfake replacement\n".to_vec();
@@ -1331,15 +1348,21 @@ mod tests {
             .file_id
             .clone();
         assert_ne!(old_file_id, new_file_id, "file id should change");
-        assert!(!editable
-            .product
-            .general_definitions
-            .files
-            .file
-            .iter()
-            .any(|f| f.id == old_file_id), "old File entry removed");
-        assert!(editable.embedded_files.get(&old_file_id).is_none());
-        assert_eq!(editable.embedded_files.get(&new_file_id), Some(&fake_ies_bytes));
+        assert!(
+            !editable
+                .product
+                .general_definitions
+                .files
+                .file
+                .iter()
+                .any(|f| f.id == old_file_id),
+            "old File entry removed"
+        );
+        assert!(!editable.embedded_files.contains_key(&old_file_id));
+        assert_eq!(
+            editable.embedded_files.get(&new_file_id),
+            Some(&fake_ies_bytes)
+        );
     }
 
     #[test]

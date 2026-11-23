@@ -98,12 +98,12 @@ fn fit_svg(svg: &str) -> String {
     };
     let mut out = String::with_capacity(svg.len() + 96);
     out.push_str(&svg[..pos + 4]); // through "<svg"
-    // Definite pixel `width`/`height` (attribute AND CSS): blitz's
-    // replaced-element measure zeroes out an SVG measured under a
-    // min-content constraint unless a definite size is present. NOTE: do
-    // NOT use percentage `max-width/max-height` here — under a min-content
-    // basis a `%` max resolves to 0 and re-collapses the box. The wrapper
-    // div owns clipping/scaling instead.
+                                   // Definite pixel `width`/`height` (attribute AND CSS): blitz's
+                                   // replaced-element measure zeroes out an SVG measured under a
+                                   // min-content constraint unless a definite size is present. NOTE: do
+                                   // NOT use percentage `max-width/max-height` here — under a min-content
+                                   // basis a `%` max resolves to 0 and re-collapses the box. The wrapper
+                                   // div owns clipping/scaling instead.
     out.push_str(&format!(
         " width=\"{w}\" height=\"{h}\" \
          style=\"width:{w}px;height:{h}px\" \
@@ -215,9 +215,12 @@ pub fn SpdPanel(bytes: Vec<u8>) -> impl IntoView {
     let parsed: Result<(SpectralDistribution, String), String> = {
         let content = match std::str::from_utf8(&bytes) {
             Ok(s) => s,
-            Err(e) => return view! {
-                <em style="color: #c00;">{ format!("Not UTF-8 .spd content: {}", e) }</em>
-            }.into_any(),
+            Err(e) => {
+                return view! {
+                    <em style="color: #c00;">{ format!("Not UTF-8 .spd content: {}", e) }</em>
+                }
+                .into_any()
+            }
         };
         // TM-33 fallback: the GLDF Spectrum may point at a TM-33 XML
         // file (shared with Photometry via the same @fileId — see
@@ -231,9 +234,7 @@ pub fn SpdPanel(bytes: Vec<u8>) -> impl IntoView {
                     .first()
                     .and_then(|e| e.spectral_distribution.clone())
                 {
-                    if !spd.wavelengths.is_empty()
-                        && spd.wavelengths.len() == spd.values.len()
-                    {
+                    if !spd.wavelengths.is_empty() && spd.wavelengths.len() == spd.values.len() {
                         Ok((spd, "embedded TM-33 XML".to_string()))
                     } else {
                         Err("TM-33 carries no SpectralDistribution".to_string())
@@ -279,7 +280,11 @@ fn render_panel_body(
     };
 
     let tm30 = if usable { calculate_tm30(&spd) } else { None };
-    let colorim = if usable { Some(colorimetry::analyze(&spd)) } else { None };
+    let colorim = if usable {
+        Some(colorimetry::analyze(&spd))
+    } else {
+        None
+    };
 
     let theme = Tm30Theme::light();
     // Strip eulumdat's mis-labeled in-SVG headers; we render correct values
@@ -291,7 +296,9 @@ fn render_panel_body(
         .unwrap_or_default();
     let rf_hue_svg = tm30
         .as_ref()
-        .map(|r| strip_text_elements_with_prefix(&r.rf_hue_svg(540.0, 280.0, &theme), &label_prefixes))
+        .map(|r| {
+            strip_text_elements_with_prefix(&r.rf_hue_svg(540.0, 280.0, &theme), &label_prefixes)
+        })
         .unwrap_or_default();
 
     let tm30_caption = match (colorim.as_ref(), tm30.as_ref()) {
@@ -337,7 +344,13 @@ fn render_panel_body(
         let doc = state.with(|s| build_atla_for_greenhouse(&s.product, &spd_for_greenhouse));
         let diagram = GreenhouseDiagram::from_atla_with_height(&doc, max_height);
         let svg = diagram.to_svg(720.0, 360.0, &GreenhouseTheme::light());
-        (max_height, svg, diagram.ppf, diagram.efficacy, diagram.watts)
+        (
+            max_height,
+            svg,
+            diagram.ppf,
+            diagram.efficacy,
+            diagram.watts,
+        )
     });
 
     // Slider input — parses the value and writes it into the signal.
@@ -508,13 +521,9 @@ fn resolve_spd(
                         .first()
                         .and_then(|e| e.spectral_distribution.clone())
                     {
-                        if !spd.wavelengths.is_empty()
-                            && spd.wavelengths.len() == spd.values.len()
+                        if !spd.wavelengths.is_empty() && spd.wavelengths.len() == spd.values.len()
                         {
-                            return Some((
-                                spd,
-                                format!("TM-33 XML in file {}", file_ref.file_id),
-                            ));
+                            return Some((spd, format!("TM-33 XML in file {}", file_ref.file_id)));
                         }
                     }
                     return Some((
@@ -530,7 +539,10 @@ fn resolve_spd(
             match spd_loader::parse(content) {
                 Ok(loaded) => return Some((loaded.spd, format!("file {}", file_ref.file_id))),
                 Err(e) => {
-                    return Some((SpectralDistribution::default(), format!("parse error: {}", e)));
+                    return Some((
+                        SpectralDistribution::default(),
+                        format!("parse error: {}", e),
+                    ));
                 }
             }
         }
@@ -592,7 +604,11 @@ fn build_atla_for_greenhouse(
         .general_definitions
         .light_sources
         .as_ref()
-        .and_then(|ls| ls.fixed_light_source.first().and_then(|s| s.rated_input_power));
+        .and_then(|ls| {
+            ls.fixed_light_source
+                .first()
+                .and_then(|s| s.rated_input_power)
+        });
     let lumens = product
         .general_definitions
         .emitters

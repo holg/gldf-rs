@@ -49,14 +49,13 @@ pub fn EmitterTypeForm(
 ) -> impl IntoView {
     let s_name = RwSignal::new(String::new());
     let s_kind = RwSignal::new(LightEmitterKind::Fixed);
-    let s_photo = RwSignal::new(
-        available_photometries.first().cloned().unwrap_or_default(),
-    );
-    let s_fixed_ls = RwSignal::new(
-        available_fixed_ls.first().cloned().unwrap_or_default(),
-    );
+    let s_photo = RwSignal::new(available_photometries.first().cloned().unwrap_or_default());
+    let s_fixed_ls = RwSignal::new(available_fixed_ls.first().cloned().unwrap_or_default());
     let s_mc_ls = RwSignal::new(
-        available_multi_channel_ls.first().cloned().unwrap_or_default(),
+        available_multi_channel_ls
+            .first()
+            .cloned()
+            .unwrap_or_default(),
     );
     let s_sensor = RwSignal::new(available_sensors.first().cloned().unwrap_or_default());
 
@@ -66,7 +65,9 @@ pub fn EmitterTypeForm(
     let sensors_for_select = available_sensors.clone();
 
     let on_kind_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         let new_kind = match v.as_str() {
             "Fixed" => LightEmitterKind::Fixed,
             "Changeable" => LightEmitterKind::Changeable,
@@ -78,13 +79,17 @@ pub fn EmitterTypeForm(
     };
 
     let on_name_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         s_name.set(v);
     };
 
     let make_select_handler = |sig: RwSignal<String>| {
         move |e: crate::components::edit_util::EditEvent| {
-            let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+            let Some(v) = crate::components::edit_util::event_value(&e) else {
+                return;
+            };
             sig.set(v);
         }
     };
@@ -106,7 +111,9 @@ pub fn EmitterTypeForm(
         // catalog is empty, the form has the disabled-state below; this
         // guard is the belt-and-braces backup.
         let ok = match draft.kind {
-            LightEmitterKind::Fixed => !draft.photometry_id.is_empty() && !draft.fixed_light_source_id.is_empty(),
+            LightEmitterKind::Fixed => {
+                !draft.photometry_id.is_empty() && !draft.fixed_light_source_id.is_empty()
+            }
             LightEmitterKind::Changeable => !draft.photometry_id.is_empty(),
             LightEmitterKind::MultiChannel => !draft.multi_channel_light_source_id.is_empty(),
             LightEmitterKind::Sensor => !draft.sensor_id.is_empty(),
@@ -155,8 +162,8 @@ pub fn EmitterTypeForm(
                 LightEmitterKind::Fixed => {
                     let photos = photos_for_select.clone();
                     let fixed_ls = fixed_for_select.clone();
-                    let on_photo = on_photo_change.clone();
-                    let on_fixed = on_fixed_ls_change.clone();
+                    let on_photo = on_photo_change;
+                    let on_fixed = on_fixed_ls_change;
                     view! {
                         <>
                             <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
@@ -197,7 +204,7 @@ pub fn EmitterTypeForm(
                 }
                 LightEmitterKind::Changeable => {
                     let photos = photos_for_select.clone();
-                    let on_photo = on_photo_change.clone();
+                    let on_photo = on_photo_change;
                     view! {
                         <>
                             <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
@@ -223,7 +230,7 @@ pub fn EmitterTypeForm(
                 }
                 LightEmitterKind::MultiChannel => {
                     let mcs = mc_for_select.clone();
-                    let on_mc = on_mc_change.clone();
+                    let on_mc = on_mc_change;
                     view! {
                         <>
                             <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">
@@ -249,7 +256,7 @@ pub fn EmitterTypeForm(
                 }
                 LightEmitterKind::Sensor => {
                     let sensors = sensors_for_select.clone();
-                    let on_sensor = on_sensor_change.clone();
+                    let on_sensor = on_sensor_change;
                     view! {
                         <>
                             <p style="margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic;">

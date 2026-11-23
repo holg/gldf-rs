@@ -27,13 +27,19 @@ pub fn MechanicalEditorPage() -> impl IntoView {
     let on_ik = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
-            s.apply(GldfAction::SetMechanicalIKRating(scope.get(), optional_string(v)));
+            s.apply(GldfAction::SetMechanicalIKRating(
+                scope.get(),
+                optional_string(v),
+            ));
         });
     };
     let on_form = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
-            s.apply(GldfAction::SetMechanicalProductForm(scope.get(), optional_string(v)));
+            s.apply(GldfAction::SetMechanicalProductForm(
+                scope.get(),
+                optional_string(v),
+            ));
         });
     };
     let on_length = move |e: crate::components::edit_util::EditEvent| {

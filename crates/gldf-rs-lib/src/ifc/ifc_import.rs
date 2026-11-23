@@ -321,10 +321,7 @@ impl IfcImporter {
         // their stable dictionary id, so it works regardless of which
         // Pset they landed in or how the name was localised.
         if let Some(first_type) = fixture_types.first() {
-            self.scan_bim_properties(
-                first_type.id,
-                &mut luminaire.descriptive_attributes,
-            );
+            self.scan_bim_properties(first_type.id, &mut luminaire.descriptive_attributes);
         }
 
         // Extract embedded files (images, sensors) from Pset_GLDF_EmbeddedFile
@@ -798,11 +795,7 @@ impl IfcImporter {
     /// `bSDD:<id>`) and populate `da` accordingly. The import-side of
     /// the BIM-properties spec round-trip — see
     /// [`crate::ifc::bim_properties`].
-    fn scan_bim_properties(
-        &self,
-        element_id: u64,
-        da: &mut ProductDescriptiveAttributes,
-    ) {
+    fn scan_bim_properties(&self, element_id: u64, da: &mut ProductDescriptiveAttributes) {
         use crate::ifc::bim_properties::resolve_imported_property;
 
         // Collect every IFCPROPERTYSET attached to the element.
@@ -823,7 +816,9 @@ impl IfcImporter {
         }
 
         for pset_id in pset_ids {
-            let Some(pset) = self.parser.get(pset_id) else { continue };
+            let Some(pset) = self.parser.get(pset_id) else {
+                continue;
+            };
             if pset.entity_type != "IFCPROPERTYSET" {
                 continue;
             }
@@ -832,8 +827,12 @@ impl IfcImporter {
                 continue;
             };
             for prop_ref in props {
-                let Some(prop_id) = prop_ref.as_ref() else { continue };
-                let Some(prop) = self.parser.get(prop_id) else { continue };
+                let Some(prop_id) = prop_ref.as_ref() else {
+                    continue;
+                };
+                let Some(prop) = self.parser.get(prop_id) else {
+                    continue;
+                };
                 if prop.entity_type != "IFCPROPERTYSINGLEVALUE" {
                     continue;
                 }
@@ -852,12 +851,8 @@ impl IfcImporter {
                 let nominal = pp.get(2);
                 let value = nominal
                     .and_then(|v| v.as_string().map(|s| s.to_string()))
-                    .or_else(|| {
-                        nominal.and_then(|v| v.as_boolean()).map(|b| b.to_string())
-                    })
-                    .or_else(|| {
-                        nominal.and_then(|v| v.as_real()).map(|f| f.to_string())
-                    })
+                    .or_else(|| nominal.and_then(|v| v.as_boolean()).map(|b| b.to_string()))
+                    .or_else(|| nominal.and_then(|v| v.as_real()).map(|f| f.to_string()))
                     .unwrap_or_default();
                 if value.is_empty() {
                     continue;
@@ -874,20 +869,18 @@ impl IfcImporter {
     /// struct. Only fills empty fields — earlier extraction (from
     /// Pset_ElectricalDeviceCommon etc.) wins, since those are the
     /// canonical IFC Psets.
-    fn apply_bim_property(
-        da: &mut ProductDescriptiveAttributes,
-        name: &str,
-        value: &str,
-    ) {
+    fn apply_bim_property(da: &mut ProductDescriptiveAttributes, name: &str, value: &str) {
         match name {
             "ElectricalSafetyClass" => {
-                da.electrical_safety_class.get_or_insert_with(|| value.to_string());
+                da.electrical_safety_class
+                    .get_or_insert_with(|| value.to_string());
             }
             "IngressProtectionIPCode" => {
                 da.ip_code.get_or_insert_with(|| value.to_string());
             }
             "MedianUsefulLife" => {
-                da.median_useful_life.get_or_insert_with(|| value.to_string());
+                da.median_useful_life
+                    .get_or_insert_with(|| value.to_string());
             }
             "PowerFactor" => {
                 if da.power_factor.is_none() {
@@ -1433,7 +1426,11 @@ fn parse_ifc_bool(value: &str) -> Option<bool> {
 /// exporter) back to GLDF's native millimetres. The exporter divided
 /// mm by 1000; we multiply back and round to the nearest mm.
 fn parse_length_mm(value: &str) -> Option<i32> {
-    value.trim().parse::<f64>().ok().map(|m| (m * 1000.0).round() as i32)
+    value
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .map(|m| (m * 1000.0).round() as i32)
 }
 
 #[cfg(test)]

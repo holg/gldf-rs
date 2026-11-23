@@ -50,7 +50,10 @@ impl WizardModal {
                 ui.horizontal_wrapped(|ui| {
                     for (i, s) in WizardStep::ALL.iter().enumerate() {
                         let sel = i == self.step;
-                        if ui.selectable_label(sel, format!("{}", s.number())).clicked() {
+                        if ui
+                            .selectable_label(sel, format!("{}", s.number()))
+                            .clicked()
+                        {
                             self.step = i;
                         }
                     }
@@ -75,9 +78,10 @@ impl WizardModal {
                     }
                     if matches!(step, WizardStep::Review)
                         && ui
-                            .add(egui::Button::new("Create GLDF").fill(
-                                egui::Color32::from_rgb(0x2e, 0x7d, 0x32),
-                            ))
+                            .add(
+                                egui::Button::new("Create GLDF")
+                                    .fill(egui::Color32::from_rgb(0x2e, 0x7d, 0x32)),
+                            )
                             .clicked()
                     {
                         self.sync_emitter();
@@ -340,11 +344,7 @@ impl WizardModal {
                     });
                     ui.end_row();
                     ui.label("Light source");
-                    ui.label(format!(
-                        "{} \"{}\"",
-                        d.ls_kind.short_label(),
-                        d.ls_name
-                    ));
+                    ui.label(format!("{} \"{}\"", d.ls_kind.short_label(), d.ls_name));
                     ui.end_row();
                     ui.label("Emitter");
                     ui.label(if self.include_emitter {

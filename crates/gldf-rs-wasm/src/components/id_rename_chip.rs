@@ -49,7 +49,9 @@ pub fn IdRenameChip(
         is_editing.set(false);
     };
     let on_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         draft.set(v);
     };
 
@@ -60,7 +62,7 @@ pub fn IdRenameChip(
                     <input
                         type="text"
                         prop:value=move || draft.get()
-                        on:input=on_input.clone()
+                        on:input=on_input
                         style="font-family: var(--font-mono); font-size: 12px; padding: 2px 4px; background: var(--bg-secondary); border: 1px solid var(--accent-blue); border-radius: 4px; color: var(--text-primary); min-width: 120px;"
                     />
                     <button
@@ -68,7 +70,7 @@ pub fn IdRenameChip(
                         style="padding: 2px 6px; font-size: 11px; background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer;"
                     >{ "Save" }</button>
                     <button
-                        on:click=on_cancel.clone()
+                        on:click=on_cancel
                         style="padding: 2px 6px; font-size: 11px; background: none; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-secondary);"
                     >{ "Cancel" }</button>
                 </span>

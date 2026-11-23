@@ -2,7 +2,7 @@
 //! `HousingColor`.
 //!
 //! Available only when the `l3d` feature is enabled (which pulls in
-//! `l3d_rs` as a dep). The editor calls [`sync_l3d_mtl_for_housing_color`]
+//! `l3d_rs` as a dep). The editor calls [`sync_l3d_mtl_for_housing_color`](crate::l3d_mtl_sync::sync_l3d_mtl_for_housing_color)
 //! inside the `UpdateHousingColor` reducer arm; the WASM viewer's
 //! three-d-based renderer picks up the new colour automatically when
 //! it re-loads the L3D bytes from `embedded_files`.
@@ -25,9 +25,9 @@
 //!
 //! Most "missing piece" cases are *not* errors. A variant without a
 //! `ModelGeometryReference` (bare emitter binding) returns
-//! [`SyncOutcome::NoModelGeometry`]; a variant whose `HousingColor`
+//! [`SyncOutcome::NoModelGeometry`](crate::l3d_mtl_sync::SyncOutcome::NoModelGeometry); a variant whose `HousingColor`
 //! has no `@ral` (free-text name only) returns
-//! [`SyncOutcome::NoRalAvailable`]. The caller is expected to swallow
+//! [`SyncOutcome::NoRalAvailable`](crate::l3d_mtl_sync::SyncOutcome::NoRalAvailable). The caller is expected to swallow
 //! these — they're the common path for variants the user hasn't yet
 //! attached a 3D model to.
 //!
@@ -226,9 +226,7 @@ pub fn sync_l3d_mtl_for_housing_color(
     };
 
     // Repack and put the new bytes back.
-    let new_bytes = l3d_file
-        .to_buffer()
-        .map_err(SyncError::L3dWriteFailed)?;
+    let new_bytes = l3d_file.to_buffer().map_err(SyncError::L3dWriteFailed)?;
     embedded_files.insert(file_id, new_bytes);
 
     Ok(outcome)
@@ -252,7 +250,9 @@ fn parse_l3d(bytes: &[u8]) -> Result<L3dFile, SyncError> {
             continue;
         }
         let mut buf = Vec::new();
-        entry.read_to_end(&mut buf).map_err(SyncError::L3dParseFailed)?;
+        entry
+            .read_to_end(&mut buf)
+            .map_err(SyncError::L3dParseFailed)?;
         let name = entry.name().to_string();
         if name == "structure.xml" {
             file.structure = String::from_utf8_lossy(&buf).into_owned();
@@ -271,15 +271,13 @@ fn parse_l3d(bytes: &[u8]) -> Result<L3dFile, SyncError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gldf::general_definitions::geometries::{
-        GeometryFileReference, ModelGeometry,
-    };
+    use crate::gldf::general_definitions::geometries::{GeometryFileReference, ModelGeometry};
     use crate::gldf::general_definitions::Files;
+    use crate::gldf::product_definitions::DescriptiveAttributes;
     use crate::gldf::product_definitions::{
         Geometry, HousingColor, HousingColors, Marketing, ModelGeometryReference,
         ProductDefinitions, Variant, Variants,
     };
-    use crate::gldf::product_definitions::DescriptiveAttributes;
 
     /// Build the smallest L3D archive that exercises ensure_mtl —
     /// one OBJ, no MTL.

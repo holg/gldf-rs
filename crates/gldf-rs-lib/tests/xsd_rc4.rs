@@ -16,8 +16,8 @@
 use std::path::PathBuf;
 
 use gldf_rs::validation::{
-    xsd_validate_product_xml, xsd_validate_product_xml_with_schema,
-    DEFAULT_VALIDATION_SCHEMA, GldfSchemaVersion,
+    xsd_validate_product_xml, xsd_validate_product_xml_with_schema, GldfSchemaVersion,
+    DEFAULT_VALIDATION_SCHEMA,
 };
 
 const RC4_XSD: &str = include_str!("../../../tests/data/gldf-1.0.0-rc-4.xsd");
@@ -54,7 +54,10 @@ fn slv_fixture_validates_clean_under_both_schemas() {
     // rc-4 too — and the version-less default (rc-3) still passes.
     let xml = slv_product_xml();
     let default_errs = xsd_validate_product_xml(&xml).expect("default validate");
-    assert!(default_errs.is_empty(), "SLV rc-3 default: {default_errs:?}");
+    assert!(
+        default_errs.is_empty(),
+        "SLV rc-3 default: {default_errs:?}"
+    );
     for v in [GldfSchemaVersion::Rc3, GldfSchemaVersion::Rc4] {
         let errs = xsd_validate_product_xml_with_schema(&xml, v).expect("validate");
         assert!(errs.is_empty(), "SLV should be {v:?}-clean; got: {errs:?}");
@@ -78,7 +81,10 @@ fn rc4_accepts_decimal_sdcm_but_rc3_rejects_it() {
         );
         let rc4 = xsd_validate_product_xml_with_schema(&patched, GldfSchemaVersion::Rc4)
             .expect("rc4 validate");
-        assert!(rc4.is_empty(), "rc.4 should accept {decimal:?}; got: {rc4:?}");
+        assert!(
+            rc4.is_empty(),
+            "rc.4 should accept {decimal:?}; got: {rc4:?}"
+        );
 
         let rc3 = xsd_validate_product_xml_with_schema(&patched, GldfSchemaVersion::Rc3)
             .expect("rc3 validate");

@@ -6,8 +6,9 @@
 //! product, not a frontend internal.
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use gldf_rs::validation::GldfSchemaVersion;
 use gldf_rs::EditableGldf;
 use gldf_rs_editor::{
     apply_script, apply_wizard, expand_file_refs, EmitterDraft, FsResolver, GldfAction, GldfState,
@@ -123,14 +124,23 @@ enum Cmd {
         /// XSD-validate every written .gldf and report violations.
         #[arg(long, default_value_t = false)]
         validate: bool,
+        /// Schema revision `--validate` checks against.
+        #[arg(long, value_enum, default_value_t = SchemaArg::Rc3)]
+        schema: SchemaArg,
     },
-    /// Validate a `.gldf` against the rc-3 XSD. Prints findings to
-    /// stderr. Exit code 0 means clean, 1 means violations, 2 means
-    /// the input couldn't be read/parsed.
+    /// Validate a `.gldf` against the GLDF XSD (rc-3 by default, rc-4
+    /// via `--schema rc4`). Prints findings to stderr. Exit code 0
+    /// means clean, 1 means violations, 2 means the input couldn't be
+    /// read/parsed.
     Validate {
         /// `.gldf` archive to validate.
         #[arg(long, short = 'i')]
         input: PathBuf,
+        /// Schema revision to validate against. rc-3 is the latest
+        /// published schema; rc-4 checks the proposed features
+        /// (control protocols, decimal SDCM, …) ahead of the merge.
+        #[arg(long, value_enum, default_value_t = SchemaArg::Rc3)]
+        schema: SchemaArg,
     },
     /// Dump the L3D structure of a GLDF (or raw .l3d): every joint,
     /// LightEmittingObject and SensorObject with its position +
@@ -141,6 +151,24 @@ enum Cmd {
         #[arg(long, short = 'i')]
         input: PathBuf,
     },
+}
+
+/// CLI spelling of [`GldfSchemaVersion`] for `--schema`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum SchemaArg {
+    /// GLDF 1.0.0-rc.3 — the latest published schema.
+    Rc3,
+    /// GLDF 1.0.0-rc.4 — proposed (PR #30), not yet published.
+    Rc4,
+}
+
+impl From<SchemaArg> for GldfSchemaVersion {
+    fn from(a: SchemaArg) -> Self {
+        match a {
+            SchemaArg::Rc3 => GldfSchemaVersion::Rc3,
+            SchemaArg::Rc4 => GldfSchemaVersion::Rc4,
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -167,9 +195,17 @@ fn main() -> Result<()> {
             ifc,
             no_gldf,
             validate,
-        } => cmd_batch(&inputs, &template, &out_dir, ifc, no_gldf, validate),
+            schema,
+        } => cmd_batch(
+            &inputs,
+            &template,
+            &out_dir,
+            ifc,
+            no_gldf,
+            validate.then_some(schema.into()),
+        ),
         Cmd::Wizard { draft, output } => cmd_wizard(draft.as_deref(), &output),
-        Cmd::Validate { input } => cmd_validate(&input),
+        Cmd::Validate { input, schema } => cmd_validate(&input, schema.into()),
         Cmd::DumpL3d { input } => cmd_dump_l3d(&input),
     }
 }
@@ -210,8 +246,7 @@ fn cmd_dump_l3d(input: &Path) -> Result<()> {
     };
 
     let l3d = l3d_rs::from_buffer(&l3d_bytes);
-    let lum = l3d_rs::Luminaire::from_xml(&l3d.file.structure)
-        .context("parse structure.xml")?;
+    let lum = l3d_rs::Luminaire::from_xml(&l3d.file.structure).context("parse structure.xml")?;
     println!("# L3D dump for {}", input.display());
     println!("# parts in <Model>: {}", l3d.model.parts.len());
     for p in &l3d.model.parts {
@@ -292,16 +327,19 @@ fn dump_geom(g: &l3d_rs::Geometry, depth: usize) {
     }
 }
 
-fn cmd_validate(input: &Path) -> Result<()> {
-    let bytes = std::fs::read(input)
-        .with_context(|| format!("read {}", input.display()))?;
-    let findings = gldf_rs::validation::xsd_validate_gldf_archive(&bytes)
+fn cmd_validate(input: &Path, schema: GldfSchemaVersion) -> Result<()> {
+    let bytes = std::fs::read(input).with_context(|| format!("read {}", input.display()))?;
+    let findings = gldf_rs::validation::xsd_validate_gldf_archive_with_schema(&bytes, schema)
         .with_context(|| format!("validate {}", input.display()))?;
     if findings.is_empty() {
-        eprintln!("✓ {} — XSD-clean", input.display());
+        eprintln!("✓ {} — XSD-clean ({schema:?})", input.display());
         return Ok(());
     }
-    eprintln!("✗ {} — {} violation(s):", input.display(), findings.len());
+    eprintln!(
+        "✗ {} — {} violation(s) against {schema:?}:",
+        input.display(),
+        findings.len()
+    );
     for (i, f) in findings.iter().enumerate() {
         eprintln!("  [{:>3}] {}", i + 1, f);
     }
@@ -341,12 +379,17 @@ fn cmd_save(
             merge_into_tm33: tm33,
         };
         let bytes = state.save_to_buf_with_options(&opts)?;
-        std::fs::write(output, bytes)
-            .with_context(|| format!("write {}", output.display()))?;
+        std::fs::write(output, bytes).with_context(|| format!("write {}", output.display()))?;
         let mut tags = Vec::new();
-        if dialux_compat { tags.push("dialux-compat"); }
-        if inline_spectrum { tags.push("inline-spectrum"); }
-        if tm33 { tags.push("tm33"); }
+        if dialux_compat {
+            tags.push("dialux-compat");
+        }
+        if inline_spectrum {
+            tags.push("inline-spectrum");
+        }
+        if tm33 {
+            tags.push("tm33");
+        }
         eprintln!("wrote {} ({})", output.display(), tags.join(", "));
         Ok(())
     } else {
@@ -367,7 +410,8 @@ fn cmd_batch(
     out_dir: &Path,
     ifc: bool,
     no_gldf: bool,
-    validate: bool,
+    // `Some(schema)` XSD-validates every written .gldf against it.
+    validate: Option<GldfSchemaVersion>,
 ) -> Result<()> {
     use gldf_rs_editor::batch::{
         collect_inputs, run_batch, BatchEvent, BatchJob, BatchOptions, BatchTemplate,
@@ -386,7 +430,11 @@ fn cmd_batch(
     if files.is_empty() {
         anyhow::bail!("no .ldt / .ies files found in the given inputs");
     }
-    eprintln!("batch: {} photometry file(s) → {}", files.len(), out_dir.display());
+    eprintln!(
+        "batch: {} photometry file(s) → {}",
+        files.len(),
+        out_dir.display()
+    );
 
     let job = BatchJob {
         template,
@@ -400,7 +448,12 @@ fn cmd_batch(
     };
 
     let reports = run_batch(&job, &mut |ev| {
-        if let BatchEvent::Finished { index, total, report } = ev {
+        if let BatchEvent::Finished {
+            index,
+            total,
+            report,
+        } = ev
+        {
             let name = report
                 .input
                 .file_name()
@@ -416,7 +469,13 @@ fn cmd_batch(
                     if let Some(p) = &report.ifc_path {
                         wrote.push(p.display().to_string());
                     }
-                    eprintln!("[{}/{}] ✓ {} → {}", index + 1, total, name, wrote.join(", "));
+                    eprintln!(
+                        "[{}/{}] ✓ {} → {}",
+                        index + 1,
+                        total,
+                        name,
+                        wrote.join(", ")
+                    );
                 }
             }
         }
@@ -424,15 +483,20 @@ fn cmd_batch(
     })?;
 
     let mut violations_total = 0usize;
-    if validate {
+    if let Some(schema) = validate {
         for report in reports.iter().filter(|r| r.error.is_none()) {
             if let Some(path) = &report.gldf_path {
                 let bytes = std::fs::read(path)?;
-                let findings = gldf_rs::validation::xsd_validate_gldf_archive(&bytes)
-                    .with_context(|| format!("validate {}", path.display()))?;
+                let findings =
+                    gldf_rs::validation::xsd_validate_gldf_archive_with_schema(&bytes, schema)
+                        .with_context(|| format!("validate {}", path.display()))?;
                 if !findings.is_empty() {
                     violations_total += findings.len();
-                    eprintln!("✗ {} — {} XSD violation(s):", path.display(), findings.len());
+                    eprintln!(
+                        "✗ {} — {} XSD violation(s):",
+                        path.display(),
+                        findings.len()
+                    );
                     for f in &findings {
                         eprintln!("    {}", f);
                     }
@@ -446,7 +510,7 @@ fn cmd_batch(
         "batch done: {} ok, {} failed{}",
         reports.len() - failed,
         failed,
-        if validate {
+        if validate.is_some() {
             format!(", {} XSD violation(s)", violations_total)
         } else {
             String::new()
@@ -464,10 +528,11 @@ fn cmd_wizard(draft_path: Option<&Path>, output: &Path) -> Result<()> {
             .with_context(|| format!("read draft {}", path.display()))?;
         let mut value: serde_json::Value = serde_json::from_str(&raw)
             .with_context(|| format!("parse JSON in {}", path.display()))?;
-        let root = path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
-        let resolver = FsResolver {
-            root: root.clone(),
-        };
+        let root = path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        let resolver = FsResolver { root: root.clone() };
         expand_file_refs(&mut value, &resolver)
             .with_context(|| format!("expand @file refs in {}", path.display()))?;
         let d: WizardDraft = serde_json::from_value(value)
@@ -532,8 +597,8 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
         (None, String::new())
     } else {
         let path = Path::new(photometry_path.trim());
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("read photometry {}", path.display()))?;
+        let bytes =
+            std::fs::read(path).with_context(|| format!("read photometry {}", path.display()))?;
         let filename = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -544,8 +609,11 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
 
     // --- Step 3: LightSource ---
     eprintln!("\nStep 3/7 — LightSource");
-    let ls_kind = match p.select("LightSource kind", &["Fixed", "Changeable", "MultiChannel"], 0)?
-    {
+    let ls_kind = match p.select(
+        "LightSource kind",
+        &["Fixed", "Changeable", "MultiChannel"],
+        0,
+    )? {
         0 => WizardLightSourceKind::Fixed,
         1 => WizardLightSourceKind::Changeable,
         _ => WizardLightSourceKind::MultiChannel,
@@ -556,8 +624,11 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
 
     // --- Step 4: Emitter ---
     eprintln!("\nStep 4/7 — Emitter");
-    let want_emitter =
-        p.select("Create an Emitter linked to the LightSource?", &["Yes", "No"], 0)? == 0;
+    let want_emitter = p.select(
+        "Create an Emitter linked to the LightSource?",
+        &["Yes", "No"],
+        0,
+    )? == 0;
     let emitter_draft = if want_emitter {
         let emitter_kind = match ls_kind {
             WizardLightSourceKind::Fixed => LightEmitterKind::Fixed,
@@ -584,8 +655,7 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
         (None, String::new())
     } else {
         let p2 = std::path::Path::new(geometry_path.trim());
-        let bytes = std::fs::read(p2)
-            .with_context(|| format!("read geometry {}", p2.display()))?;
+        let bytes = std::fs::read(p2).with_context(|| format!("read geometry {}", p2.display()))?;
         let filename = p2
             .file_name()
             .and_then(|n| n.to_str())
@@ -662,8 +732,8 @@ fn prompt_wizard_draft() -> Result<WizardDraft> {
         mounting_pendant_length_mm: String::new(),
         mounting_height_mm: String::new(),
         mounting_pole_height_mm: String::new(),
-    sensor_bytes: None,
-    sensor_filename: String::new(),
+        sensor_bytes: None,
+        sensor_filename: String::new(),
         emergency_bytes: None,
         emergency_filename: String::new(),
     })
@@ -717,9 +787,10 @@ impl Prompter {
                 &format!("{} [{}]", prompt, menu),
                 &(default + 1).to_string(),
             )?;
-            let idx: usize = raw.trim().parse().with_context(|| {
-                format!("expected a number 1..={}; got {:?}", items.len(), raw)
-            })?;
+            let idx: usize = raw
+                .trim()
+                .parse()
+                .with_context(|| format!("expected a number 1..={}; got {:?}", items.len(), raw))?;
             if idx == 0 || idx > items.len() {
                 anyhow::bail!("choice {} out of range 1..={}", idx, items.len());
             }
@@ -756,10 +827,8 @@ impl Prompter {
 fn load_state(input: Option<&std::path::Path>) -> Result<GldfState> {
     let mut state = GldfState::default();
     if let Some(path) = input {
-        let editable = EditableGldf::from_gldf(
-            path.to_str().context("non-UTF-8 path")?,
-        )
-        .with_context(|| format!("read {}", path.display()))?;
+        let editable = EditableGldf::from_gldf(path.to_str().context("non-UTF-8 path")?)
+            .with_context(|| format!("read {}", path.display()))?;
         state.apply(GldfAction::LoadWithFiles {
             product: editable.product,
             embedded_files: editable.embedded_files,

@@ -31,8 +31,10 @@ fn seed_with_l3d() -> (GldfState, String, String) {
     s.apply(GldfAction::SetAuthor("Tester".into()));
 
     // A light source with the XSD-required RatedInputPower.
-    let mut ls = FixedLightSource::default();
-    ls.rated_input_power = Some(30.0);
+    let ls = FixedLightSource {
+        rated_input_power: Some(30.0),
+        ..Default::default()
+    };
     s.apply(GldfAction::AddFixedLightSource {
         payload: Box::new(ls),
     });
@@ -148,7 +150,13 @@ fn leo_binding_uses_real_leo_name_and_is_xsd_valid() {
     assert!(s.last_error.is_none(), "{:?}", s.last_error);
 
     // The EmitterReferences carry the real LEO names — gap closed.
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     let refs = &v
         .geometry
         .as_ref()
@@ -170,8 +178,7 @@ fn leo_binding_uses_real_leo_name_and_is_xsd_valid() {
 
     // rc-3 XSD-valid (editor dev-dep enables the `xsd` feature).
     let xml = s.product.to_xml().expect("serialize");
-    let findings =
-        gldf_rs::validation::xsd_validate_product_xml(&xml).expect("validator runs");
+    let findings = gldf_rs::validation::xsd_validate_product_xml(&xml).expect("validator runs");
     let errors: Vec<String> = findings.iter().map(|f| format!("{f:?}")).collect();
     assert!(
         errors.is_empty(),

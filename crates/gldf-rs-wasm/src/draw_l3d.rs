@@ -60,7 +60,9 @@ impl DrawL3d {
             let _ = webgl_context.get_extension("OES_texture_float_linear");
             let _ = webgl_context.get_extension("OES_texture_half_float_linear");
 
-            // Create three-d context from WebGL2 context
+            // Create three-d context from WebGL2 context.
+            // three-d's API takes an `Arc`; the WebGL context is single-threaded.
+            #[allow(clippy::arc_with_non_send_sync)]
             let context = Context::from_gl_context(Arc::new(
                 three_d::context::Context::from_webgl2_context(webgl_context),
             ))
@@ -76,7 +78,7 @@ impl DrawL3d {
                 0.1,
                 1000.0,
             );
-            let control = OrbitControl::new(camera.target().clone(), 1.0, 100.0);
+            let control = OrbitControl::new(camera.target(), 1.0, 100.0);
 
             let light0 = DirectionalLight::new(&context, 2.0, Srgba::WHITE, vec3(-1.0, -1.0, -1.0));
             let light1 = DirectionalLight::new(&context, 0.2, Srgba::WHITE, vec3(-0.1, 0.5, 0.5));
@@ -358,7 +360,7 @@ impl DrawL3d {
         for model in &self.models {
             screen.render(
                 &self.camera,
-                model.into_iter(),
+                model,
                 &[&self.light0, &self.light1, &self.ambient],
             );
         }

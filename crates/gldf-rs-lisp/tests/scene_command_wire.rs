@@ -11,7 +11,10 @@ use gldf_rs_lisp::{RoomSurface, SceneCommand};
 
 fn roundtrip(cmd: &SceneCommand) {
     let line = serde_json::to_string(cmd).expect("serialize");
-    assert!(!line.contains('\n'), "NDJSON line must not contain newlines");
+    assert!(
+        !line.contains('\n'),
+        "NDJSON line must not contain newlines"
+    );
     let back: SceneCommand = serde_json::from_str(&line).expect("deserialize");
     assert_eq!(cmd, &back, "round trip changed the command\njson: {line}");
 }

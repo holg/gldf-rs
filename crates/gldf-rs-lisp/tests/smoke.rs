@@ -129,7 +129,10 @@ fn animate_primitives_dispatch_chainable_commands() {
         SceneCommand::LuminaireAnimate { duration_ms, .. } if (duration_ms - 600.0).abs() < 1e-3
     ));
     assert!(matches!(state.log[2], SceneCommand::CameraAnimate { .. }));
-    assert!(matches!(state.log[3], SceneCommand::LuminaireAnimate { .. }));
+    assert!(matches!(
+        state.log[3],
+        SceneCommand::LuminaireAnimate { .. }
+    ));
 }
 
 #[test]

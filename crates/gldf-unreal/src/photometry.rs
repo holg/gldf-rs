@@ -78,8 +78,7 @@ pub fn build_ies_outputs_for_variant(
             )));
         };
 
-        let patched = patch_ldt_for_variant(&ldt_bytes, res.lumens, res.watts)
-            .unwrap_or(ldt_bytes);
+        let patched = patch_ldt_for_variant(&ldt_bytes, res.lumens, res.watts).unwrap_or(ldt_bytes);
         let ldt_str = std::str::from_utf8(&patched).map_err(|e| {
             ExportError::Photometry(format!("LDT for {:?} is not UTF-8: {e}", res.photometry_id))
         })?;
@@ -90,10 +89,7 @@ pub fn build_ies_outputs_for_variant(
             ))
         })?;
         let ies_bytes = export_photometry(&ldt, PhotometryExportFormat::Ies).ok_or_else(|| {
-            ExportError::Photometry(format!(
-                "IES export failed for {:?}",
-                res.photometry_id
-            ))
+            ExportError::Photometry(format!("IES export failed for {:?}", res.photometry_id))
         })?;
 
         out.push(emitter_ies_from(res, ies_bytes));
@@ -139,7 +135,13 @@ fn lookup_ldt_bytes(buf: &FileBufGldf, photometry_id: &str) -> Option<Vec<u8>> {
 
     // Walk <Files> for the file entry whose `id` matches; pick out the
     // `file_name` we'd find in the bundled buf.files.
-    let file_entry = buf.gldf.general_definitions.files.file.iter().find(|f| &f.id == file_id)?;
+    let file_entry = buf
+        .gldf
+        .general_definitions
+        .files
+        .file
+        .iter()
+        .find(|f| &f.id == file_id)?;
     let file_name = file_entry.file_name.as_str();
 
     // Match on either the original name or the in-zip path suffix.
@@ -199,9 +201,9 @@ mod tests {
             assert!(!o.ies_bytes.is_empty(), "ies bytes are not empty");
             // LM-63 marker is the most reliable sentinel.
             assert!(
-                o.ies_bytes
-                    .windows(8)
-                    .any(|w| w.starts_with(b"IESNA") || w.starts_with(b"IES:") || w.starts_with(b"TILT=")),
+                o.ies_bytes.windows(8).any(|w| w.starts_with(b"IESNA")
+                    || w.starts_with(b"IES:")
+                    || w.starts_with(b"TILT=")),
                 "IES output looks like LM-63"
             );
         }

@@ -420,9 +420,18 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .iter()
         .map(|p| PhotometryRow {
             id: p.id.clone(),
-            file_id: p.photometry_file_reference.as_ref().map(|r| r.file_id.clone()),
-            used_by_emitters: photometry_emitter_uses.get(&p.id).cloned().unwrap_or_default(),
-            used_by_change_ls: change_ls_photometry_uses.get(&p.id).cloned().unwrap_or_default(),
+            file_id: p
+                .photometry_file_reference
+                .as_ref()
+                .map(|r| r.file_id.clone()),
+            used_by_emitters: photometry_emitter_uses
+                .get(&p.id)
+                .cloned()
+                .unwrap_or_default(),
+            used_by_change_ls: change_ls_photometry_uses
+                .get(&p.id)
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -430,7 +439,10 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .iter()
         .map(|sp| SpectrumRow {
             id: sp.id.clone(),
-            file_id: sp.spectrum_file_reference.as_ref().map(|r| r.file_id.clone()),
+            file_id: sp
+                .spectrum_file_reference
+                .as_ref()
+                .map(|r| r.file_id.clone()),
             used_by_light_sources: spectrum_ls_uses.get(&sp.id).cloned().unwrap_or_default(),
         })
         .collect();
@@ -440,7 +452,10 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .map(|f| FixedLsRow {
             id: f.id.clone(),
             spectrum_id: f.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()),
-            used_by_emitters: fixed_ls_emitter_uses.get(&f.id).cloned().unwrap_or_default(),
+            used_by_emitters: fixed_ls_emitter_uses
+                .get(&f.id)
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -449,7 +464,10 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .map(|c| ChangeableLsRow {
             id: c.id.clone(),
             spectrum_id: c.spectrum_reference.as_ref().map(|r| r.spectrum_id.clone()),
-            photometry_id: c.photometry_reference.as_ref().map(|r| r.photometry_id.clone()),
+            photometry_id: c
+                .photometry_reference
+                .as_ref()
+                .map(|r| r.photometry_id.clone()),
         })
         .collect();
 
@@ -484,7 +502,10 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .map(|v| VariantRow {
             id: v.id.clone(),
             name: variant_label(v),
-            bound_emitters: variant_bound_emitters.get(&v.id).cloned().unwrap_or_default(),
+            bound_emitters: variant_bound_emitters
+                .get(&v.id)
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -493,8 +514,7 @@ fn build_graph(s: &crate::state::GldfState) -> Graph {
         .map(|f| f.id.clone())
         .chain(changeable_light_sources.iter().map(|c| c.id.clone()))
         .collect();
-    let known_photometry_ids: HashSet<String> =
-        photometries.iter().map(|p| p.id.clone()).collect();
+    let known_photometry_ids: HashSet<String> = photometries.iter().map(|p| p.id.clone()).collect();
 
     Graph {
         files,

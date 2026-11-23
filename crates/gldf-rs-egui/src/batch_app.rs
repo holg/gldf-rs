@@ -329,8 +329,7 @@ impl BatchPanel {
                                 match TemplateEditor::from_file(&path) {
                                     Ok(editor) => self.template_editor = Some(editor),
                                     Err(e) => {
-                                        self.summary =
-                                            Some(format!("open template: {:#}", e));
+                                        self.summary = Some(format!("open template: {:#}", e));
                                     }
                                 }
                             }
@@ -475,7 +474,8 @@ impl BatchPanel {
                             .file_name()
                             .and_then(|n| n.to_str())
                             .unwrap_or("?");
-                        ui.label(name).on_hover_text(row.input.display().to_string());
+                        ui.label(name)
+                            .on_hover_text(row.input.display().to_string());
                     });
                     table_row.col(|ui| match &row.status {
                         RowStatus::Pending => {

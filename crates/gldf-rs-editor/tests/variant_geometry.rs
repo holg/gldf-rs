@@ -46,12 +46,24 @@ fn set_emitter_refs_creates_bare_geometry() {
         emitter_ids: vec![eid.clone()],
     });
     assert!(s.last_error.is_none(), "{:?}", s.last_error);
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     let g = v.geometry.as_ref().expect("geometry created");
     assert_eq!(g.emitter_reference.len(), 1);
     assert_eq!(g.emitter_reference[0].emitter_id, eid);
-    assert!(g.simple_geometry_reference.is_none(), "xs:choice — simple cleared");
-    assert!(g.model_geometry_reference.is_none(), "xs:choice — model cleared");
+    assert!(
+        g.simple_geometry_reference.is_none(),
+        "xs:choice — simple cleared"
+    );
+    assert!(
+        g.model_geometry_reference.is_none(),
+        "xs:choice — model cleared"
+    );
 }
 
 #[test]
@@ -69,7 +81,13 @@ fn set_geometry_simple_overrides_emitter_refs() {
         geometry_id: "simple_1".into(),
         emitter_id: eid.clone(),
     });
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     let g = v.geometry.as_ref().unwrap();
     assert!(g.emitter_reference.is_empty(), "bare emitters cleared");
     let sg = g.simple_geometry_reference.as_ref().unwrap();
@@ -91,7 +109,13 @@ fn set_geometry_model_holds_per_object_bindings() {
             target_model_type: Some("l3d".into()),
         }],
     });
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     let g = v.geometry.as_ref().unwrap();
     let mg = g.model_geometry_reference.as_ref().unwrap();
     assert_eq!(mg.geometry_id, "model_1");
@@ -114,7 +138,13 @@ fn empty_emitter_refs_clears_geometry() {
         variant_idx: 0,
         emitter_ids: vec![],
     });
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     assert!(v.geometry.is_none(), "empty list clears Geometry entirely");
 }
 
@@ -128,7 +158,13 @@ fn clear_variant_geometry_drops_it() {
         emitter_id: eid,
     });
     s.apply(GldfAction::ClearVariantGeometry { variant_idx: 0 });
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     assert!(v.geometry.is_none());
 }
 

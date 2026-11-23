@@ -557,9 +557,9 @@ fn spawn_floodlights_with_tilt(
     let (flux, color_temp) = if let Some(ref ldt) = gldf_data.ldt_data {
         log(&format!(
             "[Stadium] Using LDT data: {} lm",
-            ldt.total_luminous_flux()
+            ldt.luminous_flux()
         ));
-        (ldt.total_luminous_flux() as f32, 5700.0)
+        (ldt.luminous_flux() as f32, 5700.0)
     } else {
         log("[Stadium] No LDT data - using defaults");
         (50000.0, 5700.0)

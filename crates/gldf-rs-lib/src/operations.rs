@@ -552,10 +552,7 @@ impl GldfProduct {
         }
         let sensors = self.general_definitions.sensors.as_mut().unwrap();
         if sensors.sensor.iter().any(|s| s.id == sensor.id) {
-            return Err(anyhow!(
-                "Sensor with ID '{}' already exists",
-                sensor.id
-            ));
+            return Err(anyhow!("Sensor with ID '{}' already exists", sensor.id));
         }
         sensors.sensor.push(sensor);
         Ok(())
@@ -1019,14 +1016,8 @@ impl GldfProduct {
         if let Some(emitters) = self.general_definitions.emitters.as_mut() {
             for emitter in &mut emitters.emitter {
                 for fle in &mut emitter.fixed_light_emitter {
-                    if fle
-                        .light_source_reference
-                        .fixed_light_source_id
-                        .as_deref()
-                        == Some(old_id)
-                    {
-                        fle.light_source_reference.fixed_light_source_id =
-                            Some(new_id.to_string());
+                    if fle.light_source_reference.fixed_light_source_id.as_deref() == Some(old_id) {
+                        fle.light_source_reference.fixed_light_source_id = Some(new_id.to_string());
                     }
                 }
             }
@@ -1253,11 +1244,7 @@ impl GldfProduct {
     /// Renames a MultiChannelLightSource id, cascading into every
     /// `Emitter/MultiChannelLightEmitter/LightSourceReference
     /// @multiChannelLightSourceId` (XSD keyref L154).
-    pub fn rename_multi_channel_light_source(
-        &mut self,
-        old_id: &str,
-        new_id: &str,
-    ) -> Result<()> {
+    pub fn rename_multi_channel_light_source(&mut self, old_id: &str, new_id: &str) -> Result<()> {
         if old_id == new_id {
             return Ok(());
         }
@@ -1269,19 +1256,12 @@ impl GldfProduct {
             .light_sources
             .as_mut()
             .ok_or_else(|| anyhow!("No light sources defined"))?;
-        if !ls
-            .multi_channel_light_source
-            .iter()
-            .any(|s| s.id == old_id)
-        {
+        if !ls.multi_channel_light_source.iter().any(|s| s.id == old_id) {
             anyhow::bail!("MultiChannel light source with id '{}' not found", old_id);
         }
         if ls.fixed_light_source.iter().any(|s| s.id == new_id)
             || ls.changeable_light_source.iter().any(|s| s.id == new_id)
-            || ls
-                .multi_channel_light_source
-                .iter()
-                .any(|s| s.id == new_id)
+            || ls.multi_channel_light_source.iter().any(|s| s.id == new_id)
         {
             anyhow::bail!("Light source id '{}' is already in use", new_id);
         }
@@ -1627,9 +1607,7 @@ mod tests {
         };
         product.add_multi_channel_light_source(mc).unwrap();
 
-        product
-            .general_definitions
-            .emitters = Some(Emitters {
+        product.general_definitions.emitters = Some(Emitters {
             emitter: vec![Emitter {
                 id: "em_1".to_string(),
                 multi_channel_light_emitter: vec![MultiChannelLightEmitter {
@@ -1669,7 +1647,10 @@ mod tests {
         assert_eq!(parsed_mc.manufacturer.as_deref(), Some("Acme"));
         assert_eq!(parsed_mc.rated_input_power, 24.0);
         assert_eq!(parsed_mc.channels.channel.len(), 2);
-        assert_eq!(parsed_mc.channels.channel[0].spectrum_reference.spectrum_id, "spec_warm");
+        assert_eq!(
+            parsed_mc.channels.channel[0].spectrum_reference.spectrum_id,
+            "spec_warm"
+        );
         assert_eq!(parsed_mc.channels.channel[1].rated_luminous_flux, 1500);
 
         let emitters = parsed

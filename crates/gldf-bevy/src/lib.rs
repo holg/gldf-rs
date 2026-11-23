@@ -6,14 +6,14 @@
 //! L3D 3D models with LDT photometric lighting in various scene types.
 //! Also supports IFC geometry viewing from imported IFC files.
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod command_bridge;
 pub mod ifc_loader;
 pub mod l3d_loader;
 pub mod orientation;
 pub mod scene;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scene_bundle;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod command_bridge;
 
 pub use ifc_loader::{IfcGeometry, IfcLoaderPlugin, IfcSceneData};
 
@@ -604,6 +604,8 @@ struct CamRequest {
     pitch: f32,
 }
 
+// The fields are read by the wasm32 JS bridges only.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Default)]
 struct CamSnapshot {
     pos: Vec3,
@@ -675,9 +677,7 @@ pub fn get_camera_from_js() -> wasm_bindgen::JsValue {
 /// Bevy system: consume a pending `CamRequest` (if any) and apply it
 /// to the FirstPersonCamera, then write the current camera state back
 /// to `CAM_SNAPSHOT` so `get_camera_from_js` can read it.
-fn js_camera_bridge_apply(
-    mut camera_q: Query<(&mut Transform, &mut FirstPersonCamera)>,
-) {
+fn js_camera_bridge_apply(mut camera_q: Query<(&mut Transform, &mut FirstPersonCamera)>) {
     // Take any pending request.
     let req = cam_request_cell().lock().ok().and_then(|mut s| s.take());
     for (mut transform, mut camera) in camera_q.iter_mut() {
@@ -685,8 +685,7 @@ fn js_camera_bridge_apply(
             transform.translation = r.pos;
             camera.yaw = r.yaw;
             camera.pitch = r.pitch.clamp(-1.5, 1.5);
-            transform.rotation =
-                Quat::from_euler(EulerRot::YXZ, camera.yaw, camera.pitch, 0.0);
+            transform.rotation = Quat::from_euler(EulerRot::YXZ, camera.yaw, camera.pitch, 0.0);
         }
         // Refresh snapshot every frame (cheap; one Mutex lock).
         if let Ok(mut snap) = cam_snapshot_cell().lock() {
@@ -724,8 +723,7 @@ static JOINT_TILTS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>>,
 > = std::sync::OnceLock::new();
 
-fn joint_tilts_cell()
--> &'static std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>> {
+fn joint_tilts_cell() -> &'static std::sync::Mutex<std::collections::HashMap<String, [f32; 3]>> {
     JOINT_TILTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -808,9 +806,8 @@ static AMBIENT_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<f32>>> =
     std::sync::OnceLock::new();
 static ROOM_SIZE_REQUEST: std::sync::OnceLock<std::sync::Mutex<Option<RoomSizeRequest>>> =
     std::sync::OnceLock::new();
-static SURFACE_COLOR_REQUEST: std::sync::OnceLock<
-    std::sync::Mutex<Vec<SurfaceColorRequest>>,
-> = std::sync::OnceLock::new();
+static SURFACE_COLOR_REQUEST: std::sync::OnceLock<std::sync::Mutex<Vec<SurfaceColorRequest>>> =
+    std::sync::OnceLock::new();
 static SURFACE_REFLECTANCE_REQUEST: std::sync::OnceLock<
     std::sync::Mutex<Vec<SurfaceReflectanceRequest>>,
 > = std::sync::OnceLock::new();
@@ -913,6 +910,23 @@ fn apply_ambient_request(mut ambient: ResMut<bevy::light::GlobalAmbientLight>) {
     ambient.brightness = brightness;
 }
 
+/// Query filters that keep the three room-surface queries disjoint.
+type OnlyFloor = (
+    With<eulumdat_bevy::viewer::FloorSurface>,
+    Without<eulumdat_bevy::viewer::CeilingSurface>,
+    Without<eulumdat_bevy::viewer::WallSurface>,
+);
+type OnlyCeiling = (
+    With<eulumdat_bevy::viewer::CeilingSurface>,
+    Without<eulumdat_bevy::viewer::FloorSurface>,
+    Without<eulumdat_bevy::viewer::WallSurface>,
+);
+type OnlyWalls = (
+    With<eulumdat_bevy::viewer::WallSurface>,
+    Without<eulumdat_bevy::viewer::FloorSurface>,
+    Without<eulumdat_bevy::viewer::CeilingSurface>,
+);
+
 /// Bevy system: drain `room_size_request_cell` and rebuild the
 /// floor / ceiling / wall transforms in place. The plane MESH sizes
 /// are baked at spawn time and not easy to swap mid-run, so we
@@ -928,30 +942,9 @@ fn apply_ambient_request(mut ambient: ResMut<bevy::light::GlobalAmbientLight>) {
 /// original room defaults are read from `SceneSettings`.
 fn apply_room_size_request(
     settings: Res<SceneSettings>,
-    mut floor_q: Query<
-        &mut Transform,
-        (
-            With<eulumdat_bevy::viewer::FloorSurface>,
-            Without<eulumdat_bevy::viewer::CeilingSurface>,
-            Without<eulumdat_bevy::viewer::WallSurface>,
-        ),
-    >,
-    mut ceiling_q: Query<
-        &mut Transform,
-        (
-            With<eulumdat_bevy::viewer::CeilingSurface>,
-            Without<eulumdat_bevy::viewer::FloorSurface>,
-            Without<eulumdat_bevy::viewer::WallSurface>,
-        ),
-    >,
-    mut wall_q: Query<
-        &mut Transform,
-        (
-            With<eulumdat_bevy::viewer::WallSurface>,
-            Without<eulumdat_bevy::viewer::FloorSurface>,
-            Without<eulumdat_bevy::viewer::CeilingSurface>,
-        ),
-    >,
+    mut floor_q: Query<&mut Transform, OnlyFloor>,
+    mut ceiling_q: Query<&mut Transform, OnlyCeiling>,
+    mut wall_q: Query<&mut Transform, OnlyWalls>,
 ) {
     let Some(req) = room_size_request_cell()
         .lock()
@@ -1023,7 +1016,10 @@ fn apply_room_size_request(
 fn apply_surface_color_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
-    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    ceiling_q: Query<
+        &MeshMaterial3d<StandardMaterial>,
+        With<eulumdat_bevy::viewer::CeilingSurface>,
+    >,
     wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
 ) {
     let requests: Vec<SurfaceColorRequest> = match surface_color_request_cell().lock() {
@@ -1077,14 +1073,16 @@ fn apply_surface_color_requests(
 fn apply_surface_reflectance_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
-    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    ceiling_q: Query<
+        &MeshMaterial3d<StandardMaterial>,
+        With<eulumdat_bevy::viewer::CeilingSurface>,
+    >,
     wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
 ) {
-    let requests: Vec<SurfaceReflectanceRequest> =
-        match surface_reflectance_request_cell().lock() {
-            Ok(mut v) => std::mem::take(&mut *v),
-            Err(_) => return,
-        };
+    let requests: Vec<SurfaceReflectanceRequest> = match surface_reflectance_request_cell().lock() {
+        Ok(mut v) => std::mem::take(&mut *v),
+        Err(_) => return,
+    };
     for req in requests {
         let v = req.value.clamp(0.0, 1.0);
         let neutral = Color::srgb(v, v, v);
@@ -1126,7 +1124,10 @@ fn apply_surface_reflectance_requests(
 fn apply_surface_emissive_requests(
     mut materials: ResMut<Assets<StandardMaterial>>,
     floor_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::FloorSurface>>,
-    ceiling_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::CeilingSurface>>,
+    ceiling_q: Query<
+        &MeshMaterial3d<StandardMaterial>,
+        With<eulumdat_bevy::viewer::CeilingSurface>,
+    >,
     wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
 ) {
     let requests: Vec<SurfaceEmissiveRequest> = match surface_emissive_request_cell().lock() {
@@ -1170,6 +1171,8 @@ fn apply_surface_emissive_requests(
 // `(GET-{WALLS,FLOOR,CEILING}-{COLOR,REFLECTANCE})` primitives call
 // those bridges via `window.gldf_bevy_get_*` and convert into Expr.
 
+// The fields are read by the wasm32 JS bridges only.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Default)]
 struct RoomSizeSnapshot {
     width: f32,
@@ -1177,6 +1180,8 @@ struct RoomSizeSnapshot {
     height: f32,
 }
 
+// The fields are read by the wasm32 JS bridges only.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Default)]
 struct SurfaceMaterialSnapshot {
     r: f32,
@@ -1188,8 +1193,7 @@ struct SurfaceMaterialSnapshot {
     emissive_b: f32,
 }
 
-static AMBIENT_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<f32>> =
-    std::sync::OnceLock::new();
+static AMBIENT_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<f32>> = std::sync::OnceLock::new();
 static ROOM_SIZE_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<RoomSizeSnapshot>> =
     std::sync::OnceLock::new();
 static WALLS_SNAPSHOT: std::sync::OnceLock<std::sync::Mutex<SurfaceMaterialSnapshot>> =
@@ -1229,10 +1233,7 @@ fn snapshot_room_state(
         (&MeshMaterial3d<StandardMaterial>, &Transform),
         With<eulumdat_bevy::viewer::CeilingSurface>,
     >,
-    wall_q: Query<
-        &MeshMaterial3d<StandardMaterial>,
-        With<eulumdat_bevy::viewer::WallSurface>,
-    >,
+    wall_q: Query<&MeshMaterial3d<StandardMaterial>, With<eulumdat_bevy::viewer::WallSurface>>,
     materials: Res<Assets<StandardMaterial>>,
     settings: Res<SceneSettings>,
 ) {
@@ -1356,8 +1357,7 @@ pub fn get_surface_from_js(surface: String) -> wasm_bindgen::JsValue {
     let json = format!(
         "{{\"r\":{:.6},\"g\":{:.6},\"b\":{:.6},\"reflectance\":{:.6},\
          \"er\":{:.6},\"eg\":{:.6},\"eb\":{:.6}}}",
-        snap.r, snap.g, snap.b, snap.reflectance,
-        snap.emissive_r, snap.emissive_g, snap.emissive_b,
+        snap.r, snap.g, snap.b, snap.reflectance, snap.emissive_r, snap.emissive_g, snap.emissive_b,
     );
     js_sys::JSON::parse(&json).unwrap_or(wasm_bindgen::JsValue::NULL)
 }
@@ -1467,15 +1467,7 @@ fn cam_anim_cell() -> &'static std::sync::Mutex<Option<CamAnim>> {
 /// in a row produces a continuous sweep through all three poses.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_camera_animate)]
-pub fn camera_animate_from_js(
-    ex: f32,
-    ey: f32,
-    ez: f32,
-    tx: f32,
-    ty: f32,
-    tz: f32,
-    ms: f32,
-) {
+pub fn camera_animate_from_js(ex: f32, ey: f32, ez: f32, tx: f32, ty: f32, tz: f32, ms: f32) {
     let to_pos = Vec3::new(ex, ey, ez);
     let dir = Vec3::new(tx - ex, ty - ey, tz - ez);
     // Bevy's Camera3d looks down its local -Z, so for forward to point
@@ -1554,8 +1546,7 @@ static JOINT_ANIMS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, JointAnim>>,
 > = std::sync::OnceLock::new();
 
-fn joint_anims_cell()
--> &'static std::sync::Mutex<std::collections::HashMap<String, JointAnim>> {
+fn joint_anims_cell() -> &'static std::sync::Mutex<std::collections::HashMap<String, JointAnim>> {
     JOINT_ANIMS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -1569,13 +1560,7 @@ fn joint_anims_cell()
 /// smoothly.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(js_name = gldf_bevy_luminaire_animate)]
-pub fn luminaire_animate_from_js(
-    joint: &str,
-    deg_x: f32,
-    deg_y: f32,
-    deg_z: f32,
-    ms: f32,
-) {
+pub fn luminaire_animate_from_js(joint: &str, deg_x: f32, deg_y: f32, deg_z: f32, ms: f32) {
     let from = joint_tilts_cell()
         .lock()
         .ok()
@@ -1751,7 +1736,10 @@ fn append_camera_set_on_key(
         "(CAMERA-SET {:.3} {:.3} {:.3}  {:.3} {:.3} {:.3})",
         eye.x, eye.y, eye.z, target.x, target.y, target.z,
     );
-    log(&format!("[CAMERA-PROBE-LIVE] {} (appending to Lisp panel)", line));
+    log(&format!(
+        "[CAMERA-PROBE-LIVE] {} (appending to Lisp panel)",
+        line
+    ));
 
     use wasm_bindgen::JsCast as _;
     if let Some(win) = web_sys::window() {
@@ -1915,7 +1903,6 @@ pub fn run_on_canvas(_canvas_selector: &str) {
     run_native();
 }
 
-/// Run the 3D viewer as a native window (desktop only)
 // ---------- Native command-bridge request helpers ----------
 //
 // Phase 2: the editor forwards Lisp `SceneCommand`s to this viewer over
@@ -1936,19 +1923,18 @@ pub(crate) fn request_camera_look_at(eye: [f32; 3], target: [f32; 3]) {
         (0.0, 0.0)
     };
     if let Ok(mut slot) = cam_request_cell().lock() {
-        *slot = Some(CamRequest { pos: eye, yaw, pitch });
+        *slot = Some(CamRequest {
+            pos: eye,
+            yaw,
+            pitch,
+        });
     }
 }
 
 /// Animate the camera from its current pose to `eye` looking at `target`
 /// over `duration_ms`. `now` is a monotonic ms clock (native `now_ms()`).
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn request_camera_animate(
-    eye: [f32; 3],
-    target: [f32; 3],
-    duration_ms: f32,
-    now: f64,
-) {
+pub(crate) fn request_camera_animate(eye: [f32; 3], target: [f32; 3], duration_ms: f32, now: f64) {
     let to_pos = Vec3::from(eye);
     let dir = Vec3::from(target) - to_pos;
     let (to_yaw, to_pitch) = if dir.length_squared() > 1e-6 {
@@ -1957,7 +1943,11 @@ pub(crate) fn request_camera_animate(
     } else {
         (0.0, 0.0)
     };
-    let snap = cam_snapshot_cell().lock().ok().map(|s| *s).unwrap_or_default();
+    let snap = cam_snapshot_cell()
+        .lock()
+        .ok()
+        .map(|s| *s)
+        .unwrap_or_default();
     if let Ok(mut slot) = cam_anim_cell().lock() {
         *slot = Some(CamAnim {
             from_pos: snap.pos,
@@ -1980,12 +1970,7 @@ pub(crate) fn request_joint_tilt(joint: &str, euler_deg: [f32; 3]) {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn request_joint_animate(
-    joint: &str,
-    euler_deg: [f32; 3],
-    duration_ms: f32,
-    now: f64,
-) {
+pub(crate) fn request_joint_animate(joint: &str, euler_deg: [f32; 3], duration_ms: f32, now: f64) {
     let from_deg = joint_tilts_cell()
         .lock()
         .ok()
@@ -2043,6 +2028,7 @@ pub(crate) fn request_surface_reflectance(surface: &str, value: f32) {
     }
 }
 
+/// Run the 3D viewer as a native window (desktop only)
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_native() {
     run_native_with_scene(GldfSceneData::default());

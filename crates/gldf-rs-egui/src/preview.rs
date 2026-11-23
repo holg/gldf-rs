@@ -128,7 +128,7 @@ pub(crate) fn render_photometry_preview(ui: &mut egui::Ui, content: &[u8], path:
         }
         ui.horizontal(|ui| {
             ui.label("Lumens:");
-            ui.label(format!("{:.0} lm", ldt.total_luminous_flux()));
+            ui.label(format!("{:.0} lm", ldt.luminous_flux()));
         });
     });
 

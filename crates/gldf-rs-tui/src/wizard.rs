@@ -24,6 +24,8 @@ use ratatui::{
 
 /// Outcome of an `on_key` tick — `None` while the wizard is still
 /// running, `Some(...)` once the user finishes or cancels.
+// Transient UI value, one at a time; boxing would change the public enum.
+#[allow(clippy::large_enum_variant)]
 pub enum WizardOutcome {
     Continue,
     Finished(WizardDraft),
@@ -43,11 +45,19 @@ pub struct WizardOverlay {
     pub picker: Option<FilePicker>,
 }
 
+impl Default for WizardOverlay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WizardOverlay {
     pub fn new() -> Self {
-        let mut draft = WizardDraft::default();
-        draft.header_created_with = "gldf-edit (TUI)".to_string();
-        draft.header_default_language = "en".to_string();
+        let draft = WizardDraft {
+            header_created_with: "gldf-edit (TUI)".to_string(),
+            header_default_language: "en".to_string(),
+            ..Default::default()
+        };
         Self {
             step: WizardStep::Header,
             focus: 0,
@@ -92,7 +102,10 @@ impl WizardOverlay {
             // ControlGear/Equipment block. Users who need either can
             // configure them from the editor's Variants / ControlGear
             // pages after Finish.
-            WizardStep::Sensor | WizardStep::Emergency | WizardStep::Mounting | WizardStep::Driver => self.advance_step(code, mods),
+            WizardStep::Sensor
+            | WizardStep::Emergency
+            | WizardStep::Mounting
+            | WizardStep::Driver => self.advance_step(code, mods),
             WizardStep::Variant => self.on_key_variant(code, mods),
             WizardStep::Review => self.on_key_review(code, mods),
         }
@@ -325,21 +338,19 @@ impl WizardOverlay {
                     self.include_emitter = !self.include_emitter;
                 }
             }
-            1 => {
-                if self.include_emitter {
-                    let mut buf = self
-                        .draft
-                        .emitter_draft
-                        .clone()
-                        .unwrap_or_else(|| EmitterDraft {
-                            child_name: "Primary".to_string(),
-                            kind: self.emitter_kind_for_ls(),
-                            ..EmitterDraft::default()
-                        });
-                    buf.kind = self.emitter_kind_for_ls();
-                    edit_text(&mut buf.child_name, code);
-                    self.draft.emitter_draft = Some(buf);
-                }
+            1 if self.include_emitter => {
+                let mut buf = self
+                    .draft
+                    .emitter_draft
+                    .clone()
+                    .unwrap_or_else(|| EmitterDraft {
+                        child_name: "Primary".to_string(),
+                        kind: self.emitter_kind_for_ls(),
+                        ..EmitterDraft::default()
+                    });
+                buf.kind = self.emitter_kind_for_ls();
+                edit_text(&mut buf.child_name, code);
+                self.draft.emitter_draft = Some(buf);
             }
             _ => {}
         }
@@ -362,7 +373,10 @@ impl WizardOverlay {
             self.focus = 0;
             return WizardOutcome::Continue;
         }
-        if matches!(code, KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y')) {
+        if matches!(
+            code,
+            KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y')
+        ) {
             let mut draft = self.draft.clone();
             if !self.include_emitter {
                 draft.emitter_draft = None;
@@ -469,7 +483,11 @@ pub fn draw(frame: &mut Frame, area: Rect, w: &WizardOverlay) {
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(2)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(2),
+        ])
         .split(inner);
 
     draw_step_indicator(frame, rows[0], w.step);
@@ -513,7 +531,9 @@ fn draw_step_body(frame: &mut Frame, area: Rect, w: &WizardOverlay) {
         WizardStep::LightSource => lightsource_body(w),
         WizardStep::Emitter => emitter_body(w),
         WizardStep::Geometry => geometry_body(w),
-        WizardStep::Sensor | WizardStep::Emergency | WizardStep::Mounting | WizardStep::Driver => skip_step_body(w),
+        WizardStep::Sensor | WizardStep::Emergency | WizardStep::Mounting | WizardStep::Driver => {
+            skip_step_body(w)
+        }
         WizardStep::Variant => variant_body(w),
         WizardStep::Review => review_body(w),
     };
@@ -562,10 +582,7 @@ fn photometry_body(w: &WizardOverlay) -> Vec<Line<'static>> {
 }
 
 fn lightsource_body(w: &WizardOverlay) -> Vec<Line<'static>> {
-    let kind = format!(
-        "{}  (←/→/Space to change)",
-        w.draft.ls_kind.long_label()
-    );
+    let kind = format!("{}  (←/→/Space to change)", w.draft.ls_kind.long_label());
     let labels = [
         (txt::LS_KIND_LABEL, kind.as_str()),
         (txt::LS_NAME_LABEL, w.draft.ls_name.as_str()),
@@ -701,10 +718,7 @@ fn review_body(w: &WizardOverlay) -> Vec<Line<'static>> {
             },
         ),
         Line::raw(""),
-        Line::styled(
-            txt::REVIEW_FOOTNOTE,
-            Style::default().fg(Color::DarkGray),
-        ),
+        Line::styled(txt::REVIEW_FOOTNOTE, Style::default().fg(Color::DarkGray)),
     ]
 }
 
@@ -732,7 +746,9 @@ fn field_rows(rows: &[(&str, &str)], focus: usize) -> Vec<Line<'static>> {
                 Style::default().fg(Color::White)
             };
             let label_style = if active {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             };

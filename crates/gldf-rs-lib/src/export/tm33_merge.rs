@@ -66,12 +66,7 @@ pub fn apply_tm33_merge(
             embedded_files,
             &cand.light_source_id,
         )
-        .with_context(|| {
-            format!(
-                "build TM-33 XML for light source {}",
-                cand.light_source_id
-            )
-        })?;
+        .with_context(|| format!("build TM-33 XML for light source {}", cand.light_source_id))?;
 
         // Pick the photometry file's original name, swapping its
         // extension to `.xml` so DIALux + others recognise the
@@ -115,9 +110,7 @@ pub fn apply_tm33_merge(
 
         // Drop the <Spectrum> entry (its bytes leave with the SPD file).
         if let Some(spectrums) = product.general_definitions.spectrums.as_mut() {
-            spectrums
-                .spectrum
-                .retain(|s| s.id != cand.spectrum_id);
+            spectrums.spectrum.retain(|s| s.id != cand.spectrum_id);
         }
         outcome.spectrums_removed.push(cand.spectrum_id.clone());
 
@@ -129,9 +122,7 @@ pub fn apply_tm33_merge(
             .retain(|f| f.id != cand.phot_file_id && f.id != cand.spd_file_id);
         embedded_files.remove(&cand.phot_file_id);
         embedded_files.remove(&cand.spd_file_id);
-        outcome
-            .files_removed
-            .push(cand.phot_file_id.clone());
+        outcome.files_removed.push(cand.phot_file_id.clone());
         outcome.files_removed.push(cand.spd_file_id.clone());
 
         // Add the new TM-33 File entry + bytes.
@@ -187,16 +178,13 @@ fn enumerate_merge_candidates(product: &GldfProduct) -> Vec<MergeCandidate> {
         };
 
         // Photometry → file id
-        let Some(phot_file_id) =
-            photometry_file_id(product, &phot_id)
-        else {
+        let Some(phot_file_id) = photometry_file_id(product, &phot_id) else {
             continue;
         };
 
         // Spectrum → file id (only file-backed spectra; inline ones
         // can't be merged — TM-33 needs the raw SPD bytes anyway).
-        let Some(spd_file_id) = spectrum_file_id(product, &spec_ref.spectrum_id)
-        else {
+        let Some(spd_file_id) = spectrum_file_id(product, &spec_ref.spectrum_id) else {
             continue;
         };
 

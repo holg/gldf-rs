@@ -17,9 +17,7 @@
 //! banner self-hides.
 
 use crate::state::use_gldf;
-use gldf_rs::validation::{
-    validate, validate_gldf, xsd_validate_product_xml, ValidationLevel,
-};
+use gldf_rs::validation::{validate, validate_gldf, xsd_validate_product_xml, ValidationLevel};
 use leptos::prelude::*;
 
 #[component]
@@ -148,7 +146,11 @@ pub fn ValidationBanner() -> impl IntoView {
 }
 
 #[component]
-fn ViolationGroup(label: &'static str, tint: &'static str, rows: Vec<(String, String)>) -> impl IntoView {
+fn ViolationGroup(
+    label: &'static str,
+    tint: &'static str,
+    rows: Vec<(String, String)>,
+) -> impl IntoView {
     if rows.is_empty() {
         return ().into_any();
     }

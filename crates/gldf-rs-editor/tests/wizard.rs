@@ -52,11 +52,7 @@ fn wizard_creates_fixed_light_source_and_emitter() {
         .light_sources
         .as_ref()
         .expect("light_sources should exist after wizard");
-    assert_eq!(
-        ls.fixed_light_source.len(),
-        1,
-        "fixed light source created"
-    );
+    assert_eq!(ls.fixed_light_source.len(), 1, "fixed light source created");
 
     let emitters = state
         .product
@@ -185,7 +181,12 @@ fn wizard_binds_emitter_via_model_geometry_with_l3d() {
     let files = &state.product.general_definitions.files.file;
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].file_name, "luminaire.l3d");
-    let geoms = state.product.general_definitions.geometries.as_ref().unwrap();
+    let geoms = state
+        .product
+        .general_definitions
+        .geometries
+        .as_ref()
+        .unwrap();
     assert_eq!(geoms.model_geometry.len(), 1);
     assert_eq!(geoms.model_geometry[0].id, mg.geometry_id);
 }

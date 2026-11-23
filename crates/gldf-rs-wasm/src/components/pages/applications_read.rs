@@ -13,8 +13,18 @@ use leptos::prelude::*;
 pub fn ApplicationsReadPage() -> impl IntoView {
     let state = use_gldf();
 
-    let title_signal = move || ui_t("gldf.applications.title", &state.with(|s| s.ui_language.clone()));
-    let desc_signal = move || ui_t("gldf.applications_read.description", &state.with(|s| s.ui_language.clone()));
+    let title_signal = move || {
+        ui_t(
+            "gldf.applications.title",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
+    let desc_signal = move || {
+        ui_t(
+            "gldf.applications_read.description",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
 
     view! {
         <div class="editor-section applications-readonly">

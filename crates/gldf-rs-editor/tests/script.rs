@@ -8,10 +8,7 @@ use std::collections::HashMap;
 #[test]
 fn apply_script_with_file_ref_resolves_and_applies() {
     let mut files = HashMap::new();
-    files.insert(
-        "fake.ies".to_string(),
-        b"IESNA:LM-63-2002\nfake\n".to_vec(),
-    );
+    files.insert("fake.ies".to_string(), b"IESNA:LM-63-2002\nfake\n".to_vec());
     let resolver = MemoryResolver::new(&files);
 
     let script = r#"[
@@ -156,7 +153,12 @@ fn gldf_wizard_json_builds_xsd_complete_product() {
         .canonicalize()
         .expect("tests/test-create exists");
     let mut files = HashMap::new();
-    for name in ["middle.ldt", "example_007.l3d", "sensor.ldt", "emergency.ldt"] {
+    for name in [
+        "middle.ldt",
+        "example_007.l3d",
+        "sensor.ldt",
+        "emergency.ldt",
+    ] {
         files.insert(
             name.to_string(),
             std::fs::read(root.join(name)).unwrap_or_else(|_| panic!("{name}")),
@@ -209,8 +211,7 @@ fn gldf_wizard_json_builds_xsd_complete_product() {
 
     // The panel resolves @file refs before deserializing the draft.
     expand_file_refs(&mut draft_json, &resolver).expect("expand @file");
-    let draft: WizardDraft =
-        serde_json::from_value(draft_json).expect("draft deserializes");
+    let draft: WizardDraft = serde_json::from_value(draft_json).expect("draft deserializes");
 
     let mut state = GldfState::default();
     apply_wizard(&mut state, &draft);
@@ -290,9 +291,7 @@ fn gldf_wizard_json_builds_xsd_complete_product() {
 /// photometry_2/3/4 orphaned".
 #[test]
 fn full_prolumia_script_wires_all_beams() {
-    use gldf_rs_editor::{
-        apply_script, apply_wizard, expand_file_refs, WizardDraft,
-    };
+    use gldf_rs_editor::{apply_script, apply_wizard, expand_file_refs, WizardDraft};
     use std::path::Path;
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -426,29 +425,49 @@ fn full_prolumia_script_wires_all_beams() {
     let gd = &state.product.general_definitions;
     // 4 photometries, 4 light sources (1 wizard + 3 explicit).
     assert_eq!(
-        gd.photometries.as_ref().map(|p| p.photometry.len()).unwrap_or(0),
-        4, "4 photometries"
+        gd.photometries
+            .as_ref()
+            .map(|p| p.photometry.len())
+            .unwrap_or(0),
+        4,
+        "4 photometries"
     );
     assert_eq!(
-        gd.light_sources.as_ref().map(|l| l.fixed_light_source.len()).unwrap_or(0),
-        4, "4 FixedLightSources (one per CCT)"
+        gd.light_sources
+            .as_ref()
+            .map(|l| l.fixed_light_source.len())
+            .unwrap_or(0),
+        4,
+        "4 FixedLightSources (one per CCT)"
     );
     // 9 emitters: wizard's emitter_1 + 7 explicit fixed + 1 sensor.
     assert_eq!(
         gd.emitters.as_ref().map(|e| e.emitter.len()).unwrap_or(0),
-        9, "8 fixed (incl wizard) + 1 sensor emitter"
+        9,
+        "8 fixed (incl wizard) + 1 sensor emitter"
     );
     assert_eq!(
-        state.product.product_definitions.variants.as_ref().map(|v| v.variant.len()).unwrap_or(0),
-        4, "4 variants"
+        state
+            .product
+            .product_definitions
+            .variants
+            .as_ref()
+            .map(|v| v.variant.len())
+            .unwrap_or(0),
+        4,
+        "4 variants"
     );
 
     let xml = state.product.to_xml().expect("serialize");
 
     // Variant ids were renamed (no leftover auto `variant_N` on a real
     // variant; the meaningful ids are present).
-    for vid in ["v_ral6018_yellowgreen", "v_ral1023_trafficyellow",
-                "v_ral9003_signalwhite", "v_ral9005_emergency"] {
+    for vid in [
+        "v_ral6018_yellowgreen",
+        "v_ral1023_trafficyellow",
+        "v_ral9003_signalwhite",
+        "v_ral9005_emergency",
+    ] {
         assert!(xml.contains(vid), "variant id '{vid}' present after rename");
     }
 
@@ -464,8 +483,10 @@ fn full_prolumia_script_wires_all_beams() {
 
     // The sensor is wired into an emitter (SensorReference present).
     assert!(xml.contains("sensor_1"), "sensor referenced");
-    assert!(xml.contains("SensorReference") || xml.contains("SensorEmitter"),
-            "a SensorEmitter binds the sensor");
+    assert!(
+        xml.contains("SensorReference") || xml.contains("SensorEmitter"),
+        "a SensorEmitter binds the sensor"
+    );
 
     // rc-3 XSD-valid.
     let findings = gldf_rs::validation::xsd_validate_product_xml(&xml).expect("validator runs");
@@ -473,17 +494,32 @@ fn full_prolumia_script_wires_all_beams() {
     assert!(
         errors.is_empty(),
         "scripted product must be XSD-valid, got {} finding(s):\n{}",
-        errors.len(), errors.join("\n")
+        errors.len(),
+        errors.join("\n")
     );
 
     // Metadata landed.
-    for needle in ["Interior: Office", ">II<", "IP20", "IK08", "6018", "Europe", "ENEC"] {
+    for needle in [
+        "Interior: Office",
+        ">II<",
+        "IP20",
+        "IK08",
+        "6018",
+        "Europe",
+        "ENEC",
+    ] {
         assert!(xml.contains(needle), "expected metadata '{needle}'");
     }
 
     // Product picture: file embedded + referenced as a product Image.
-    assert!(xml.contains("product_picture.jpg"), "picture file registered");
-    assert!(xml.contains("Product Picture"), "product Image with type present");
+    assert!(
+        xml.contains("product_picture.jpg"),
+        "picture file registered"
+    );
+    assert!(
+        xml.contains("Product Picture"),
+        "product Image with type present"
+    );
     assert!(
         state.embedded_files.values().any(|b| !b.is_empty()),
         "picture bytes embedded"
@@ -498,18 +534,24 @@ fn full_prolumia_script_wires_all_beams() {
 
     // The newly-requested "must-have" fields.
     for needle in [
-        "4260000000041",          // variant 0 GTIN (one per variant)
-        "4260000000044",          // variant 3 GTIN
-        "DACH",                   // market region #2
-        "Guide Light",            // emergency lighting type
-        "Round",                  // sensor DetectorCharacteristic
-        "Passive Infrared",       // sensor DetectionMethod
-        "Motion Detector",        // sensor DetectorType
+        "4260000000041",    // variant 0 GTIN (one per variant)
+        "4260000000044",    // variant 3 GTIN
+        "DACH",             // market region #2
+        "Guide Light",      // emergency lighting type
+        "Round",            // sensor DetectorCharacteristic
+        "Passive Infrared", // sensor DetectionMethod
+        "Motion Detector",  // sensor DetectorType
     ] {
-        assert!(xml.contains(needle), "expected '{needle}' in the product XML");
+        assert!(
+            xml.contains(needle),
+            "expected '{needle}' in the product XML"
+        );
     }
     // Product size length/width/height filled.
-    assert!(xml.contains(">170<") && xml.contains(">90<"), "product size length+width");
+    assert!(
+        xml.contains(">170<") && xml.contains(">90<"),
+        "product size length+width"
+    );
     // Emergency duration/flux: 5h, 100 lm.
     assert!(
         xml.contains("hours=\"5\"") && xml.contains(">100<"),

@@ -60,7 +60,7 @@ pub fn load_ldt_from_storage() -> Option<eulumdat::Eulumdat> {
         log(&format!(
             "[Stadium] LDT parsed: {}, {} lm",
             ldt.luminaire_name,
-            ldt.total_luminous_flux()
+            ldt.luminous_flux()
         ));
     }
     parsed
@@ -97,7 +97,7 @@ pub fn run_native_with_ldt(ldt_path: Option<&str>) {
             Ok(ldt) => {
                 println!("[Stadium] Loaded LDT: {}", path);
                 println!("[Stadium] Luminaire: {}", ldt.luminaire_name);
-                println!("[Stadium] Luminous flux: {} lm", ldt.total_luminous_flux());
+                println!("[Stadium] Luminous flux: {} lm", ldt.luminous_flux());
                 if let Some(lamp) = ldt.lamp_sets.first() {
                     println!("[Stadium] Color temp: {}", lamp.color_appearance);
                 }

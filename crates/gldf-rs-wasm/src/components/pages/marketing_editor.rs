@@ -11,9 +11,7 @@ use crate::components::edit_util::event_value;
 use crate::components::ScopePicker;
 use crate::i18n::ui::t as ui_t;
 use crate::state::{use_active_scope, use_gldf, GldfAction, Scope};
-use gldf_rs::gldf::product_definitions::{
-    ApprovalMarks, DesignAwards, HousingColors, Markets,
-};
+use gldf_rs::gldf::product_definitions::{ApprovalMarks, DesignAwards, HousingColors, Markets};
 use leptos::prelude::*;
 
 #[component]
@@ -47,7 +45,10 @@ pub fn MarketingEditorPage() -> impl IntoView {
     }
 }
 
-fn read_housing_colors(s: &crate::state::GldfState, scope: Scope) -> Vec<(Option<i32>, String, String)> {
+fn read_housing_colors(
+    s: &crate::state::GldfState,
+    scope: Scope,
+) -> Vec<(Option<i32>, String, String)> {
     let marketing = match scope {
         Scope::Product => s
             .product
@@ -244,7 +245,11 @@ fn HousingColorRow(
 
     let dispatch = move || {
         let scp = scope.get();
-        let ral = if s_ral.get() == 0 { None } else { Some(s_ral.get()) };
+        let ral = if s_ral.get() == 0 {
+            None
+        } else {
+            Some(s_ral.get())
+        };
         state.update(|s| {
             s.apply(GldfAction::UpdateHousingColor {
                 scope: scp,
@@ -260,7 +265,6 @@ fn HousingColorRow(
     // number AND the locale name from the table entry. The user can
     // still override the name afterwards via the free-text field.
     let on_pick_ral = {
-        let dispatch = dispatch.clone();
         let ui_language = ui_language.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let raw = event_value(&e).unwrap_or_default();
@@ -284,7 +288,6 @@ fn HousingColorRow(
         }
     };
     let on_lang = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
             s_lang.set(event_value(&e).unwrap_or_default());
             dispatch();
@@ -298,7 +301,6 @@ fn HousingColorRow(
     // (Sonderfarbe)") — `by_name` simply returns None and the RAL
     // number is left alone.
     let on_value = {
-        let dispatch = dispatch.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let typed = event_value(&e).unwrap_or_default();
             s_value.set(typed.clone());
@@ -312,7 +314,12 @@ fn HousingColorRow(
     };
     let on_remove = move |_| {
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::RemoveHousingColor { scope: scp, index: idx }));
+        state.update(|s| {
+            s.apply(GldfAction::RemoveHousingColor {
+                scope: scp,
+                index: idx,
+            })
+        });
     };
 
     // Force a fresh L3D MTL sync from the current RAL. Useful when the
@@ -463,12 +470,7 @@ fn MarketsSection(scope: RwSignal<Scope>) -> impl IntoView {
 }
 
 #[component]
-fn MarketRow(
-    idx: usize,
-    language: String,
-    value: String,
-    scope: RwSignal<Scope>,
-) -> impl IntoView {
+fn MarketRow(idx: usize, language: String, value: String, scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let s_lang = RwSignal::new(language.clone());
@@ -486,7 +488,6 @@ fn MarketRow(
         });
     };
     let on_lang = {
-        let on_change = on_change.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             s_lang.set(v);
@@ -494,7 +495,6 @@ fn MarketRow(
         }
     };
     let on_value = {
-        let on_change = on_change.clone();
         move |e: crate::components::edit_util::EditEvent| {
             let v = event_value(&e).unwrap_or_default();
             s_value.set(v);
@@ -503,7 +503,12 @@ fn MarketRow(
     };
     let on_remove = move |_| {
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::RemoveMarketRegion { scope: scp, index: idx }));
+        state.update(|s| {
+            s.apply(GldfAction::RemoveMarketRegion {
+                scope: scp,
+                index: idx,
+            })
+        });
     };
 
     view! {

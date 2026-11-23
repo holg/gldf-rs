@@ -2,8 +2,8 @@
 //!
 //! Goal of slice S: visually indistinguishable from the Yew app at gldf.icu
 //! before any file is loaded. Sidebar with 16 nav items in 3 sections, top
-//! toolbar with Edit Mode toggle + 4 export buttons + language picker + clear
-//! + help, welcome screen with drop affordance and 4 demo file buttons, drop
+//! toolbar with Edit Mode toggle + 4 export buttons + language picker + clear +
+//! help, welcome screen with drop affordance and 4 demo file buttons, drop
 //! zone with visual feedback. Every nav item routes to a placeholder until
 //! its real content lands in slice 1+.
 //!
@@ -18,13 +18,12 @@ use gldf_rs_wasm::components::{
     CustomPropertiesPage, ElectricalEditorPage, ElectricalReadPage, EmergencyEditorPage,
     EmergencyReadPage, EmittersPage, EquipmentPage, FileViewerPage, FilesListPage, GeometriesPage,
     HeaderDashboardPage, HeaderEditorPage, HyperlinksEditorPage, HyperlinksReadPage,
-    IdentityEditorPage, IfcViewerPage, LabelsEditorPage, LabelsReadPage, LightSourcesPage, LinkagePage,
-    LinkageTarget, MarketingEditorPage, MechanicalEditorPage, MechanicalReadPage, NewGldfWizard,
-    OverviewPage, PhotometryEditorPage, PhotometryReadPage, PicturesEditorPage, PicturesReadPage,
-    PluginsPage, RawDataPage, SensorsEditorPage, SensorsReadPage, SpdViewer, StatisticsPage,
-    VariantEditorPage, VariantsPage,
+    IdentityEditorPage, IfcViewerPage, LabelsEditorPage, LabelsReadPage, LightSourcesPage,
+    LinkagePage, LinkageTarget, MarketingEditorPage, MechanicalEditorPage, MechanicalReadPage,
+    NewGldfWizard, OverviewPage, PhotometryEditorPage, PhotometryReadPage, PicturesEditorPage,
+    PicturesReadPage, PluginsPage, RawDataPage, SensorsEditorPage, SensorsReadPage, SpdViewer,
+    StatisticsPage, VariantEditorPage, VariantsPage,
 };
-use std::sync::Arc;
 use gldf_rs_wasm::exports;
 use gldf_rs_wasm::i18n::ui::t as ui_t;
 use gldf_rs_wasm::state::{
@@ -34,6 +33,7 @@ use gldf_rs_wasm::state::{
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::collections::HashMap;
+use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 
@@ -58,6 +58,8 @@ pub enum NavItem {
     FileViewer,
     BevyViewer,
     IfcViewer,
+    // The page is routed, but no sidebar entry selects it yet.
+    #[allow(dead_code)]
     Plugins,
     // Document metadata section
     Header,
@@ -198,18 +200,16 @@ pub fn apply_action_json(json: &str) -> String {
         Err(e) => return format!("parse: {}", e),
     };
     let mut result = String::new();
-    GLDF_CTX.with(|cell| {
-        match cell.get() {
-            Some(ctx) => {
-                ctx.update(|s| {
-                    s.apply(action);
-                    if let Some(err) = &s.last_error {
-                        result = format!("apply: {}", err);
-                    }
-                });
-            }
-            None => result = "GldfContext not yet initialised".to_string(),
+    GLDF_CTX.with(|cell| match cell.get() {
+        Some(ctx) => {
+            ctx.update(|s| {
+                s.apply(action);
+                if let Some(err) = &s.last_error {
+                    result = format!("apply: {}", err);
+                }
+            });
         }
+        None => result = "GldfContext not yet initialised".to_string(),
     });
     result
 }
@@ -252,12 +252,13 @@ fn App() -> impl IntoView {
     // importing the trunk-generated module. Done lazily on first App
     // mount so we capture a freshly-initialised GldfContext.
     if let Some(window) = web_sys::window() {
-        let cb = wasm_bindgen::closure::Closure::wrap(
-            Box::new(|json: wasm_bindgen::JsValue| -> wasm_bindgen::JsValue {
+        let cb = wasm_bindgen::closure::Closure::wrap(Box::new(
+            |json: wasm_bindgen::JsValue| -> wasm_bindgen::JsValue {
                 let s = json.as_string().unwrap_or_default();
                 apply_action_json(&s).into()
-            }) as Box<dyn Fn(wasm_bindgen::JsValue) -> wasm_bindgen::JsValue>,
-        );
+            },
+        )
+            as Box<dyn Fn(wasm_bindgen::JsValue) -> wasm_bindgen::JsValue>);
         let _ = js_sys::Reflect::set(
             &window,
             &wasm_bindgen::JsValue::from_str("gldf_apply_action_json"),
@@ -265,10 +266,10 @@ fn App() -> impl IntoView {
         );
         cb.forget();
         // Read-only state probe — same pattern.
-        let probe = wasm_bindgen::closure::Closure::wrap(
-            Box::new(|| -> wasm_bindgen::JsValue { product_state().into() })
-                as Box<dyn Fn() -> wasm_bindgen::JsValue>,
-        );
+        let probe = wasm_bindgen::closure::Closure::wrap(Box::new(|| -> wasm_bindgen::JsValue {
+            product_state().into()
+        })
+            as Box<dyn Fn() -> wasm_bindgen::JsValue>);
         let _ = js_sys::Reflect::set(
             &window,
             &wasm_bindgen::JsValue::from_str("gldf_product_state"),
@@ -607,7 +608,7 @@ fn NavItemViewStaticLabel(
 
 #[component]
 fn MainArea() -> impl IntoView {
-    let shell = expect_context::<ShellState>();
+    let _shell = expect_context::<ShellState>();
     let state = use_gldf();
     let has_file = move || {
         state.with(|s| {
@@ -717,7 +718,9 @@ fn BevyCanvasShell() -> impl IntoView {
 ///   localStorage value; bumping it on every visibility transition
 ///   triggers a `poll_gldf_changes` re-spawn that paints a fresh frame.
 fn wake_bevy_canvas() {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     // Bump the timestamp so the poll system fires on the next Update.
     // Using `performance.now()` keeps the values monotonic without
     // pulling `js_sys::Date::now()` (which is fine here, but matches
@@ -1265,8 +1268,8 @@ fn Welcome() -> impl IntoView {
 }
 
 /// Manual build stamp shown on the welcome screen. Bump on each change you
-/// want users to verify they're loading. Cheaper than a full build.rs
-/// + git-rev pipeline for now; replace when the build stamp matters enough
+/// want users to verify they're loading. Cheaper than a full build.rs +
+/// git-rev pipeline for now; replace when the build stamp matters enough
 /// to be automatic.
 const BUILD_STAMP: &str = "2026-06-17 leo-lvk-graphical-picker";
 
@@ -1489,7 +1492,10 @@ async fn fetch_bytes(path: &str) -> Result<Vec<u8>, String> {
     // resolve manually so deployed builds at https://gldf.icu/ AND
     // file:// offline single-HTML bundles AND the local 8052 dev
     // server all work uniformly.
-    let url = if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("file://") {
+    let url = if path.starts_with("http://")
+        || path.starts_with("https://")
+        || path.starts_with("file://")
+    {
         path.to_string()
     } else if let Some(base) = web_sys::window().and_then(|w| w.location().href().ok()) {
         // `window.location.href` is always absolute. URL-join via
@@ -1546,9 +1552,7 @@ fn try_load(state: GldfContext, filename: &str, bytes: Vec<u8>) -> anyhow::Resul
             });
         });
         Ok(())
-    } else if lower.ends_with(".tm33.xml")
-        || (lower.ends_with(".xml") && is_tm33_xml(&bytes))
-    {
+    } else if lower.ends_with(".tm33.xml") || (lower.ends_with(".xml") && is_tm33_xml(&bytes)) {
         let converted = gldf_rs::convert::tm33_to_gldf(&bytes, filename)
             .map_err(|e| anyhow::anyhow!("tm33_to_gldf: {}", e))?;
         let embedded_files: HashMap<String, Vec<u8>> = converted

@@ -4,8 +4,8 @@
 //! "what fields can I edit" lives in [`section_fields`].
 
 use crossterm::event::KeyCode;
-use gldf_rs_editor::{wizard_text as txt, GldfAction, GldfState};
 use gldf_rs::gldf::header::{Locale, LocaleFoo};
+use gldf_rs_editor::{wizard_text as txt, GldfAction, GldfState};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -17,6 +17,8 @@ use ratatui::{
 use crate::app::Section;
 
 /// Outcome of an `on_key` tick.
+// Transient UI value, one at a time; boxing would change the public enum.
+#[allow(clippy::large_enum_variant)]
 pub enum EditOutcome {
     Continue,
     Cancelled,
@@ -76,6 +78,9 @@ impl FieldEdit {
     }
 }
 
+/// Builds a populated [`FieldEdit`] from the current state and row.
+pub type MakeFieldEdit = Box<dyn Fn(&GldfState, usize) -> FieldEdit>;
+
 /// One editable field listed in the per-section action menu.
 pub struct FieldSpec {
     /// Short shortcut letter, e.g. 'a' for Author. Shown next to the label.
@@ -83,7 +88,7 @@ pub struct FieldSpec {
     pub label: String,
     /// Build a populated `FieldEdit` from the current state. Boxed so
     /// the table can hold heterogeneous closures.
-    pub make: Box<dyn Fn(&GldfState, usize) -> FieldEdit>,
+    pub make: MakeFieldEdit,
 }
 
 /// Build the list of editable fields for a given section + row index.

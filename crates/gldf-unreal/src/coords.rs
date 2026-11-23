@@ -2,7 +2,7 @@
 //!
 //! L3D source: Z-up, right-handed, millimetres. Light's default emission
 //! direction is −Z. Unreal: Z-up, **left-handed**, centimetres (or metres
-//! when [`UnitSystem::M`](crate::options::UnitSystem::M) is selected).
+//! when [`UnitSystem::M`] is selected).
 //!
 //! The transform is a Y-negating uniform scale: `M = diag(s, -s, s, 1)`
 //! where `s` is the mm→target scale factor. Apply it to translation vectors
@@ -56,7 +56,10 @@ mod tests {
         // must be flipped accordingly. Guard the property here so we notice
         // if anyone "fixes" the negative sign without updating mesh.rs.
         let m = l3d_to_ue_matrix(UnitSystem::Cm);
-        assert!(m.determinant() < 0.0, "L3D→UE matrix should reverse orientation");
+        assert!(
+            m.determinant() < 0.0,
+            "L3D→UE matrix should reverse orientation"
+        );
     }
 
     #[test]

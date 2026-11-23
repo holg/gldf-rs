@@ -41,7 +41,7 @@ viewer3d = ["dep:three-d", "dep:three-d-asset"]
 gldf-rs = { workspace = true, features = ["http"] }
 
 # Shared editor/batch engine (template + LDT→GLDF/IFC pipeline)
-gldf-rs-editor = { workspace = true, features = ["uld"] }
+gldf-rs-editor = { workspace = true, features = ["uld", "xsd"] }
 
 # UI translations (same gldf.* keys as the WASM/TUI frontends)
 gldf-rs-i18n = { workspace = true }

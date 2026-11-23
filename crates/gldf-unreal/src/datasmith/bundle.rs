@@ -105,9 +105,10 @@ impl BundleWriter {
     /// Consumes the writer and returns the artifact summary.
     pub fn finish(self, doc: &DatasmithDocument) -> Result<BundleArtifact> {
         let xml = write_document(doc);
-        let udatasmith_path = self
-            .root
-            .join(format!("{}__{}.udatasmith", self.bundle_name, self.variant_id));
+        let udatasmith_path = self.root.join(format!(
+            "{}__{}.udatasmith",
+            self.bundle_name, self.variant_id
+        ));
         fs::write(&udatasmith_path, xml).map_err(|e| ExportError::Io {
             path: udatasmith_path.clone(),
             source: e,

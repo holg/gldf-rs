@@ -74,15 +74,26 @@ fn ControlGearCard(gear: ControlGear, editable: bool) -> impl IntoView {
     let on_edit = move |_| is_editing.set(true);
     let on_remove = move |_| {
         let id = id_for_remove.clone();
-        let msg = format!("Remove control gear '{}'? Equipment and per-emitter references to it will dangle.", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        let msg = format!(
+            "Remove control gear '{}'? Equipment and per-emitter references to it will dangle.",
+            id
+        );
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveControlGear { id }));
         }
     };
 
-    let name = gear.name.locale.first().map(|l| l.value.clone()).unwrap_or_default();
-    let display_name = if name.is_empty() { gear.id.clone() } else { name };
+    let name = gear
+        .name
+        .locale
+        .first()
+        .map(|l| l.value.clone())
+        .unwrap_or_default();
+    let display_name = if name.is_empty() {
+        gear.id.clone()
+    } else {
+        name
+    };
 
     view! {
         <div class="card" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
@@ -145,16 +156,38 @@ fn ControlGearCard(gear: ControlGear, editable: bool) -> impl IntoView {
 }
 
 #[component]
-fn ControlGearEditForm(gear: ControlGear, on_done: impl Fn() + Send + Sync + 'static + Clone) -> impl IntoView {
+fn ControlGearEditForm(
+    gear: ControlGear,
+    on_done: impl Fn() + Send + Sync + 'static + Clone,
+) -> impl IntoView {
     let state = use_gldf();
     let tr = move |key: &str| ui_t(key, &state.with(|s| s.ui_language.clone()));
     let id = gear.id.clone();
 
-    let name_first = gear.name.locale.first().map(|l| l.value.clone()).unwrap_or_default();
-    let voltage = gear.nominal_voltage.as_ref().and_then(|v| v.fixed_voltage).map(|v| v.to_string()).unwrap_or_default();
-    let standby = gear.standby_power.map(|p| p.to_string()).unwrap_or_default();
-    let clo_start = gear.constant_light_output_start_power.map(|p| p.to_string()).unwrap_or_default();
-    let clo_end = gear.constant_light_output_end_power.map(|p| p.to_string()).unwrap_or_default();
+    let name_first = gear
+        .name
+        .locale
+        .first()
+        .map(|l| l.value.clone())
+        .unwrap_or_default();
+    let voltage = gear
+        .nominal_voltage
+        .as_ref()
+        .and_then(|v| v.fixed_voltage)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let standby = gear
+        .standby_power
+        .map(|p| p.to_string())
+        .unwrap_or_default();
+    let clo_start = gear
+        .constant_light_output_start_power
+        .map(|p| p.to_string())
+        .unwrap_or_default();
+    let clo_end = gear
+        .constant_light_output_end_power
+        .map(|p| p.to_string())
+        .unwrap_or_default();
     let dimmable = gear.dimmable.unwrap_or(false);
     let color = gear.color_controllable.unwrap_or(false);
 
@@ -181,8 +214,7 @@ fn ControlGearEditForm(gear: ControlGear, on_done: impl Fn() + Send + Sync + 'st
                 color_controllable: Some(s_color.get()),
                 constant_light_output_start_power: s_clo_start
                     .with(|t| t.trim().parse::<f64>().ok()),
-                constant_light_output_end_power: s_clo_end
-                    .with(|t| t.trim().parse::<f64>().ok()),
+                constant_light_output_end_power: s_clo_end.with(|t| t.trim().parse::<f64>().ok()),
             });
         });
         on_done();

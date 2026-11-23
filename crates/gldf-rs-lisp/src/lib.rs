@@ -296,15 +296,14 @@ pub(crate) fn state_mut<'a>(
     ctx.user_data.downcast_mut::<GldfState>()
 }
 
-pub(crate) fn state_ref<'a>(
-    ctx: &'a acadlisp::ForeignContext<'_>,
-) -> Option<&'a GldfState> {
+pub(crate) fn state_ref<'a>(ctx: &'a acadlisp::ForeignContext<'_>) -> Option<&'a GldfState> {
     ctx.user_data.downcast_ref::<GldfState>()
 }
 
 pub(crate) fn expr_to_string(e: &acadlisp::Expr) -> Option<String> {
     match e {
-        acadlisp::Expr::String(s) | acadlisp::Expr::Symbol(s) => Some(s.clone()),
+        acadlisp::Expr::String(s) => Some(s.clone()),
+        acadlisp::Expr::Symbol(s) => Some(s.name()),
         _ => None,
     }
 }

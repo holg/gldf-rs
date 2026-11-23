@@ -24,9 +24,6 @@ fn error_codes_are_stable() {
     use gldf_unreal::ExportError;
     // The discriminant numbers are part of the C ABI contract — pin them.
     assert_eq!(ExportError::NoGeometry.code(), 4);
-    assert_eq!(
-        ExportError::VariantNotFound("foo".into()).code(),
-        3
-    );
+    assert_eq!(ExportError::VariantNotFound("foo".into()).code(), 3);
     assert_eq!(ExportError::Internal("x".into()).code(), 99);
 }

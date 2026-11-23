@@ -4,6 +4,8 @@
 
 #include "SWebBrowser.h"
 #include "IWebBrowserWindow.h" // FWebNavigationRequest
+#include "IWebBrowserSingleton.h"
+#include "WebBrowserModule.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "HAL/PlatformProcess.h"
 
@@ -46,20 +48,51 @@ static FString QueryParam(const FString& Url, const FString& Key)
 
 void SGldfWebPanel::Construct(const FArguments& /*InArgs*/)
 {
+    // Own browser window: gives us the document state + error code for the log.
+    if (IWebBrowserSingleton* Singleton = IWebBrowserModule::Get().GetSingleton())
+    {
+        FCreateBrowserWindowSettings Settings;
+        Settings.InitialURL = GldfWebSearchUrl;
+        Settings.bUseTransparency = false;
+        Settings.bShowErrorMessage = true;
+        Window = Singleton->CreateBrowserWindow(Settings);
+        if (Window.IsValid())
+        {
+            TWeakPtr<IWebBrowserWindow> Weak = Window;
+            Window->OnDocumentStateChanged().AddLambda([Weak](EWebBrowserDocumentState State)
+            {
+                TSharedPtr<IWebBrowserWindow> W = Weak.Pin();
+                UE_LOG(LogGldfWebPanel, Log, TEXT("document state %d (%s) url=%s error=%d"), (int32)State,
+                    State == EWebBrowserDocumentState::Completed ? TEXT("completed") : State == EWebBrowserDocumentState::Error ? TEXT("ERROR") : State == EWebBrowserDocumentState::Loading ? TEXT("loading") : TEXT("none"),
+                    W.IsValid() ? *W->GetUrl() : TEXT("?"), W.IsValid() ? W->GetLoadError() : 0);
+            });
+            Window->OnUrlChanged().AddLambda([](FString NewUrl) { UE_LOG(LogGldfWebPanel, Log, TEXT("url → %s"), *NewUrl); });
+        }
+        else
+        {
+            UE_LOG(LogGldfWebPanel, Warning, TEXT("CreateBrowserWindow returned null — no web browser backend on this platform/build"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogGldfWebPanel, Warning, TEXT("WebBrowser singleton unavailable"));
+    }
+
     ChildSlot
     [
-        SAssignNew(Browser, SWebBrowser)
+        SAssignNew(Browser, SWebBrowser, Window)
             .InitialURL(GldfWebSearchUrl)
             .ShowControls(false)
             .SupportsTransparency(false)
             .OnBeforeNavigation(SWebBrowserView::FOnBeforeBrowse::CreateSP(this, &SGldfWebPanel::HandleBeforeNavigation))
             .OnLoadCompleted(FSimpleDelegate::CreateSP(this, &SGldfWebPanel::HandleLoadCompleted))
-            .OnLoadError(FSimpleDelegate::CreateLambda([]()
+            .OnLoadError(FSimpleDelegate::CreateLambda([this]()
             {
                 // On the Mac WKWebView backend this also fires once per Place
                 // click: the ueplace: scheme intentionally fails to load
                 // (failed provisional navigation, page unaffected).
-                UE_LOG(LogGldfWebPanel, Log, TEXT("Browser load error (network outage, or the expected ueplace: side-channel failure after a Place click)"));
+                UE_LOG(LogGldfWebPanel, Log, TEXT("Browser load error %d at %s (network outage, or the expected ueplace: side-channel failure after a Place click)"),
+                    Window.IsValid() ? Window->GetLoadError() : -1, Window.IsValid() ? *Window->GetUrl() : TEXT("?"));
             }))
     ];
 }
@@ -123,7 +156,7 @@ bool SGldfWebPanel::TryPlaceFromViewerUrl(const FString& Url)
     }
 
     // https://iesna.eu?url=<base>/api/ldc/<doc_hex>/<variant>  →  resolve the
-    // variant's .gldf via the cabi and import that.
+    // variant's .gldf over the REST API and place that.
     if (Url.Contains(TEXT("iesna.eu")))
     {
         const FString LdcUrl = QueryParam(Url, TEXT("url"));
@@ -135,7 +168,7 @@ bool SGldfWebPanel::TryPlaceFromViewerUrl(const FString& Url)
             if (LdcUrl.Mid(MarkerIdx + Marker.Len()).Split(TEXT("/"), &DocHex, &VariantStr))
             {
                 const int32 Variant = FCString::Atoi(*VariantStr);
-                UE_LOG(LogGldfWebPanel, Log, TEXT("Place (variant): doc %s v%d"), *DocHex, Variant);
+                UE_LOG(LogGldfWebPanel, Log, TEXT("Place (variant): doc %s v%d (resolved via /api/doc)"), *DocHex, Variant);
                 UGldfSearchLibrary::DownloadAndPlace(DocHex, Variant, QueryParam(Url, TEXT("uename")));
                 return true;
             }

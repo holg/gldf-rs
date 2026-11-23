@@ -3,7 +3,7 @@
 //! Mirrors `view_emitters` from the Yew side, minus the embedded `LdtViewer`
 //! (which is a three-d renderer, slice 3 territory). Slice 1 surfaces the
 //! emitter structure: id, fixed / changeable / sensor sub-types, photometry
-//! + light-source references, emergency badges. The LDT viewer slot shows
+//! and light-source references, emergency badges. The LDT viewer slot shows
 //! the photometry file name + size so the user knows where the chart will
 //! land in slice 3.
 //!
@@ -29,7 +29,8 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
     let show_new_form = RwSignal::new(false);
 
     let on_open_new_form = move |_| show_new_form.set(true);
-    let close_new_form_arc: Arc<dyn Fn() + Send + Sync> = Arc::new(move || show_new_form.set(false));
+    let close_new_form_arc: Arc<dyn Fn() + Send + Sync> =
+        Arc::new(move || show_new_form.set(false));
 
     view! {
         {move || state.with(|s| {
@@ -74,7 +75,6 @@ pub fn EmittersPage(#[prop(default = false)] editable: bool) -> impl IntoView {
 
             // Submit handler for the top-of-page new-emitter form.
             let new_form_submit: Arc<dyn Fn(EmitterDraft) + Send + Sync> = {
-                let show_new_form = show_new_form;
                 Arc::new(move |draft: EmitterDraft| {
                     let name = draft.child_name.clone();
                     state.update(|s| s.apply(GldfAction::AddEmitterWithChild {
@@ -239,10 +239,12 @@ fn EmitterCard(
     let on_rename: Arc<dyn Fn(String) + Send + Sync> = {
         let old_id = emitter_id_for_rename.clone();
         Arc::new(move |new_id| {
-            state.update(|s| s.apply(GldfAction::RenameEmitter {
-                old_id: old_id.clone(),
-                new_id,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RenameEmitter {
+                    old_id: old_id.clone(),
+                    new_id,
+                })
+            });
         })
     };
 
@@ -335,7 +337,7 @@ fn EmitterCard(
                 view! {
                     <div class="changeable-emitters">
                         <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">{ tr("gldf.emitters.changeable_title") }</h4>
-                        {emitter.changeable_light_emitter.iter().enumerate().map(|(_idx, cle)| {
+                        {emitter.changeable_light_emitter.iter().map(|cle| {
                             let photo_id = cle.photometry_reference.photometry_id.clone();
                             let emergency = cle.emergency_behaviour.clone();
                             view! {
@@ -534,11 +536,13 @@ fn EmitterEditForm(
     let make_remove: Arc<dyn Fn(LightEmitterKind, usize) + Send + Sync> = {
         let emitter_id = emitter_id.clone();
         Arc::new(move |kind: LightEmitterKind, index: usize| {
-            state.update(|s| s.apply(GldfAction::RemoveLightEmitter {
-                emitter_id: emitter_id.clone(),
-                kind,
-                index,
-            }));
+            state.update(|s| {
+                s.apply(GldfAction::RemoveLightEmitter {
+                    emitter_id: emitter_id.clone(),
+                    kind,
+                    index,
+                })
+            });
         })
     };
     let remove_fixed = make_remove.clone();
@@ -547,9 +551,11 @@ fn EmitterEditForm(
     let remove_sensor = make_remove;
     let on_remove_emitter = move |_| {
         let id = emitter_id_for_remove.clone();
-        let msg = format!("Remove emitter '{}'? Variants that mount it will dangle.", id);
-        if crate::components::edit_util::confirm(&msg)
-        {
+        let msg = format!(
+            "Remove emitter '{}'? Variants that mount it will dangle.",
+            id
+        );
+        if crate::components::edit_util::confirm(&msg) {
             state.update(|s| s.apply(GldfAction::RemoveEmitter { id }));
             on_done_for_remove();
         }
@@ -565,7 +571,10 @@ fn EmitterEditForm(
             {let h_fixed = h_fixed.clone(); move || {
                 let kids = fixed_children.get();
                 if kids.is_empty() {
-                    return view! { <></> }.into_any();
+                    return {
+                        let _: () = view! { <></> };
+                        ().into_any()
+                    };
                 }
                 let remove = remove_fixed.clone();
                 let h_fixed = h_fixed.clone();
@@ -599,7 +608,10 @@ fn EmitterEditForm(
             {let h_change = h_change.clone(); move || {
                 let kids = change_children.get();
                 if kids.is_empty() {
-                    return view! { <></> }.into_any();
+                    return {
+                        let _: () = view! { <></> };
+                        ().into_any()
+                    };
                 }
                 let remove = remove_change.clone();
                 let h_change = h_change.clone();
@@ -629,7 +641,10 @@ fn EmitterEditForm(
             {let h_mc = h_mc.clone(); move || {
                 let kids = mc_children.get();
                 if kids.is_empty() {
-                    return view! { <></> }.into_any();
+                    return {
+                        let _: () = view! { <></> };
+                        ().into_any()
+                    };
                 }
                 let remove = remove_mc.clone();
                 let h_mc = h_mc.clone();
@@ -659,7 +674,10 @@ fn EmitterEditForm(
             {let h_sensor = h_sensor.clone(); move || {
                 let kids = sensor_children.get();
                 if kids.is_empty() {
-                    return view! { <></> }.into_any();
+                    return {
+                        let _: () = view! { <></> };
+                        ().into_any()
+                    };
                 }
                 let remove = remove_sensor.clone();
                 let h_sensor = h_sensor.clone();
@@ -732,23 +750,31 @@ fn AddChildForm(
         Arc::new(move |draft: EmitterDraft| {
             let emitter_id = emitter_id.clone();
             match draft.kind {
-                LightEmitterKind::Fixed => state.update(|s| s.apply(GldfAction::AddFixedLightEmitter {
-                    emitter_id,
-                    photometry_id: draft.photometry_id,
-                    light_source_id: draft.fixed_light_source_id,
-                })),
-                LightEmitterKind::Changeable => state.update(|s| s.apply(GldfAction::AddChangeableLightEmitter {
-                    emitter_id,
-                    photometry_id: draft.photometry_id,
-                })),
-                LightEmitterKind::MultiChannel => state.update(|s| s.apply(GldfAction::AddMultiChannelLightEmitter {
-                    emitter_id,
-                    multi_channel_light_source_id: draft.multi_channel_light_source_id,
-                })),
-                LightEmitterKind::Sensor => state.update(|s| s.apply(GldfAction::AddSensorEmitter {
-                    emitter_id,
-                    sensor_id: draft.sensor_id,
-                })),
+                LightEmitterKind::Fixed => state.update(|s| {
+                    s.apply(GldfAction::AddFixedLightEmitter {
+                        emitter_id,
+                        photometry_id: draft.photometry_id,
+                        light_source_id: draft.fixed_light_source_id,
+                    })
+                }),
+                LightEmitterKind::Changeable => state.update(|s| {
+                    s.apply(GldfAction::AddChangeableLightEmitter {
+                        emitter_id,
+                        photometry_id: draft.photometry_id,
+                    })
+                }),
+                LightEmitterKind::MultiChannel => state.update(|s| {
+                    s.apply(GldfAction::AddMultiChannelLightEmitter {
+                        emitter_id,
+                        multi_channel_light_source_id: draft.multi_channel_light_source_id,
+                    })
+                }),
+                LightEmitterKind::Sensor => state.update(|s| {
+                    s.apply(GldfAction::AddSensorEmitter {
+                        emitter_id,
+                        sensor_id: draft.sensor_id,
+                    })
+                }),
             }
             is_open.set(false);
         })
@@ -812,7 +838,12 @@ fn ControlGearPicker(
                 .general_definitions
                 .control_gears
                 .as_ref()
-                .map(|c| c.control_gear.iter().map(|g| g.id.clone()).collect::<Vec<_>>())
+                .map(|c| {
+                    c.control_gear
+                        .iter()
+                        .map(|g| g.id.clone())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         })
     });
@@ -829,7 +860,9 @@ fn ControlGearPicker(
 
     let emitter_id_for_pick = emitter_id.clone();
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(val) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(val) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         let control_gear_id = if val.is_empty() { None } else { Some(val) };
         let eid = emitter_id_for_pick.clone();
         state.update(|s| {

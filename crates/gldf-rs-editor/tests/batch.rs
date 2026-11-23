@@ -62,7 +62,10 @@ fn empty_template_autofills_from_ldt() {
     let loaded = gldf_rs::GldfProduct::load_gldf_from_buf_all(gldf_bytes).expect("re-load gldf");
     let gd = &loaded.gldf.general_definitions;
     assert_eq!(gd.files.file.len(), 1, "one embedded photometry file");
-    assert!(gd.photometries.as_ref().is_some_and(|p| !p.photometry.is_empty()));
+    assert!(gd
+        .photometries
+        .as_ref()
+        .is_some_and(|p| !p.photometry.is_empty()));
     assert!(gd
         .light_sources
         .as_ref()
@@ -76,7 +79,10 @@ fn empty_template_autofills_from_ldt() {
         .is_some_and(|v| !v.variant.is_empty()));
 
     let ifc = out.ifc.expect("ifc text");
-    assert!(ifc.contains("IFCLIGHTFIXTURETYPE"), "IFC has a light fixture");
+    assert!(
+        ifc.contains("IFCLIGHTFIXTURETYPE"),
+        "IFC has a light fixture"
+    );
 }
 
 #[test]
@@ -130,10 +136,7 @@ fn run_batch_converts_directory_to_gldf_and_ifc() {
         inputs.len()
     );
 
-    let out_dir = std::env::temp_dir().join(format!(
-        "gldf-batch-test-{}",
-        std::process::id()
-    ));
+    let out_dir = std::env::temp_dir().join(format!("gldf-batch-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out_dir);
 
     let job = BatchJob {
@@ -191,10 +194,8 @@ fn template_draft_roundtrips_and_converts() {
     assert!(json.contains("\"@file\""), "geometry saved as @file ref");
     assert!(!json.contains("photometry_bytes"), "no byte-slot noise");
 
-    let reparsed = TemplateDraft::from_template_value(
-        &serde_json::from_str(&json).unwrap(),
-    )
-    .expect("round-trip back into the form");
+    let reparsed = TemplateDraft::from_template_value(&serde_json::from_str(&json).unwrap())
+        .expect("round-trip back into the form");
     assert_eq!(reparsed.draft.header_author, "Form author");
     assert_eq!(reparsed.geometry_file, "example_007.l3d");
 
@@ -202,8 +203,8 @@ fn template_draft_roundtrips_and_converts() {
     // @file geometry resolved relative to the template dir.
     let template = BatchTemplate::parse(&json).expect("parse as batch template");
     let ldt = narrow_ldt();
-    let geometry = std::fs::read(test_create_dir().join("example_007.l3d"))
-        .expect("read example_007.l3d");
+    let geometry =
+        std::fs::read(test_create_dir().join("example_007.l3d")).expect("read example_007.l3d");
     let mut files = HashMap::new();
     files.insert("example_007.l3d".to_string(), geometry);
     let resolver = MemoryResolver::new(&files);
@@ -234,10 +235,9 @@ fn template_draft_roundtrips_and_converts() {
 #[cfg(feature = "uld")]
 #[test]
 fn uld_input_converts_with_header_overrides() {
-    let uld = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/test_1.uld"),
-    )
-    .expect("read tests/data/test_1.uld");
+    let uld =
+        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/test_1.uld"))
+            .expect("read tests/data/test_1.uld");
     let template = BatchTemplate::parse(
         r#"{"header_author": "batch: {input.stem}", "header_created_with": "uld-batch"}"#,
     )
@@ -274,10 +274,7 @@ fn run_batch_cancels_via_callback() {
     let inputs = collect_inputs(&[test_create_dir()]);
     assert!(inputs.len() >= 2);
 
-    let out_dir = std::env::temp_dir().join(format!(
-        "gldf-batch-cancel-{}",
-        std::process::id()
-    ));
+    let out_dir = std::env::temp_dir().join(format!("gldf-batch-cancel-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out_dir);
 
     let job = BatchJob {

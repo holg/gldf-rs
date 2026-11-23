@@ -127,7 +127,7 @@ pub fn dialux_compat_check(
 }
 
 fn out_of_range(nm: i32) -> bool {
-    nm < DIALUX_PREFERRED_MIN_NM || nm > DIALUX_PREFERRED_MAX_NM
+    !(DIALUX_PREFERRED_MIN_NM..=DIALUX_PREFERRED_MAX_NM).contains(&nm)
 }
 
 fn dedup_sorted(mut v: Vec<i32>) -> Vec<i32> {
@@ -181,9 +181,18 @@ mod tests {
                 id: "inline".to_string(),
                 spectrum_file_reference: None,
                 intensity: vec![
-                    Intensity { wavelength: Some(360), value: Some(0.1) },
-                    Intensity { wavelength: Some(400), value: Some(0.5) },
-                    Intensity { wavelength: Some(830), value: Some(0.2) },
+                    Intensity {
+                        wavelength: Some(360),
+                        value: Some(0.1),
+                    },
+                    Intensity {
+                        wavelength: Some(400),
+                        value: Some(0.5),
+                    },
+                    Intensity {
+                        wavelength: Some(830),
+                        value: Some(0.2),
+                    },
                 ],
             }],
         });

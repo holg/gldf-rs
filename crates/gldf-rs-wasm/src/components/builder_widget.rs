@@ -74,7 +74,9 @@ pub fn BuilderWidget() -> impl IntoView {
     });
 
     let on_light_source_change = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         light_source_id.set(v);
     };
 
@@ -117,7 +119,9 @@ pub fn BuilderWidget() -> impl IntoView {
     // ---- Variant input ----
     let variant_name = RwSignal::new(String::new());
     let on_variant_input = move |e: crate::components::edit_util::EditEvent| {
-        let Some(v) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(v) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         variant_name.set(v);
     };
     let on_variant_add = move |_| {

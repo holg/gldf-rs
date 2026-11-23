@@ -331,9 +331,7 @@ impl Header {
     /// touched the Header page.
     pub fn ensure_xsd_required(&mut self) {
         if self.creation_time_code.trim().is_empty() {
-            self.creation_time_code = chrono::Utc::now()
-                .format("%Y-%m-%dT%H:%M:%S")
-                .to_string();
+            self.creation_time_code = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         }
         if self
             .unique_gldf_id
@@ -365,6 +363,8 @@ pub fn make_uuid_v4_public() -> String {
 /// epoch milliseconds via web_sys. Failing both, returns 0 — the PRNG
 /// still de-duplicates within a process via the atomic counter, just
 /// not across processes.
+// The `return` is the tail only on native; on wasm32 the other block follows.
+#[allow(clippy::needless_return)]
 fn time_seed_ns() -> u64 {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -402,7 +402,9 @@ fn make_uuid_v4() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let seed_now = time_seed_ns();
     let mut state = seed_now
-        ^ COUNTER.fetch_add(1, Ordering::Relaxed).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        ^ COUNTER
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15);
     let mut bytes = [0u8; 16];
     for chunk in bytes.chunks_mut(8) {
         // SplitMix64 step
@@ -477,7 +479,11 @@ impl serde::Serialize for Locale {
             self.language.as_str()
         };
         s.serialize_field("@language", lang)?;
-        let text = if self.value.is_empty() { " " } else { self.value.as_str() };
+        let text = if self.value.is_empty() {
+            " "
+        } else {
+            self.value.as_str()
+        };
         s.serialize_field("$text", text)?;
         s.end()
     }

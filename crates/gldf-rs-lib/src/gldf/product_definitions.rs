@@ -212,9 +212,10 @@ mod pendant_serialisation {
     /// fails XSD validation — DIALux silently rejects the import.
     #[test]
     fn pendant_length_serialises_as_attribute() {
-        let p = Pendant { pendant_length: 500 };
-        let xml = quick_xml::se::to_string_with_root("Pendant", &p)
-            .expect("serialise");
+        let p = Pendant {
+            pendant_length: 500,
+        };
+        let xml = quick_xml::se::to_string_with_root("Pendant", &p).expect("serialise");
         assert!(
             xml.contains(r#"pendantLength="500""#),
             "expected attribute form, got: {xml}"
@@ -240,8 +241,7 @@ mod unique_product_id_serialisation {
     #[test]
     fn empty_unique_product_id_still_serialises() {
         let meta = ProductMetaData::default();
-        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta)
-            .expect("serialise");
+        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta).expect("serialise");
         assert!(
             xml.contains("<UniqueProductId"),
             "<UniqueProductId> must appear even when empty; got: {xml}"
@@ -250,10 +250,11 @@ mod unique_product_id_serialisation {
 
     #[test]
     fn non_empty_unique_product_id_serialises() {
-        let mut meta = ProductMetaData::default();
-        meta.unique_product_id = "6a8e39a7-6ed6-4d49-affe-1cf7764a75df".to_string();
-        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta)
-            .expect("serialise");
+        let meta = ProductMetaData {
+            unique_product_id: "6a8e39a7-6ed6-4d49-affe-1cf7764a75df".to_string(),
+            ..Default::default()
+        };
+        let xml = quick_xml::se::to_string_with_root("ProductMetaData", &meta).expect("serialise");
         assert!(xml.contains("6a8e39a7-6ed6-4d49-affe-1cf7764a75df"));
     }
 }

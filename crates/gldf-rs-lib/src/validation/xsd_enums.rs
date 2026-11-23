@@ -432,7 +432,7 @@ pub const APPLICATIONS: &[&str] = &[
 /// Quick membership check, used by viewers to tag legacy/non-canonical
 /// values with ⚠.
 pub fn is_canonical(canonical_set: &'static [&'static str], value: &str) -> bool {
-    canonical_set.iter().any(|v| *v == value)
+    canonical_set.contains(&value)
 }
 
 /// Map an XSD element/attribute name to its canonical-values set. Used

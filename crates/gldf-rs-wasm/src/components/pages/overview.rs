@@ -226,14 +226,16 @@ fn FileCategorySection(
     ui_language: String,
 ) -> impl IntoView {
     if names.is_empty() {
-        return view! { <></> }.into_any();
+        return {
+            let _: () = view! { <></> };
+            ().into_any()
+        };
     }
     let total = names.len();
     let visible = names.iter().take(3).cloned().collect::<Vec<_>>();
     let extra = if total > 3 {
         Some(
-            ui_t("gldf.overview.more_count", &ui_language)
-                .replace("{n}", &(total - 3).to_string()),
+            ui_t("gldf.overview.more_count", &ui_language).replace("{n}", &(total - 3).to_string()),
         )
     } else {
         None
@@ -249,7 +251,8 @@ fn FileCategorySection(
             }).collect::<Vec<_>>()}
             {extra.map(|e| view! { <div class="more-items">{ e }</div> })}
         </div>
-    }.into_any()
+    }
+    .into_any()
 }
 
 #[component]

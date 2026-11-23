@@ -94,11 +94,7 @@ impl Exporter {
         Ok(ExportReport { bundles })
     }
 
-    fn export_one_variant(
-        &self,
-        opts: &ExportOptions,
-        variant_id: &str,
-    ) -> Result<BundleArtifact> {
+    fn export_one_variant(&self, opts: &ExportOptions, variant_id: &str) -> Result<BundleArtifact> {
         // Resolve the L3D bytes. Prefer the strict mapping (variant →
         // geometry → L3D file) because that's what the photometry pipeline
         // also uses. If the GLDF doesn't wire L3D via

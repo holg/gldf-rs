@@ -6,7 +6,7 @@
 //! - `gldf-l3d-viewer` — standalone three-d L3D viewer (`viewer3d`).
 //!
 //! The former read-only `gldf-viewer-egui` app was retired in favour of
-//! the editor; its file-preview renderers live on in [`preview`].
+//! the editor; its file-preview renderers live on in `preview`.
 
 pub mod batch_app;
 pub mod editor;

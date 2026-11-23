@@ -46,12 +46,20 @@ mod native_impl {
 
     pub fn event_f64(e: &InputEvent) -> Option<f64> {
         let s = event_value(e)?;
-        if s.is_empty() { None } else { s.parse().ok() }
+        if s.is_empty() {
+            None
+        } else {
+            s.parse().ok()
+        }
     }
 
     pub fn event_i32(e: &InputEvent) -> Option<i32> {
         let s = event_value(e)?;
-        if s.is_empty() { None } else { s.parse().ok() }
+        if s.is_empty() {
+            None
+        } else {
+            s.parse().ok()
+        }
     }
 
     /// Checkbox state: blitz reports the toggled value through the input

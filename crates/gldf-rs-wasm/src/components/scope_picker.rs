@@ -9,9 +9,7 @@ use crate::state::{use_gldf, Scope};
 use leptos::prelude::*;
 
 #[component]
-pub fn ScopePicker(
-    scope: RwSignal<Scope>,
-) -> impl IntoView {
+pub fn ScopePicker(scope: RwSignal<Scope>) -> impl IntoView {
     let state = use_gldf();
 
     let on_select = move |e: crate::components::edit_util::EditEvent| {

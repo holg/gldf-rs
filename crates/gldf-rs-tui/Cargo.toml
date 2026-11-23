@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 gldf-rs = { workspace = true, features = ["eulumdat"] }
-gldf-rs-editor = { workspace = true }
+gldf-rs-editor = { workspace = true, features = ["xsd"] }
 # Photometric LDT parser + polar-diagram primitive — feeds the
 # Photometry detail pane's braille polar plot.
 eulumdat = { workspace = true }

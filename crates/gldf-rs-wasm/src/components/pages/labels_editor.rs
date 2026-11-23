@@ -212,11 +212,22 @@ fn ApprovalMarkRow(idx: usize, value: String, scope: RwSignal<Scope>) -> impl In
     let on_change = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::UpdateApprovalMark { scope: scp, index: idx, value: v }));
+        state.update(|s| {
+            s.apply(GldfAction::UpdateApprovalMark {
+                scope: scp,
+                index: idx,
+                value: v,
+            })
+        });
     };
     let on_remove = move |_| {
         let scp = scope.get();
-        state.update(|s| s.apply(GldfAction::RemoveApprovalMark { scope: scp, index: idx }));
+        state.update(|s| {
+            s.apply(GldfAction::RemoveApprovalMark {
+                scope: scp,
+                index: idx,
+            })
+        });
     };
     view! {
         <div style="display: flex; gap: 6px; align-items: center;">

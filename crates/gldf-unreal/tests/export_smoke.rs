@@ -77,9 +77,7 @@ fn alurays_3000mm_first_variant_emits_bundle() {
     let b = &report.bundles[0];
     assert!(b.udatasmith_path.is_file(), "udatasmith file written");
     assert!(
-        b.udatasmith_path
-            .to_string_lossy()
-            .ends_with(".udatasmith"),
+        b.udatasmith_path.to_string_lossy().ends_with(".udatasmith"),
         "extension is .udatasmith"
     );
     // An .fbx asset was written under Assets/Geometry/. UE 5.7 Datasmith

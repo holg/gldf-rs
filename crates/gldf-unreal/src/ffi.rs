@@ -37,6 +37,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use gldf_rs::mapping::{MountingInfo, MountingType};
 use gldf_rs::GldfProduct;
 
 use crate::error::{ExportError, Result};
@@ -199,9 +200,7 @@ pub unsafe extern "C" fn gldf_unreal_first_ies_bytes(
             .as_ref()
             .and_then(|v| v.variant.first())
             .map(|v| v.id.clone())
-            .ok_or_else(|| {
-                ExportError::Internal("GLDF has no variants".into())
-            })?;
+            .ok_or_else(|| ExportError::Internal("GLDF has no variants".into()))?;
         // First non-emergency emitter (build_ies_outputs_for_variant
         // already filters emergency-only).
         let outs = crate::photometry::build_ies_outputs_for_variant(buf, &variant_id)?;
@@ -253,7 +252,7 @@ pub unsafe extern "C" fn gldf_unreal_bytes_free(ptr: *mut u8, len: usize) {
     if ptr.is_null() {
         return;
     }
-    let slice: *mut [u8] = std::slice::from_raw_parts_mut(ptr, len);
+    let slice: *mut [u8] = std::ptr::slice_from_raw_parts_mut(ptr, len);
     let _ = Box::from_raw(slice);
 }
 
@@ -278,6 +277,7 @@ pub unsafe extern "C" fn gldf_unreal_bytes_free(ptr: *mut u8, len: usize) {
 
 /// Layout MUST match `GldfMeshHeader` in the generated C header.
 #[repr(C)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct GldfMeshHeader {
     pub vertex_count: u32,
     /// 0 when the source OBJ has no `vn` lines.
@@ -314,7 +314,7 @@ pub struct GldfMeshPolygon {
 /// Registry-owned, FFI-friendly snapshot of a parsed mesh. Flattened so
 /// the borrow call can hand back stable raw pointers. Built once at
 /// open(), lives until close().
-struct MeshHandleData {
+pub(crate) struct MeshHandleData {
     /// vertex_count * 3 f32, xyz interleaved.
     positions: Vec<f32>,
     /// normal_count * 3 f32 (empty if none).
@@ -327,11 +327,10 @@ struct MeshHandleData {
 }
 
 impl MeshHandleData {
-    fn from_parsed(m: &GldfMeshData) -> Self {
+    pub(crate) fn from_parsed(m: &GldfMeshData) -> Self {
         let groups = m.material_groups();
-        let group_index = |name: &str| -> u32 {
-            groups.iter().position(|g| g == name).unwrap_or(0) as u32
-        };
+        let group_index =
+            |name: &str| -> u32 { groups.iter().position(|g| g == name).unwrap_or(0) as u32 };
 
         let mut positions = Vec::with_capacity(m.positions.len() * 3);
         for p in &m.positions {
@@ -375,7 +374,7 @@ impl MeshHandleData {
         }
     }
 
-    fn header(&self) -> GldfMeshHeader {
+    pub(crate) fn header(&self) -> GldfMeshHeader {
         GldfMeshHeader {
             vertex_count: (self.positions.len() / 3) as u32,
             normal_count: (self.normals.len() / 3) as u32,
@@ -387,8 +386,9 @@ impl MeshHandleData {
     }
 }
 
-static MESH_REGISTRY: Mutex<Option<HashMap<u64, Box<MeshHandleData>>>> = Mutex::new(None);
-static MESH_NEXT_ID: AtomicU64 = AtomicU64::new(1);
+pub(crate) static MESH_REGISTRY: Mutex<Option<HashMap<u64, Box<MeshHandleData>>>> =
+    Mutex::new(None);
+pub(crate) static MESH_NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Open the first mesh of the first variant of the GLDF at `gldf_path`.
 ///
@@ -434,7 +434,9 @@ pub unsafe extern "C" fn gldf_unreal_first_mesh_open(
             }
             let id = MESH_NEXT_ID.fetch_add(1, Ordering::Relaxed);
             let mut guard = MESH_REGISTRY.lock().unwrap();
-            guard.get_or_insert_with(HashMap::new).insert(id, Box::new(data));
+            guard
+                .get_or_insert_with(HashMap::new)
+                .insert(id, Box::new(data));
             id
         }
         Err(e) => {
@@ -587,6 +589,15 @@ pub const GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME: u32 = 2;
 /// falls back to the id if unnamed). For the variant string getter — shown
 /// in the UE variant dropdown.
 pub const GLDF_VARIANT_FIELD_NAME: u32 = 3;
+/// The variant's own product number (`Variant.ProductNumber`, localized → en/first).
+pub const GLDF_VARIANT_FIELD_PRODUCT_NUMBER: u32 = 4;
+/// The variant's GTIN (empty when the GLDF has none).
+pub const GLDF_VARIANT_FIELD_GTIN: u32 = 5;
+
+/// Field selector for [`gldf_unreal_product_string`] (product-level data).
+pub const GLDF_PRODUCT_FIELD_MANUFACTURER: u32 = 0;
+pub const GLDF_PRODUCT_FIELD_NAME: u32 = 1;
+pub const GLDF_PRODUCT_FIELD_NUMBER: u32 = 2;
 
 /// One emitter within a variant: its photometry + the L3D LEO `partName`
 /// it drives. A twin-head spotlight has two of these per variant, with
@@ -608,6 +619,14 @@ struct VariantEntry {
     name: String,
     /// All non-emergency emitters for this variant, in reference order.
     emitters: Vec<EmitterEntry>,
+    /// GLDF `Mountings` of this variant (ceiling/wall/ground/working plane +
+    /// recess depth / pendant length / mounting height / pole height). Drives
+    /// surface snapping when the luminaire is placed in a UE level.
+    mounting: MountingInfo,
+    pole_top: bool,
+    pole_integrated: bool,
+    product_number: String,
+    gtin: String,
 }
 
 impl VariantEntry {
@@ -619,6 +638,28 @@ impl VariantEntry {
 
 struct VariantTable {
     entries: Vec<VariantEntry>,
+    manufacturer: String,
+    product_name: String,
+    product_number: String,
+}
+
+/// English-first text of a localized GLDF string (empty when absent).
+fn locale_text(v: &Option<gldf_rs::gldf::LocaleFoo>) -> String {
+    let Some(name) = v.as_ref() else {
+        return String::new();
+    };
+    let locales = &name.locale;
+    if let Some(en) = locales
+        .iter()
+        .find(|l| l.language.to_lowercase().starts_with("en") && !l.value.trim().is_empty())
+    {
+        return en.value.trim().to_string();
+    }
+    locales
+        .iter()
+        .find(|l| !l.value.trim().is_empty())
+        .map(|l| l.value.trim().to_string())
+        .unwrap_or_default()
 }
 
 static VARIANT_REGISTRY: Mutex<Option<HashMap<u64, Box<VariantTable>>>> = Mutex::new(None);
@@ -651,20 +692,33 @@ pub unsafe extern "C" fn gldf_unreal_variants_open(
         let buf = exporter.file_buf();
         let gldf = &buf.gldf;
 
-        let variants: Vec<(String, String)> = gldf
+        let variants: Vec<(String, String, String, String)> = gldf
             .product_definitions
             .variants
             .as_ref()
             .map(|v| {
                 v.variant
                     .iter()
-                    .map(|x| (x.id.clone(), resolve_variant_name(x)))
+                    .map(|x| {
+                        (
+                            x.id.clone(),
+                            resolve_variant_name(x),
+                            locale_text(&x.product_number),
+                            x.gtin.clone().unwrap_or_default(),
+                        )
+                    })
                     .collect()
             })
             .unwrap_or_default();
+        let meta = gldf.product_definitions.product_meta_data.as_ref();
+        let manufacturer = gldf.header.manufacturer.trim().to_string();
+        let product_name = meta.map(|m| locale_text(&m.name)).unwrap_or_default();
+        let product_number = meta
+            .map(|m| locale_text(&m.product_number))
+            .unwrap_or_default();
 
         let mut entries = Vec::with_capacity(variants.len());
-        for (vid, vname) in &variants {
+        for (vid, vname, vnum, vgtin) in &variants {
             // ALL non-emergency emitters for this variant (build_ies_outputs
             // already drops emergency-only ones). A multi-head luminaire
             // yields several, each with its own photometry + LEO partName.
@@ -690,13 +744,25 @@ pub unsafe extern "C" fn gldf_unreal_variants_open(
                     }
                 })
                 .collect();
+            let mounting = gldf_rs::mapping::get_variant_emitter_data(gldf, vid).mounting;
+            let (pole_top, pole_integrated) = pole_flags(gldf, vid);
             entries.push(VariantEntry {
                 variant_id: vid.clone(),
                 name: vname.clone(),
                 emitters,
+                mounting,
+                pole_top,
+                pole_integrated,
+                product_number: vnum.clone(),
+                gtin: vgtin.clone(),
             });
         }
-        Ok(VariantTable { entries })
+        Ok(VariantTable {
+            entries,
+            manufacturer,
+            product_name,
+            product_number,
+        })
     })();
 
     match result {
@@ -736,7 +802,9 @@ pub unsafe extern "C" fn gldf_unreal_variant_info(
 ) -> i32 {
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
-    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(table) = map.get(&handle) else {
+        return 1;
+    };
     let Some(v) = table.entries.get(idx as usize) else {
         return 1;
     };
@@ -751,6 +819,124 @@ pub unsafe extern "C" fn gldf_unreal_variant_info(
             cct_present: e.cct.is_some() as u8,
             ies_len: e.ies_bytes.len() as u32,
         };
+    }
+    0
+}
+
+/// `GldfMountingInfo::kind` values — the variant's primary mounting surface.
+pub const GLDF_MOUNTING_NONE: u8 = 0;
+pub const GLDF_MOUNTING_CEILING: u8 = 1;
+pub const GLDF_MOUNTING_WALL: u8 = 2;
+pub const GLDF_MOUNTING_GROUND: u8 = 3;
+pub const GLDF_MOUNTING_WORKING_PLANE: u8 = 4;
+
+/// One variant's GLDF `Mountings`, flattened for the UE placement code.
+///
+/// `kind` is the primary surface (`GLDF_MOUNTING_*`; wall wins over ceiling
+/// over ground when a product lists several, because wall carries an explicit
+/// mounting height). Every length is millimetres with a `*_present` flag so
+/// the consumer can tell "0 mm" from "not specified":
+///
+/// * `recessed_depth_mm` — ceiling/wall `Recessed recessedDepth`: how far the
+///   body sinks INTO the mounting surface (SLV Tria 2: 11 mm).
+/// * `pendant_length_mm` — ceiling `Pendant pendantLength`: how far below the
+///   ceiling the luminaire hangs.
+/// * `mounting_height_mm` — wall `mountingHeight`: height of the mounting
+///   point above the floor.
+/// * `pole_height_mm` — ground `PoleTop`/`PoleIntegrated` pole height.
+/// * `surface_mounted` / `free_standing` / `pole_top` / `pole_integrated` — the
+///   flag-only mounting kinds. Street luminaires often declare `<PoleTop/>`
+///   WITHOUT a poleHeight; the consumer then applies its own default pole.
+#[repr(C)]
+pub struct GldfMountingInfo {
+    pub kind: u8,
+    pub surface_mounted: u8,
+    pub free_standing: u8,
+    /// Ground `<PoleTop/>` declared (even without a poleHeight).
+    pub pole_top: u8,
+    /// Ground `<PoleIntegrated/>` declared (even without a poleHeight).
+    pub pole_integrated: u8,
+    pub recessed_depth_present: u8,
+    pub pendant_length_present: u8,
+    pub mounting_height_present: u8,
+    pub pole_height_present: u8,
+    pub recessed_depth_mm: i32,
+    pub pendant_length_mm: i32,
+    pub mounting_height_mm: i32,
+    pub pole_height_mm: i32,
+}
+
+/// Pole flags straight from the variant's `<Mountings><Ground>` (gldf-rs-lib's
+/// `MountingInfo` only keeps the pole HEIGHT, which many GLDFs omit).
+fn pole_flags(gldf: &GldfProduct, variant_id: &str) -> (bool, bool) {
+    gldf.product_definitions
+        .variants
+        .as_ref()
+        .and_then(|vs| vs.variant.iter().find(|v| v.id == variant_id))
+        .and_then(|v| v.mountings.as_ref())
+        .and_then(|m| m.ground.as_ref())
+        .map(|g| (g.pole_top.is_some(), g.pole_integrated.is_some()))
+        .unwrap_or((false, false))
+}
+
+impl GldfMountingInfo {
+    fn from_parts(m: &MountingInfo, pole_top: bool, pole_integrated: bool) -> Self {
+        let mut out = GldfMountingInfo::from(m);
+        out.pole_top = pole_top as u8;
+        out.pole_integrated = pole_integrated as u8;
+        out
+    }
+}
+
+impl From<&MountingInfo> for GldfMountingInfo {
+    fn from(m: &MountingInfo) -> Self {
+        GldfMountingInfo {
+            pole_top: 0,
+            pole_integrated: 0,
+            kind: match m.mounting_type {
+                None => GLDF_MOUNTING_NONE,
+                Some(MountingType::Ceiling) => GLDF_MOUNTING_CEILING,
+                Some(MountingType::Wall) => GLDF_MOUNTING_WALL,
+                Some(MountingType::Ground) => GLDF_MOUNTING_GROUND,
+                Some(MountingType::WorkingPlane) => GLDF_MOUNTING_WORKING_PLANE,
+            },
+            surface_mounted: m.is_surface_mounted as u8,
+            free_standing: m.is_free_standing as u8,
+            recessed_depth_present: m.recessed_depth_mm.is_some() as u8,
+            pendant_length_present: m.pendant_length_mm.is_some() as u8,
+            mounting_height_present: m.mounting_height_mm.is_some() as u8,
+            pole_height_present: m.pole_height_mm.is_some() as u8,
+            recessed_depth_mm: m.recessed_depth_mm.unwrap_or(0),
+            pendant_length_mm: m.pendant_length_mm.unwrap_or(0),
+            mounting_height_mm: m.mounting_height_mm.unwrap_or(0),
+            pole_height_mm: m.pole_height_mm.unwrap_or(0),
+        }
+    }
+}
+
+/// Fill `*out` with variant `idx`'s GLDF mounting info (see
+/// [`GldfMountingInfo`]). Returns 0 on success, non-zero if the handle or
+/// index is invalid. A variant without `<Mountings>` succeeds with
+/// `kind == GLDF_MOUNTING_NONE` and every `*_present` flag 0.
+///
+/// # Safety
+/// `handle` must be live; `out` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_variant_mounting(
+    handle: u64,
+    idx: u32,
+    out: *mut GldfMountingInfo,
+) -> i32 {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else { return 1 };
+    let Some(table) = map.get(&handle) else {
+        return 1;
+    };
+    let Some(v) = table.entries.get(idx as usize) else {
+        return 1;
+    };
+    if !out.is_null() {
+        *out = GldfMountingInfo::from_parts(&v.mounting, v.pole_top, v.pole_integrated);
     }
     0
 }
@@ -780,6 +966,8 @@ pub unsafe extern "C" fn gldf_unreal_variant_string(
     let s = match field {
         GLDF_VARIANT_FIELD_ID => &v.variant_id,
         GLDF_VARIANT_FIELD_NAME => &v.name,
+        GLDF_VARIANT_FIELD_PRODUCT_NUMBER => &v.product_number,
+        GLDF_VARIANT_FIELD_GTIN => &v.gtin,
         GLDF_VARIANT_FIELD_PHOTOMETRY_ID => {
             let Some(e) = v.first_emitter() else {
                 return std::ptr::null_mut();
@@ -808,7 +996,9 @@ pub unsafe extern "C" fn gldf_unreal_variant_ies(
 ) -> i32 {
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
-    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(table) = map.get(&handle) else {
+        return 1;
+    };
     let Some(v) = table.entries.get(idx as usize) else {
         return 1;
     };
@@ -836,11 +1026,44 @@ pub unsafe extern "C" fn gldf_unreal_variant_ies(
 ///
 /// # Safety
 /// `handle` must be live.
+/// Product-level string (`GLDF_PRODUCT_FIELD_*`: manufacturer, product name,
+/// product number) as a Rust CString (caller frees via
+/// [`gldf_unreal_string_free`]). Null on invalid handle / field; an empty
+/// string when the GLDF has no such value.
+///
+/// # Safety
+/// `handle` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn gldf_unreal_product_string(handle: u64, field: u32) -> *mut c_char {
+    let guard = VARIANT_REGISTRY.lock().unwrap();
+    let Some(map) = guard.as_ref() else {
+        return std::ptr::null_mut();
+    };
+    let Some(table) = map.get(&handle) else {
+        return std::ptr::null_mut();
+    };
+    let s = match field {
+        GLDF_PRODUCT_FIELD_MANUFACTURER => &table.manufacturer,
+        GLDF_PRODUCT_FIELD_NAME => &table.product_name,
+        GLDF_PRODUCT_FIELD_NUMBER => &table.product_number,
+        _ => return std::ptr::null_mut(),
+    };
+    CString::new(s.as_str())
+        .map(|c| c.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Number of emitters of variant `idx`, or -1 when the handle or index is unknown.
+///
+/// # Safety
+/// `handle` must be live.
 #[no_mangle]
 pub unsafe extern "C" fn gldf_unreal_variant_emitter_count(handle: u64, idx: u32) -> i32 {
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return -1 };
-    let Some(table) = map.get(&handle) else { return -1 };
+    let Some(table) = map.get(&handle) else {
+        return -1;
+    };
     let Some(v) = table.entries.get(idx as usize) else {
         return -1;
     };
@@ -861,7 +1084,9 @@ pub unsafe extern "C" fn gldf_unreal_variant_emitter_info(
 ) -> i32 {
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
-    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(table) = map.get(&handle) else {
+        return 1;
+    };
     let Some(v) = table.entries.get(vidx as usize) else {
         return 1;
     };
@@ -936,7 +1161,9 @@ pub unsafe extern "C" fn gldf_unreal_variant_emitter_ies(
 ) -> i32 {
     let guard = VARIANT_REGISTRY.lock().unwrap();
     let Some(map) = guard.as_ref() else { return 1 };
-    let Some(table) = map.get(&handle) else { return 1 };
+    let Some(table) = map.get(&handle) else {
+        return 1;
+    };
     let Some(v) = table.entries.get(vidx as usize) else {
         return 1;
     };
@@ -1022,6 +1249,7 @@ fn lookup_cct(gldf: &GldfProduct, light_source_id: &str) -> Option<i32> {
 /// axis = (ax_*), height axis = (ay_*). Lets the consumer aim the light
 /// correctly instead of assuming "straight down".
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct GldfLeoShape {
     pub kind: u8,
     pub dim_a: f32,
@@ -1098,7 +1326,7 @@ pub unsafe extern "C" fn gldf_unreal_first_leo_shape(
 }
 
 /// Fill a `GldfLeoShape` from a parsed [`LeoPlacement`].
-fn leo_shape_from_placement(p: &crate::mesh_payload::LeoPlacement) -> GldfLeoShape {
+pub(crate) fn leo_shape_from_placement(p: &crate::mesh_payload::LeoPlacement) -> GldfLeoShape {
     let [pos_x, pos_y, pos_z] = p.position_cm;
     let [ax_x, ax_y, ax_z] = p.axis_x;
     let [ay_x, ay_y, ay_z] = p.axis_y;
@@ -1215,7 +1443,7 @@ unsafe fn export_impl(
     Exporter::from_path(&gldf_path)?.export(&export_opts)
 }
 
-unsafe fn cstr_to_pathbuf(p: *const c_char, name: &str) -> Result<PathBuf> {
+pub(crate) unsafe fn cstr_to_pathbuf(p: *const c_char, name: &str) -> Result<PathBuf> {
     if p.is_null() {
         return Err(ExportError::Internal(format!("{name} is null")));
     }
@@ -1429,11 +1657,7 @@ mod tests {
         // LM-63 IES files start with "IESNA:" or "TILT=" / "IES:" — the
         // gldf-rs photometry pipeline goes through eulumdat's IES
         // exporter, which writes the modern header.
-        let head: String = bytes
-            .iter()
-            .take(64)
-            .map(|&b| b as char)
-            .collect();
+        let head: String = bytes.iter().take(64).map(|&b| b as char).collect();
         assert!(
             head.contains("IES") || head.contains("TILT="),
             "expected an IES LM-63 header; got bytes starting with {:?}",
@@ -1670,7 +1894,10 @@ mod tests {
             let pid_ptr =
                 unsafe { gldf_unreal_variant_string(handle, i, GLDF_VARIANT_FIELD_PHOTOMETRY_ID) };
             assert!(!pid_ptr.is_null());
-            let pid = unsafe { CStr::from_ptr(pid_ptr) }.to_str().unwrap().to_owned();
+            let pid = unsafe { CStr::from_ptr(pid_ptr) }
+                .to_str()
+                .unwrap()
+                .to_owned();
             unsafe { gldf_unreal_string_free(pid_ptr) };
             seen_photometry_ids.insert(pid);
 
@@ -1775,9 +2002,7 @@ mod tests {
         // ── Per-variant emitters: expect 2, with distinct photometry ────
         let mut count: u32 = 0;
         let mut err: *mut c_char = std::ptr::null_mut();
-        let handle = unsafe {
-            gldf_unreal_variants_open(path_c.as_ptr(), &mut count, &mut err)
-        };
+        let handle = unsafe { gldf_unreal_variants_open(path_c.as_ptr(), &mut count, &mut err) };
         assert_ne!(handle, 0, "variant handle; err = {err:?}");
         assert!(count >= 1);
 
@@ -1800,8 +2025,13 @@ mod tests {
         let mut emitter_lumens = Vec::new();
         for e in 0..ecount as u32 {
             let mut info = GldfVariantInfo {
-                lumens: 0, lumens_present: 0, watts: 0.0, watts_present: 0,
-                cct: 0, cct_present: 0, ies_len: 0,
+                lumens: 0,
+                lumens_present: 0,
+                watts: 0.0,
+                watts_present: 0,
+                cct: 0,
+                cct_present: 0,
+                ies_len: 0,
             };
             let rc = unsafe { gldf_unreal_variant_emitter_info(handle, 0, e, &mut info as *mut _) };
             assert_eq!(rc, 0, "emitter_info(0,{e}) ok");
@@ -1812,7 +2042,10 @@ mod tests {
 
             let np = unsafe {
                 gldf_unreal_variant_emitter_string(
-                    handle, 0, e, GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME,
+                    handle,
+                    0,
+                    e,
+                    GLDF_VARIANT_FIELD_EMITTER_EXTERNAL_NAME,
                 )
             };
             assert!(!np.is_null(), "emitter {e} has an external name");
@@ -1882,8 +2115,16 @@ mod tests {
         let rc = unsafe { gldf_unreal_first_leo_shape(path_c.as_ptr(), &mut shape as *mut _) };
         assert_eq!(rc, 0);
         assert_eq!(shape.kind, GLDF_LEO_RECTANGLE, "alurays LEO is a rectangle");
-        assert!((shape.dim_a - 3.4).abs() < 1e-4, "width 3.4 m, got {}", shape.dim_a);
-        assert!((shape.dim_b - 0.044).abs() < 1e-4, "height 0.044 m, got {}", shape.dim_b);
+        assert!(
+            (shape.dim_a - 3.4).abs() < 1e-4,
+            "width 3.4 m, got {}",
+            shape.dim_a
+        );
+        assert!(
+            (shape.dim_b - 0.044).abs() < 1e-4,
+            "height 0.044 m, got {}",
+            shape.dim_b
+        );
         // Position must be filled (not the NAN sentinel) — emitter center
         // in cm. For a 3.4 m strip the center is offset along the long axis.
         assert!(shape.pos_x.is_finite() && shape.pos_y.is_finite() && shape.pos_z.is_finite());
@@ -1896,16 +2137,32 @@ mod tests {
                 && (shape.az_y).abs() < 1e-5
                 && (shape.az_z - 1.0).abs() < 1e-5,
             "un-rotated LEO local +Z should be world +Z (emission −Z = down); got az=({},{},{})",
-            shape.az_x, shape.az_y, shape.az_z
+            shape.az_x,
+            shape.az_y,
+            shape.az_z
         );
         // Width axis along world +X, height along world +Y.
-        assert!((shape.ax_x - 1.0).abs() < 1e-5, "width axis ≈ +X, got ax_x={}", shape.ax_x);
-        assert!((shape.ay_y - 1.0).abs() < 1e-5, "height axis ≈ +Y, got ay_y={}", shape.ay_y);
+        assert!(
+            (shape.ax_x - 1.0).abs() < 1e-5,
+            "width axis ≈ +X, got ax_x={}",
+            shape.ax_x
+        );
+        assert!(
+            (shape.ay_y - 1.0).abs() < 1e-5,
+            "height axis ≈ +Y, got ay_y={}",
+            shape.ay_y
+        );
 
         eprintln!(
             "[alurays LEO] rect {} x {} m @ ({:.1},{:.1},{:.1}) cm, +Z→({:.2},{:.2},{:.2})",
-            shape.dim_a, shape.dim_b, shape.pos_x, shape.pos_y, shape.pos_z,
-            shape.az_x, shape.az_y, shape.az_z
+            shape.dim_a,
+            shape.dim_b,
+            shape.pos_x,
+            shape.pos_y,
+            shape.pos_z,
+            shape.az_x,
+            shape.az_y,
+            shape.az_z
         );
     }
 }

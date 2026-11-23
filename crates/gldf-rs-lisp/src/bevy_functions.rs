@@ -239,12 +239,7 @@ fn set_room_size(ctx: &mut ForeignContext, args: &[Expr]) -> Expr {
     }
     let nums: Vec<f32> = args.iter().filter_map(expr_to_f32).collect();
     if nums.len() != 3 || !nums.iter().all(|n| n.is_finite() && *n > 0.0) {
-        return arg_error(
-            ctx.output,
-            "SET-ROOM-SIZE",
-            "three positive numbers",
-            args,
-        );
+        return arg_error(ctx.output, "SET-ROOM-SIZE", "three positive numbers", args);
     }
     if let Some(state) = state_mut(ctx) {
         state.dispatch(SceneCommand::SetRoomSize {
@@ -269,7 +264,11 @@ fn dispatch_color(
         return arg_error(ctx.output, fn_name, "<r> <g> <b>", args);
     }
     let nums: Vec<f32> = args.iter().filter_map(expr_to_f32).collect();
-    if nums.len() != 3 || !nums.iter().all(|n| n.is_finite() && (0.0..=1.0).contains(n)) {
+    if nums.len() != 3
+        || !nums
+            .iter()
+            .all(|n| n.is_finite() && (0.0..=1.0).contains(n))
+    {
         return arg_error(ctx.output, fn_name, "three numbers in [0, 1]", args);
     }
     if let Some(state) = state_mut(ctx) {

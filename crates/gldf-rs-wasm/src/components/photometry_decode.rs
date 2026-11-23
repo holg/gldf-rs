@@ -106,9 +106,7 @@ pub fn parse_photometry_with_fallback(content: &str) -> Option<(Eulumdat, ParseK
     }
     // TM-33 XML fallback. content.trim_start_matches('\u{feff}') drops
     // an optional UTF-8 BOM the way atla::xml::parse expects.
-    let trimmed = content
-        .trim_start_matches('\u{feff}')
-        .trim_start();
+    let trimmed = content.trim_start_matches('\u{feff}').trim_start();
     if trimmed.starts_with('<') {
         if let Ok(doc) = eulumdat::atla::xml::parse(content) {
             let ldt: Eulumdat = (&doc).into();

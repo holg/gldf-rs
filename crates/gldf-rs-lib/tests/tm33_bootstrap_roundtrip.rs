@@ -31,9 +31,7 @@
 #![cfg(feature = "eulumdat")]
 
 use eulumdat::atla::xml as atla_xml;
-use gldf_rs::{
-    export::lightsource::export_tm33_xml, tm33_to_gldf, EditableGldf, GldfProduct,
-};
+use gldf_rs::{export::lightsource::export_tm33_xml, tm33_to_gldf, EditableGldf, GldfProduct};
 use std::collections::HashMap;
 
 fn count_intensity_samples(xml: &str) -> Option<usize> {
@@ -61,8 +59,8 @@ fn golden_lightsource_2_bootstrap_roundtrip() {
     let source_text = std::str::from_utf8(&source_bytes).expect("UTF-8 TM-33");
 
     // --- Bootstrap ---
-    let bundle = tm33_to_gldf(&source_bytes, "golden_lightsource_2.tm33.xml")
-        .expect("tm33_to_gldf");
+    let bundle =
+        tm33_to_gldf(&source_bytes, "golden_lightsource_2.tm33.xml").expect("tm33_to_gldf");
 
     // The single-file dual-reference shape: 1 File entry, 1
     // Photometry, 1 Spectrum, both pointing at the SAME @fileId.
@@ -105,12 +103,13 @@ fn golden_lightsource_2_bootstrap_roundtrip() {
     let mut editable_in = EditableGldf::from_product(bundle.gldf.clone());
     for f in &bundle.files {
         if let (Some(id), Some(content)) = (f.file_id.as_ref(), f.content.as_ref()) {
-            editable_in.embedded_files.insert(id.clone(), content.clone());
+            editable_in
+                .embedded_files
+                .insert(id.clone(), content.clone());
         }
     }
     let resaved = editable_in.save_to_buf().expect("save_to_buf");
-    let reloaded_bundle =
-        GldfProduct::load_gldf_from_buf_all(resaved).expect("reload");
+    let reloaded_bundle = GldfProduct::load_gldf_from_buf_all(resaved).expect("reload");
     let reloaded_product = reloaded_bundle.gldf;
     let reloaded_files: HashMap<String, Vec<u8>> = reloaded_bundle
         .files
@@ -137,8 +136,8 @@ fn golden_lightsource_2_bootstrap_roundtrip() {
         .expect("light_sources after reload")
         .fixed_light_source[0]
         .id;
-    let reexported = export_tm33_xml(&reloaded_product, &reloaded_files, ls_id)
-        .expect("export_tm33_xml");
+    let reexported =
+        export_tm33_xml(&reloaded_product, &reloaded_files, ls_id).expect("export_tm33_xml");
 
     // --- Compare SPD sample counts ---
     let source_spd = spd_sample_count(source_text);

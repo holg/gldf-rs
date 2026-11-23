@@ -21,13 +21,19 @@ pub fn ElectricalEditorPage() -> impl IntoView {
     let on_safety = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
-            s.apply(GldfAction::SetElectricalSafetyClass(scope.get(), optional_string(v)));
+            s.apply(GldfAction::SetElectricalSafetyClass(
+                scope.get(),
+                optional_string(v),
+            ));
         });
     };
     let on_ip = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
         state.update(|s| {
-            s.apply(GldfAction::SetIngressProtectionIPCode(scope.get(), optional_string(v)));
+            s.apply(GldfAction::SetIngressProtectionIPCode(
+                scope.get(),
+                optional_string(v),
+            ));
         });
     };
     let on_pf = move |e: crate::components::edit_util::EditEvent| {
@@ -40,11 +46,21 @@ pub fn ElectricalEditorPage() -> impl IntoView {
     };
     let on_dist = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetLightDistribution(scope.get(), optional_string(v))));
+        state.update(|s| {
+            s.apply(GldfAction::SetLightDistribution(
+                scope.get(),
+                optional_string(v),
+            ))
+        });
     };
     let on_sc = move |e: crate::components::edit_util::EditEvent| {
         let v = event_value(&e).unwrap_or_default();
-        state.update(|s| s.apply(GldfAction::SetSwitchingCapacity(scope.get(), optional_string(v))));
+        state.update(|s| {
+            s.apply(GldfAction::SetSwitchingCapacity(
+                scope.get(),
+                optional_string(v),
+            ))
+        });
     };
 
     fn safety_label(v: &str) -> &str {
@@ -58,7 +74,12 @@ pub fn ElectricalEditorPage() -> impl IntoView {
         }
     }
 
-    let title_signal = move || ui_t("gldf.electrical.title", &state.with(|s| s.ui_language.clone()));
+    let title_signal = move || {
+        ui_t(
+            "gldf.electrical.title",
+            &state.with(|s| s.ui_language.clone()),
+        )
+    };
 
     view! {
         <div class="editor-section electrical-editor">

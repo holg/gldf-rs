@@ -30,8 +30,14 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
             kv("Manufacturer", &product.header.manufacturer),
             kv("Created with", &product.header.created_with_application),
             kv("Creation time", &product.header.creation_time_code),
-            kv("Format version", &format!("{:?}", product.header.format_version)),
-            kv("Embedded files", &app.state.embedded_files.len().to_string()),
+            kv(
+                "Format version",
+                &format!("{:?}", product.header.format_version),
+            ),
+            kv(
+                "Embedded files",
+                &app.state.embedded_files.len().to_string(),
+            ),
             kv(
                 "Variants",
                 &product
@@ -195,6 +201,7 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
                     .collect()
             }
         }
+        Section::Validation => render_validation(app),
         Section::Linkage => {
             // Minimal linkage summary; full per-section orphan-check
             // lands in a later cut.
@@ -203,7 +210,10 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
                     "Files declared: {}",
                     product.general_definitions.files.file.len()
                 )),
-                Line::from(format!("Embedded bytes: {}", app.state.embedded_files.len())),
+                Line::from(format!(
+                    "Embedded bytes: {}",
+                    app.state.embedded_files.len()
+                )),
                 Line::from(format!(
                     "Photometries:    {}",
                     product
@@ -229,7 +239,11 @@ fn render_section(app: &App, section: Section) -> Vec<Line<'static>> {
 }
 
 fn kv(label: &str, value: &str) -> Line<'static> {
-    let value = if value.is_empty() { "—".to_string() } else { value.to_string() };
+    let value = if value.is_empty() {
+        "—".to_string()
+    } else {
+        value.to_string()
+    };
     Line::from(vec![
         Span::styled(
             format!("{:18}", label),
@@ -262,4 +276,82 @@ fn muted(text: &str) -> Line<'static> {
             .fg(Color::DarkGray)
             .add_modifier(Modifier::ITALIC),
     ))
+}
+
+/// Validation section: engine + canonical + XSD findings bucketed by
+/// severity (`gldf_rs_editor::validation_report`). The report itself is
+/// refreshed by `App::refresh_validation` after each key event.
+fn render_validation(app: &App) -> Vec<Line<'static>> {
+    use gldf_rs_editor::{ValidationReport, ValidationRow};
+
+    let dim = Style::default().fg(Color::DarkGray);
+    let bold = Style::default().add_modifier(Modifier::BOLD);
+    let Some(report) = &app.validation else {
+        return vec![Line::styled(
+            "(press any key to run the checks)".to_string(),
+            dim,
+        )];
+    };
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("Schema: ", dim),
+            Span::styled(
+                ValidationReport::schema_label(report.schema).to_string(),
+                bold,
+            ),
+            Span::styled("   (t toggles rc-3 / rc-4)", dim),
+        ]),
+        Line::raw(""),
+    ];
+    if report.is_clean() {
+        lines.push(Line::styled(
+            "✓ No issues found".to_string(),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ));
+        return lines;
+    }
+    let headline_color = if report.error_count() > 0 {
+        Color::Red
+    } else if !report.warnings.is_empty() {
+        Color::Yellow
+    } else {
+        Color::Blue
+    };
+    lines.push(Line::styled(
+        report.headline(),
+        Style::default()
+            .fg(headline_color)
+            .add_modifier(Modifier::BOLD),
+    ));
+    if let Some(err) = &report.xsd_error {
+        lines.push(Line::styled(
+            format!("XSD pass failed: {err}"),
+            Style::default().fg(Color::Red),
+        ));
+    }
+    let buckets: [(&str, &[ValidationRow], Color); 4] = [
+        ("Errors", &report.errors, Color::Red),
+        ("XSD violations", &report.xsd, Color::Red),
+        ("Warnings", &report.warnings, Color::Yellow),
+        ("Notes", &report.info, Color::Blue),
+    ];
+    for (title, rows, color) in buckets {
+        if rows.is_empty() {
+            continue;
+        }
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            format!("{title} ({})", rows.len()),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ));
+        for row in rows {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}  ", row.location), dim),
+                Span::raw(row.message.clone()),
+            ]));
+        }
+    }
+    lines
 }

@@ -15,12 +15,22 @@ fn variant_picture_lands_on_variant_not_product() {
     });
 
     // Product pictures must NOT contain the entry.
-    assert!(s.product.product_definitions.product_meta_data.as_ref()
+    assert!(s
+        .product
+        .product_definitions
+        .product_meta_data
+        .as_ref()
         .and_then(|m| m.pictures.as_ref())
-        .map_or(true, |p| p.image.is_empty()));
+        .is_none_or(|p| p.image.is_empty()));
 
     // Variant[0] pictures must contain it.
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
     let pics = v.pictures.as_ref().expect("variant pictures created");
     assert_eq!(pics.image.len(), 1);
     assert_eq!(pics.image[0].file_id, "file_1");
@@ -43,8 +53,16 @@ fn variant_hyperlink_lands_on_variant_marketing() {
         value: "Datasheet".to_string(),
     });
 
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
-    let hs = v.descriptive_attributes.as_ref()
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
+    let hs = v
+        .descriptive_attributes
+        .as_ref()
         .and_then(|a| a.marketing.as_ref())
         .and_then(|m| m.hyperlinks.as_ref())
         .expect("variant marketing.hyperlinks");
@@ -52,11 +70,15 @@ fn variant_hyperlink_lands_on_variant_marketing() {
     assert_eq!(hs.hyperlink[0].href, "https://example.com");
 
     // Product-level should be empty.
-    let prod_hs = s.product.product_definitions.product_meta_data.as_ref()
+    let prod_hs = s
+        .product
+        .product_definitions
+        .product_meta_data
+        .as_ref()
         .and_then(|m| m.descriptive_attributes.as_ref())
         .and_then(|a| a.marketing.as_ref())
         .and_then(|m| m.hyperlinks.as_ref());
-    assert!(prod_hs.map_or(true, |h| h.hyperlink.is_empty()));
+    assert!(prod_hs.is_none_or(|h| h.hyperlink.is_empty()));
 }
 
 #[test]
@@ -77,11 +99,22 @@ fn variant_emergency_dispatches_to_variant_descriptive_attributes() {
         flux: 200,
     });
 
-    let v = &s.product.product_definitions.variants.as_ref().unwrap().variant[0];
-    let e = v.descriptive_attributes.as_ref()
+    let v = &s
+        .product
+        .product_definitions
+        .variants
+        .as_ref()
+        .unwrap()
+        .variant[0];
+    let e = v
+        .descriptive_attributes
+        .as_ref()
         .and_then(|a| a.emergency.as_ref())
         .expect("variant emergency");
-    assert_eq!(e.dedicated_emergency_lighting_type.as_deref(), Some("Maintained"));
+    assert_eq!(
+        e.dedicated_emergency_lighting_type.as_deref(),
+        Some("Maintained")
+    );
     let flux = e.duration_time_and_flux.as_ref().unwrap();
     assert_eq!(flux.flux.len(), 1);
     assert_eq!(flux.flux[0].hours, 1);

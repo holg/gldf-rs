@@ -11,20 +11,22 @@
 //! removal.
 
 pub mod error;
-pub mod options;
 pub mod exporter;
+pub mod options;
 
 // Photometry/mesh extraction consumed by the Interchange FFI.
-pub mod photometry;
 pub mod mesh_payload;
+pub mod photometry;
 
 // Datasmith-era modules — abandoned, kept compiling until clean removal.
 pub mod coords;
-pub mod mesh;
 pub mod datasmith;
+pub mod mesh;
 
 // C ABI surface for the Unreal Interchange plugin.
 pub mod ffi;
+pub mod ffi_l3d;
+pub mod ffi_photometry;
 
 pub use error::{ExportError, Result};
 pub use exporter::{export_gldf_to_datasmith, BundleArtifact, ExportReport, Exporter};

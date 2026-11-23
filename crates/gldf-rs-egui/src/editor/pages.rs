@@ -306,9 +306,7 @@ pub fn files(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
             if app.rename_target.as_ref().map(|(k, id)| (*k, id.as_str()))
                 == Some(("file", sel_id.as_str()))
             {
-                ui.add(
-                    egui::TextEdit::singleline(&mut app.rename_buf).desired_width(140.0),
-                );
+                ui.add(egui::TextEdit::singleline(&mut app.rename_buf).desired_width(140.0));
                 if ui.button("Apply").clicked() && !app.rename_buf.trim().is_empty() {
                     let new_id = app.rename_buf.trim().to_string();
                     app.dispatch(GldfAction::RenameFile {
@@ -424,9 +422,7 @@ pub fn photometries(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
                             .map(|r| r.file_id.clone());
                         let file_name = file_id
                             .as_deref()
-                            .and_then(|fid| {
-                                gd.files.file.iter().find(|f| f.id == fid)
-                            })
+                            .and_then(|fid| gd.files.file.iter().find(|f| f.id == fid))
                             .map(|f| f.file_name.clone())
                             .unwrap_or_default();
                         Row {
@@ -441,7 +437,9 @@ pub fn photometries(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
     };
 
     if rows.is_empty() {
-        ui.weak("No photometries yet — drop an .ldt/.ies file anywhere or add one on the Files page.");
+        ui.weak(
+            "No photometries yet — drop an .ldt/.ies file anywhere or add one on the Files page.",
+        );
         return;
     }
     if app.sel_photometry >= rows.len() {
@@ -557,7 +555,8 @@ pub fn light_sources(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
     ui.collapsing("+ Add fixed light source", |ui| {
         let id = egui::Id::new("new-ls");
         let mut name: String = ui.memory_mut(|m| m.data.get_temp(id.with("n")).unwrap_or_default());
-        let mut power: String = ui.memory_mut(|m| m.data.get_temp(id.with("p")).unwrap_or_default());
+        let mut power: String =
+            ui.memory_mut(|m| m.data.get_temp(id.with("p")).unwrap_or_default());
         kv_grid(ui, "ls-new", |ui| {
             ui.label("Name");
             ui.text_edit_singleline(&mut name);
@@ -572,9 +571,11 @@ pub fn light_sources(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
         });
         if ui.button("Add").clicked() {
             use gldf_rs::gldf::general_definitions::lightsources::FixedLightSource;
-            let mut ls = FixedLightSource::default();
-            ls.name = locale_from(&name);
-            ls.rated_input_power = power.trim().parse::<f64>().ok();
+            let ls = FixedLightSource {
+                name: locale_from(&name),
+                rated_input_power: power.trim().parse::<f64>().ok(),
+                ..Default::default()
+            };
             app.dispatch(GldfAction::AddFixedLightSource {
                 payload: Box::new(ls),
             });
@@ -841,7 +842,11 @@ pub fn variants(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
             let label = format!(
                 "{}  ·  {}",
                 row.id,
-                if row.name.is_empty() { "—" } else { &row.name }
+                if row.name.is_empty() {
+                    "—"
+                } else {
+                    &row.name
+                }
             );
             if ui.selectable_label(app.sel_variant == i, label).clicked() {
                 app.sel_variant = i;
@@ -897,9 +902,7 @@ pub fn variants(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
                     ui.horizontal(|ui| {
                         let id = egui::Id::new("variant-geo-pick");
                         let mut pick: String = ui.memory_mut(|m| {
-                            m.data
-                                .get_temp(id)
-                                .unwrap_or_else(|| geometries[0].clone())
+                            m.data.get_temp(id).unwrap_or_else(|| geometries[0].clone())
                         });
                         egui::ComboBox::from_id_salt("variant-geo")
                             .selected_text(pick.clone())
@@ -920,5 +923,126 @@ pub fn variants(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
                 }
             }
         }
+    });
+}
+
+// ---------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------
+
+/// Engine + canonical + XSD findings for the current state, with an
+/// rc-3 / rc-4 schema switch. Mirrors the WASM validation banner; the
+/// bucketing lives in `gldf_rs_editor::validation_report`.
+pub fn validation(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
+    use gldf_rs::validation::GldfSchemaVersion;
+    use gldf_rs_editor::ValidationReport;
+
+    ui.heading(app.t("gldf.nav.validation"));
+    ui.add_space(8.0);
+
+    ui.horizontal(|ui| {
+        ui.label(app.t("gldf.validation.schema"));
+        let mut schema = app.validation_schema;
+        egui::ComboBox::from_id_salt("validation-schema")
+            .selected_text(ValidationReport::schema_label(schema))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut schema, GldfSchemaVersion::Rc3, "rc-3 (published)");
+                ui.selectable_value(
+                    &mut schema,
+                    GldfSchemaVersion::Rc4,
+                    "rc-4 (proposed, GLDF PR #30)",
+                );
+            });
+        if schema != app.validation_schema {
+            app.validation_schema = schema;
+            app.validation_cache = None;
+        }
+        if ui.button(app.t("gldf.validation.refresh")).clicked() {
+            app.validation_cache = None;
+        }
+    });
+    ui.add_space(8.0);
+
+    let report = app.validation_report().clone();
+    let schema_label = ValidationReport::schema_label(report.schema);
+    if report.is_clean() {
+        ui.colored_label(
+            egui::Color32::from_rgb(0x3c, 0xb0, 0x43),
+            format!("✓ {} ({schema_label})", app.t("gldf.validation.clean")),
+        );
+        return;
+    }
+
+    let error_color = ui.visuals().error_fg_color;
+    let warn_color = ui.visuals().warn_fg_color;
+    let text_color = ui.visuals().text_color();
+    let headline_color = if report.error_count() > 0 {
+        error_color
+    } else if !report.warnings.is_empty() {
+        warn_color
+    } else {
+        text_color
+    };
+    ui.colored_label(headline_color, report.headline());
+    if let Some(err) = &report.xsd_error {
+        ui.colored_label(error_color, format!("XSD: {err}"));
+    }
+    ui.add_space(6.0);
+
+    findings_section(
+        ui,
+        "validation-errors",
+        &app.t("gldf.validation.errors"),
+        &report.errors,
+        error_color,
+    );
+    findings_section(
+        ui,
+        "validation-xsd",
+        &app.t("gldf.validation.xsd"),
+        &report.xsd,
+        error_color,
+    );
+    findings_section(
+        ui,
+        "validation-warnings",
+        &app.t("gldf.validation.warnings"),
+        &report.warnings,
+        warn_color,
+    );
+    findings_section(
+        ui,
+        "validation-notes",
+        &app.t("gldf.validation.notes"),
+        &report.info,
+        text_color,
+    );
+}
+
+fn findings_section(
+    ui: &mut egui::Ui,
+    id: &str,
+    title: &str,
+    rows: &[gldf_rs_editor::ValidationRow],
+    color: egui::Color32,
+) {
+    if rows.is_empty() {
+        return;
+    }
+    egui::CollapsingHeader::new(
+        egui::RichText::new(format!("{title} ({})", rows.len())).color(color),
+    )
+    .id_salt(id)
+    .default_open(true)
+    .show(ui, |ui| {
+        kv_grid(ui, &format!("{id}-grid"), |ui| {
+            for row in rows {
+                ui.monospace(&row.location);
+                // XSD enum messages list every allowed value; wrap so
+                // they stay readable instead of clipping at the edge.
+                ui.add(egui::Label::new(&row.message).wrap());
+                ui.end_row();
+            }
+        });
     });
 }

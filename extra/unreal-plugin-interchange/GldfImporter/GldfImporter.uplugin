@@ -3,7 +3,7 @@
   "Version": 1,
   "VersionName": "0.0.1",
   "FriendlyName": "GLDF Importer (Interchange)",
-  "Description": "Native UE 5.7 Interchange translator for GLDF (Global Lighting Data Format) luminaire files. Imports .gldf as UTextureLightProfile + UStaticMesh + AActor assets. Phase 1: IES only.",
+  "Description": "Native UE 5.7 Interchange importer for GLDF (Global Lighting Data Format) luminaire files: one draggable luminaire actor per .gldf with body mesh, one IES light per emitter, and runtime variant switching. GldfRuntime + GldfSearch ship in packaged games (runtime .gldf loading, gldf-search.de web panel); GldfImporter/GldfSearchEditor are editor-only.",
   "Category": "Importers",
   "CreatedBy": "gldf-rs project",
   "CreatedByURL": "https://github.com/holg/gldf-rs",
@@ -17,12 +17,22 @@
   "Installed": false,
   "Modules": [
     {
+      "Name": "GldfRuntime",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
       "Name": "GldfImporter",
       "Type": "Editor",
       "LoadingPhase": "Default"
     },
     {
       "Name": "GldfSearch",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "GldfSearchEditor",
       "Type": "Editor",
       "LoadingPhase": "Default"
     }
@@ -30,6 +40,10 @@
   "Plugins": [
     {
       "Name": "Interchange",
+      "Enabled": true
+    },
+    {
+      "Name": "ProceduralMeshComponent",
       "Enabled": true
     }
   ]

@@ -31,7 +31,9 @@ pub fn LightSourceExportMenu(
     let ls_id = light_source_id.clone();
 
     let on_pick = move |e: crate::components::edit_util::EditEvent| {
-        let Some(format) = crate::components::edit_util::event_value(&e) else { return };
+        let Some(format) = crate::components::edit_util::event_value(&e) else {
+            return;
+        };
         // Reset to placeholder so the same format can be picked twice
         // in a row without the change event being suppressed.
         #[cfg(target_arch = "wasm32")]
@@ -93,7 +95,11 @@ fn trigger_download(state: GldfContext, ls_id: &str, format: &str) -> Result<()>
             }
             "ifc" => {
                 let text = ls_export::export_ifc_fragment(&s.product, &s.embedded_files, ls_id)?;
-                Ok((format!("{ls_id}.ifc"), "application/x-step", text.into_bytes()))
+                Ok((
+                    format!("{ls_id}.ifc"),
+                    "application/x-step",
+                    text.into_bytes(),
+                ))
             }
             other => Err(anyhow::anyhow!("Unknown export format: {other}")),
         }

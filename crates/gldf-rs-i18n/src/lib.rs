@@ -115,9 +115,8 @@ impl Translator for GldfStaticTranslator {
 }
 
 fn parse_locale(path: &str, json: &str) -> LocaleMap {
-    serde_json::from_str(json).unwrap_or_else(|e| {
-        panic!("bundled locale file '{}' failed to parse: {}", path, e)
-    })
+    serde_json::from_str(json)
+        .unwrap_or_else(|e| panic!("bundled locale file '{}' failed to parse: {}", path, e))
 }
 
 #[cfg(test)]
@@ -150,10 +149,7 @@ mod tests {
     fn nav_overview_english_fallback_for_unknown_lang() {
         let t = GldfStaticTranslator::new();
         // Unknown language code → English fallback
-        assert_eq!(
-            t.t("gldf.nav.overview", "ja"),
-            Some("Overview".to_string())
-        );
+        assert_eq!(t.t("gldf.nav.overview", "ja"), Some("Overview".to_string()));
     }
 
     #[test]
@@ -195,8 +191,14 @@ mod tests {
     fn bcp47_stem_matching() {
         let t = GldfStaticTranslator::new();
         // de-AT should pick up the German table
-        assert_eq!(t.t("gldf.nav.overview", "de-AT"), Some("Übersicht".to_string()));
-        assert_eq!(t.t("gldf.nav.overview", "de-CH"), Some("Übersicht".to_string()));
+        assert_eq!(
+            t.t("gldf.nav.overview", "de-AT"),
+            Some("Übersicht".to_string())
+        );
+        assert_eq!(
+            t.t("gldf.nav.overview", "de-CH"),
+            Some("Übersicht".to_string())
+        );
     }
 
     #[test]

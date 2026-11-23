@@ -100,8 +100,7 @@ fn validator(version: GldfSchemaVersion) -> XsdResult<&'static uppsala::XsdValid
 
     let compile = |xsd: &str| -> Result<uppsala::XsdValidator, String> {
         let doc = uppsala::parse(xsd).map_err(|e| format!("parse xsd: {e:?}"))?;
-        uppsala::XsdValidator::from_schema(&doc)
-            .map_err(|e| format!("compile xsd: {e:?}"))
+        uppsala::XsdValidator::from_schema(&doc).map_err(|e| format!("compile xsd: {e:?}"))
     };
 
     let cached = match version {
@@ -145,8 +144,8 @@ pub fn validate_gldf_archive_with_schema(
 ) -> XsdResult<Vec<XsdFinding>> {
     use std::io::Read;
     let reader = std::io::Cursor::new(bytes);
-    let mut zip = zip::ZipArchive::new(reader)
-        .map_err(|e| XsdError::Archive(format!("open zip: {e}")))?;
+    let mut zip =
+        zip::ZipArchive::new(reader).map_err(|e| XsdError::Archive(format!("open zip: {e}")))?;
     let mut entry = zip
         .by_name("product.xml")
         .map_err(|e| XsdError::Archive(format!("no product.xml: {e}")))?;

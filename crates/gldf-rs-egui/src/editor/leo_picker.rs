@@ -63,13 +63,10 @@ pub fn leo_plan_picker(
     geometry_id: &str,
 ) {
     // --- Data snapshot (cloned; dispatches happen after rendering) ---
-    let leos: Vec<LeoFootprint> = resolve_l3d_bytes(
-        &app.state.product,
-        &app.state.embedded_files,
-        geometry_id,
-    )
-    .map(|bytes| gldf_rs::extract_leos(&bytes).unwrap_or_default())
-    .unwrap_or_default();
+    let leos: Vec<LeoFootprint> =
+        resolve_l3d_bytes(&app.state.product, &app.state.embedded_files, geometry_id)
+            .map(|bytes| gldf_rs::extract_leos(&bytes).unwrap_or_default())
+            .unwrap_or_default();
 
     if leos.is_empty() {
         ui.weak("No Light Emitting Objects found in this L3D.");
@@ -407,11 +404,7 @@ fn new_emitter_form(
                 .selected_text(sel_name)
                 .show_ui(ui, |ui| {
                     for (pid, fname) in photometries {
-                        ui.selectable_value(
-                            &mut app.leo_form.photometry_id,
-                            pid.clone(),
-                            fname,
-                        );
+                        ui.selectable_value(&mut app.leo_form.photometry_id, pid.clone(), fname);
                     }
                 });
             ui.end_row();
@@ -446,7 +439,11 @@ fn new_emitter_form(
             ui.end_row();
 
             ui.label("Flux (lm)");
-            ui.add(egui::DragValue::new(&mut app.leo_form.flux).range(0..=200_000).speed(50));
+            ui.add(
+                egui::DragValue::new(&mut app.leo_form.flux)
+                    .range(0..=200_000)
+                    .speed(50),
+            );
             ui.end_row();
         });
 

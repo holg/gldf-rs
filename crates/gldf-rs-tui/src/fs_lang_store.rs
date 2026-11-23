@@ -15,6 +15,12 @@ pub struct FsLangStore {
     path: PathBuf,
 }
 
+impl Default for FsLangStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FsLangStore {
     pub fn new() -> Self {
         let dir = dirs::config_dir()

@@ -228,9 +228,8 @@ impl TemplateEditor {
     fn apply_json_to_form(&mut self) {
         match serde_json::from_str::<serde_json::Value>(&self.json_text)
             .map_err(|e| e.to_string())
-            .and_then(|v| {
-                TemplateDraft::from_template_value(&v).map_err(|e| format!("{:#}", e))
-            }) {
+            .and_then(|v| TemplateDraft::from_template_value(&v).map_err(|e| format!("{:#}", e)))
+        {
             Ok(form) => {
                 self.emitter_name = form
                     .draft
@@ -345,9 +344,7 @@ impl TemplateEditor {
         ui.strong("Emitter & variant");
         egui::Grid::new("tpl-var").num_columns(2).show(ui, |ui| {
             ui.label("Emitter name");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.emitter_name).hint_text("Primary (auto)"),
-            );
+            ui.add(egui::TextEdit::singleline(&mut self.emitter_name).hint_text("Primary (auto)"));
             ui.end_row();
             ui.label("Variant name");
             ui.add(
@@ -424,7 +421,11 @@ impl TemplateEditor {
         ui.strong("Shared files (applied to every output)");
         egui::Grid::new("tpl-files").num_columns(2).show(ui, |ui| {
             for (label, field, filters) in [
-                ("Geometry (.l3d)", &mut self.form.geometry_file, &["l3d"][..]),
+                (
+                    "Geometry (.l3d)",
+                    &mut self.form.geometry_file,
+                    &["l3d"][..],
+                ),
                 (
                     "Sensor sheet",
                     &mut self.form.sensor_file,

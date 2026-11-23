@@ -34,6 +34,38 @@
  */
 #define GLDF_VARIANT_FIELD_NAME 3
 
+/*
+ The variant's own product number (`Variant.ProductNumber`, localized → en/first).
+ */
+#define GLDF_VARIANT_FIELD_PRODUCT_NUMBER 4
+
+/*
+ The variant's GTIN (empty when the GLDF has none).
+ */
+#define GLDF_VARIANT_FIELD_GTIN 5
+
+/*
+ Field selector for [`gldf_unreal_product_string`] (product-level data).
+ */
+#define GLDF_PRODUCT_FIELD_MANUFACTURER 0
+
+#define GLDF_PRODUCT_FIELD_NAME 1
+
+#define GLDF_PRODUCT_FIELD_NUMBER 2
+
+/*
+ `GldfMountingInfo::kind` values — the variant's primary mounting surface.
+ */
+#define GLDF_MOUNTING_NONE 0
+
+#define GLDF_MOUNTING_CEILING 1
+
+#define GLDF_MOUNTING_WALL 2
+
+#define GLDF_MOUNTING_GROUND 3
+
+#define GLDF_MOUNTING_WORKING_PLANE 4
+
 #define GLDF_LEO_POINT 0
 
 #define GLDF_LEO_RECTANGLE 1
@@ -126,6 +158,47 @@ typedef struct GldfVariantInfo {
 } GldfVariantInfo;
 
 /*
+ One variant's GLDF `Mountings`, flattened for the UE placement code.
+
+ `kind` is the primary surface (`GLDF_MOUNTING_*`; wall wins over ceiling
+ over ground when a product lists several, because wall carries an explicit
+ mounting height). Every length is millimetres with a `*_present` flag so
+ the consumer can tell "0 mm" from "not specified":
+
+ * `recessed_depth_mm` — ceiling/wall `Recessed recessedDepth`: how far the
+   body sinks INTO the mounting surface (SLV Tria 2: 11 mm).
+ * `pendant_length_mm` — ceiling `Pendant pendantLength`: how far below the
+   ceiling the luminaire hangs.
+ * `mounting_height_mm` — wall `mountingHeight`: height of the mounting
+   point above the floor.
+ * `pole_height_mm` — ground `PoleTop`/`PoleIntegrated` pole height.
+ * `surface_mounted` / `free_standing` / `pole_top` / `pole_integrated` — the
+   flag-only mounting kinds. Street luminaires often declare `<PoleTop/>`
+   WITHOUT a poleHeight; the consumer then applies its own default pole.
+ */
+typedef struct GldfMountingInfo {
+  uint8_t kind;
+  uint8_t surface_mounted;
+  uint8_t free_standing;
+  /*
+   Ground `<PoleTop/>` declared (even without a poleHeight).
+   */
+  uint8_t pole_top;
+  /*
+   Ground `<PoleIntegrated/>` declared (even without a poleHeight).
+   */
+  uint8_t pole_integrated;
+  uint8_t recessed_depth_present;
+  uint8_t pendant_length_present;
+  uint8_t mounting_height_present;
+  uint8_t pole_height_present;
+  int32_t recessed_depth_mm;
+  int32_t pendant_length_mm;
+  int32_t mounting_height_mm;
+  int32_t pole_height_mm;
+} GldfMountingInfo;
+
+/*
  `kind`: 0 = Point/none, 1 = Rectangle, 2 = Circle.
  For Rectangle, `dim_a`/`dim_b` are width/height in **metres**.
  For Circle, `dim_a` is the diameter in metres (`dim_b` unused).
@@ -159,6 +232,103 @@ typedef struct GldfLeoShape {
   float az_y;
   float az_z;
 } GldfLeoShape;
+
+/*
+ One emitter's pose for [`gldf_unreal_illuminance_grid`], metres.
+ */
+typedef struct GldfEmitterPose {
+  uint64_t ldc;
+  double pos_x;
+  double pos_y;
+  double pos_z;
+  /*
+   Photometric nadir (γ = 0) direction — where a downlight points.
+   */
+  double nadir_x;
+  double nadir_y;
+  double nadir_z;
+  /*
+   C = 0° half-plane direction (perpendicular to nadir).
+   */
+  double c0_x;
+  double c0_y;
+  double c0_z;
+  /*
+   C = 90° half-plane direction (perpendicular to both).
+   */
+  double c90_x;
+  double c90_y;
+  double c90_z;
+  /*
+   Dimming / maintenance factor applied to this emitter (1 = nominal).
+   */
+  double factor;
+} GldfEmitterPose;
+
+/*
+ A planar receiver grid, metres. Cell (ix, iy) centre =
+ origin + u·(ix + 0.5) + v·(iy + 0.5); `u`/`v` are full cell vectors.
+ */
+typedef struct GldfGridSpec {
+  double origin_x;
+  double origin_y;
+  double origin_z;
+  double u_x;
+  double u_y;
+  double u_z;
+  double v_x;
+  double v_y;
+  double v_z;
+  double normal_x;
+  double normal_y;
+  double normal_z;
+  uint32_t nx;
+  uint32_t ny;
+} GldfGridSpec;
+
+/*
+ One L3D node. `parent` is -1 for the root. `axis_mask` bit 0/1/2 =
+ the joint rotates about its local X/Y/Z (limits in `axis_min/max/step`,
+ degrees); 0 for geometry nodes.
+ */
+typedef struct GldfL3dNode {
+  int32_t parent;
+  uint8_t is_joint;
+  uint8_t has_mesh;
+  uint8_t axis_mask;
+  uint8_t has_default_rotation;
+  /*
+   parent_world · local, column-major, translation in cm.
+   */
+  float world[16];
+  /*
+   Rest transform relative to the parent node, column-major, translation in cm.
+   */
+  float local[16];
+  /*
+   The authored rest pose: position in cm and rotation in degrees
+   (X, then Y, then Z) relative to the parent node.
+   */
+  float local_pos_cm[3];
+  float local_rot_deg[3];
+  float axis_min[3];
+  float axis_max[3];
+  float axis_step[3];
+  /*
+   Joint `DefaultRotation` in degrees (valid when `has_default_rotation`).
+   */
+  float default_rotation_deg[3];
+} GldfL3dNode;
+
+/*
+ A LEO with the index of the geometry node that carries it. `shape` is
+ the same world pose `gldf_unreal_leo_at` reports (cm, L3D frame, rest
+ pose of all joints).
+ */
+typedef struct GldfL3dLeo {
+  int32_t node;
+  struct GldfLeoShape shape;
+} GldfL3dLeo;
 
 #ifdef __cplusplus
 extern "C" {
@@ -320,6 +490,17 @@ uint64_t gldf_unreal_variants_open(const char *gldf_path,
 int32_t gldf_unreal_variant_info(uint64_t handle, uint32_t idx, struct GldfVariantInfo *out);
 
 /*
+ Fill `*out` with variant `idx`'s GLDF mounting info (see
+ [`GldfMountingInfo`]). Returns 0 on success, non-zero if the handle or
+ index is invalid. A variant without `<Mountings>` succeeds with
+ `kind == GLDF_MOUNTING_NONE` and every `*_present` flag 0.
+
+ # Safety
+ `handle` must be live; `out` may be null.
+ */
+int32_t gldf_unreal_variant_mounting(uint64_t handle, uint32_t idx, struct GldfMountingInfo *out);
+
+/*
  Return a string field (`GLDF_VARIANT_FIELD_*`) for variant `idx` as a
  Rust CString (caller frees via [`gldf_unreal_string_free`]). Null on
  invalid handle / index / field.
@@ -347,7 +528,16 @@ int32_t gldf_unreal_variant_ies(uint64_t handle,
 
  # Safety
  `handle` must be live.
+ Product-level string (`GLDF_PRODUCT_FIELD_*`: manufacturer, product name,
+ product number) as a Rust CString (caller frees via
+ [`gldf_unreal_string_free`]). Null on invalid handle / field; an empty
+ string when the GLDF has no such value.
+
+ # Safety
+ `handle` must be live.
  */
+char *gldf_unreal_product_string(uint64_t handle, uint32_t field);
+
 int32_t gldf_unreal_variant_emitter_count(uint64_t handle, uint32_t idx);
 
 /*
@@ -438,6 +628,109 @@ int32_t gldf_unreal_leo_at(const char *gldf_path, uint32_t idx, struct GldfLeoSh
  `gldf_path` is a NUL-terminated UTF-8 C string.
  */
 char *gldf_unreal_leo_part_name(const char *gldf_path, uint32_t idx);
+
+/*
+ Parse IES/LDT text bytes into a photometry handle (0 on failure).
+
+ # Safety
+ `bytes` points to `len` readable bytes.
+ */
+uint64_t gldf_unreal_ldc_open(const uint8_t *bytes, uintptr_t len);
+
+/*
+ Luminous flux (lm) of the photometry behind `handle`; 0 if unknown handle.
+ */
+double gldf_unreal_ldc_flux_lm(uint64_t handle);
+
+/*
+ Absolute luminous intensity (cd) toward photometric angles `c_deg`
+ (0..360) and `gamma_deg` (0 = nadir, 180 = zenith). Symmetry-aware and
+ interpolated by the eulumdat core. 0 for an unknown handle.
+ */
+double gldf_unreal_ldc_intensity_cd(uint64_t handle, double c_deg, double gamma_deg);
+
+/*
+ Release a photometry handle.
+ */
+void gldf_unreal_ldc_close(uint64_t handle);
+
+/*
+ Direct illuminance (lux) of every emitter on every grid cell.
+
+ `out_lux` must hold `n_emitters * nx * ny` doubles, laid out
+ `[emitter][iy][ix]`. Optional `cell_z` (nx*ny doubles, may be null)
+ overrides each cell's height along the grid normal — lets the caller
+ drape the grid over uneven ground it measured itself. Returns 0 on
+ success, 1 on bad arguments.
+
+ # Safety
+ Pointers must be valid for the stated counts.
+ */
+int32_t gldf_unreal_illuminance_grid(const struct GldfEmitterPose *emitters,
+                                     uint32_t n_emitters,
+                                     const struct GldfGridSpec *grid,
+                                     const double *cell_offsets,
+                                     double *out_lux);
+
+/*
+ Open the articulated structure of the GLDF's first L3D. Returns a
+ non-zero handle and writes the node / LEO counts; 0 and `*out_err` on
+ failure (caller frees via `gldf_unreal_string_free`).
+
+ # Safety
+ `gldf_path` is a NUL-terminated UTF-8 C string; out-pointers may be null.
+ */
+uint64_t gldf_unreal_l3d_open(const char *gldf_path,
+                              uint32_t *out_node_count,
+                              uint32_t *out_leo_count,
+                              char **out_err);
+
+/*
+ Fill `*out` with node `idx`. Returns 0 on success, non-zero on an unknown
+ handle / index.
+
+ # Safety
+ `handle` must be live; `out` may be null.
+ */
+int32_t gldf_unreal_l3d_node(uint64_t handle, uint32_t idx, struct GldfL3dNode *out);
+
+/*
+ Node `idx`'s `partName` as a Rust CString (free via
+ `gldf_unreal_string_free`); null on an unknown handle / index.
+
+ # Safety
+ `handle` must be live.
+ */
+char *gldf_unreal_l3d_node_name(uint64_t handle, uint32_t idx);
+
+/*
+ Open node `idx`'s part mesh (node-local frame, cm) as a MESH handle for
+ `gldf_unreal_mesh_borrow` / `gldf_unreal_mesh_close`. Returns 0 when the
+ node has no mesh (joints, missing assets).
+
+ # Safety
+ `handle` must be live; `out_header` may be null.
+ */
+uint64_t gldf_unreal_l3d_node_mesh_open(uint64_t handle,
+                                        uint32_t idx,
+                                        struct GldfMeshHeader *out_header);
+
+/*
+ Fill `*out` with LEO `idx` (owning node + rest-pose world shape).
+ Returns 0 on success, non-zero on an unknown handle / index.
+
+ # Safety
+ `handle` must be live; `out` may be null.
+ */
+int32_t gldf_unreal_l3d_leo(uint64_t handle, uint32_t idx, struct GldfL3dLeo *out);
+
+/*
+ Drop an L3D structure handle. No-op on zero / unknown.
+
+ # Safety
+ `handle` must be from `gldf_unreal_l3d_open` or 0.
+ */
+void gldf_unreal_l3d_close(uint64_t handle);
 
 #ifdef __cplusplus
 }  // extern "C"

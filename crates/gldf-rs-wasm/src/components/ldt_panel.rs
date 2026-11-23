@@ -108,9 +108,8 @@ pub fn LdtPanel(
     // updates both renderings in lockstep. The bytes are cloned twice
     // because each `Signal::derive` closure captures by move.
     let bytes_inline = bytes.clone();
-    let svg_inline = Signal::derive(move || {
-        generate_ldt_svg(&bytes_inline, width, height, view.get())
-    });
+    let svg_inline =
+        Signal::derive(move || generate_ldt_svg(&bytes_inline, width, height, view.get()));
     let bytes_zoom = bytes.clone();
     let svg_zoom = Signal::derive(move || {
         // Big render for the modal — same shape eulumdat-rs uses when the
@@ -228,8 +227,7 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view: LdtView) -> St
     // read_with_encoding_fallback shape via the shared helper.
     let (content, _decode_kind) =
         crate::components::photometry_decode::decode_photometry_bytes(buffer);
-    let ldt = match crate::components::photometry_decode::parse_photometry_with_fallback(&content)
-    {
+    let ldt = match crate::components::photometry_decode::parse_photometry_with_fallback(&content) {
         Some((ldt, _kind)) => ldt,
         None => return error_svg(width, height, "Could not parse as IES or EULUMDAT"),
     };
@@ -238,21 +236,26 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view: LdtView) -> St
     let summary = PhotometricSummary::from_eulumdat(&ldt);
 
     match view {
-        LdtView::Polar => PolarDiagram::from_eulumdat(&ldt)
-            .to_svg_with_summary(width, height, &theme, &summary),
+        LdtView::Polar => {
+            PolarDiagram::from_eulumdat(&ldt).to_svg_with_summary(width, height, &theme, &summary)
+        }
         LdtView::Cartesian => CartesianDiagram::from_eulumdat(&ldt, width, height, 8)
             .to_svg_with_summary(width, height, &theme, &summary),
         LdtView::Heatmap => HeatmapDiagram::from_eulumdat(&ldt, width, height)
             .to_svg_with_summary(width, height, &theme, &summary),
-        LdtView::Butterfly => ButterflyDiagram::from_eulumdat(&ldt, width, height, 60.0)
-            .to_svg(width, height, &theme),
-        LdtView::Bug => BugDiagram::from_eulumdat(&ldt)
-            .to_svg_with_details(width.max(550.0), height, &theme),
-        LdtView::Lcs => BugDiagram::from_eulumdat(&ldt)
-            .to_lcs_svg(width.max(510.0), height, &theme),
+        LdtView::Butterfly => {
+            ButterflyDiagram::from_eulumdat(&ldt, width, height, 60.0).to_svg(width, height, &theme)
+        }
+        LdtView::Bug => {
+            BugDiagram::from_eulumdat(&ldt).to_svg_with_details(width.max(550.0), height, &theme)
+        }
+        LdtView::Lcs => {
+            BugDiagram::from_eulumdat(&ldt).to_lcs_svg(width.max(510.0), height, &theme)
+        }
         LdtView::Cone => ConeDiagram::from_eulumdat(&ldt, 8.0).to_svg(width, height, &theme),
-        LdtView::Isocandela => IsocandelaDiagram::from_eulumdat(&ldt, width, height)
-            .to_svg(width, height, &theme),
+        LdtView::Isocandela => {
+            IsocandelaDiagram::from_eulumdat(&ldt, width, height).to_svg(width, height, &theme)
+        }
         LdtView::Isolux => {
             let params = IsoluxParams {
                 mounting_height: 8.0,
@@ -261,8 +264,7 @@ fn generate_ldt_svg(buffer: &[u8], width: f64, height: f64, view: LdtView) -> St
                 area_half_depth: 20.0,
                 grid_resolution: 50,
             };
-            IsoluxDiagram::from_eulumdat(&ldt, width, height, params)
-                .to_svg(width, height, &theme)
+            IsoluxDiagram::from_eulumdat(&ldt, width, height, params).to_svg(width, height, &theme)
         }
         LdtView::Floodlight => {
             FloodlightCartesianDiagram::from_eulumdat(&ldt, width, height, YScale::Linear)

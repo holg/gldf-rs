@@ -98,8 +98,7 @@ pub mod photometry;
 #[cfg(feature = "eulumdat")]
 pub use photometry::{
     export_photometry, patch_ldt_for_variant, patch_photometry_for_variant,
-    resolve_variant_photometries, PhotometryExportFormat,
-    VariantPhotometryResolution,
+    resolve_variant_photometries, PhotometryExportFormat, VariantPhotometryResolution,
 };
 
 /// Format-specific export helpers (per-LightSource LDT/IES/TM-33/IFC).
@@ -390,10 +389,10 @@ impl GldfProduct {
     /// Serialize this `GldfProduct` back into a `.gldf` zip buffer.
     ///
     /// Reads the original `.gldf` (whose path was recorded on
-    /// [`load_gldf`]) and produces a new zip with **only the
+    /// [`Self::load_gldf`]) and produces a new zip with **only the
     /// `product.xml` entry replaced** by `self.to_xml_with_schema(...)`;
     /// every other entry (LDC files, images, geometries, spectra) is
-    /// copied through with [`ZipWriter::raw_copy_file`], preserving
+    /// copied through with [`zip::ZipWriter::raw_copy_file`], preserving
     /// compression and CRCs so we don't recompress untouched files.
     ///
     /// The schema version written matches the source: a
@@ -403,7 +402,7 @@ impl GldfProduct {
     /// version of the file on disk.
     ///
     /// Requires `self.path` to be non-empty — i.e. this `GldfProduct`
-    /// originated from [`load_gldf`] (path-based load), not from
+    /// originated from [`Self::load_gldf`] (path-based load), not from
     /// `load_gldf_from_buf` (which leaves `path` empty and so has no
     /// source zip to copy non-XML entries from).
     pub fn to_buf(&self) -> anyhow::Result<Vec<u8>> {
@@ -431,7 +430,10 @@ impl GldfProduct {
             // The file size on disk is a tight upper bound for the new
             // archive in practice: only product.xml grows/shrinks, and
             // a manufacturer-rename rarely changes its size meaningfully.
-            std::fs::metadata(&self.path).map(|m| m.len() as usize).unwrap_or(0).max(8 * 1024),
+            std::fs::metadata(&self.path)
+                .map(|m| m.len() as usize)
+                .unwrap_or(0)
+                .max(8 * 1024),
         );
         {
             let cursor = std::io::Cursor::new(&mut out_buf);
@@ -468,13 +470,13 @@ impl GldfProduct {
 
     /// Save this `GldfProduct` to disk at `path`, replacing the
     /// `product.xml` entry inside the zip while preserving every other
-    /// file unchanged. Companion to [`load_gldf`].
+    /// file unchanged. Companion to [`Self::load_gldf`].
     ///
     /// Writes via a sibling temp file + atomic rename, so a crash mid-
     /// write can't leave a corrupt `.gldf` on disk. Safe to call with
     /// `path == self.path` (the common "patch in place" case): we
     /// finish reading the source zip into the in-memory buffer in
-    /// [`to_buf`] before any write, so we never overwrite a file we're
+    /// [`Self::to_buf`] before any write, so we never overwrite a file we're
     /// still reading.
     pub fn save_gldf(&self, path: &str) -> anyhow::Result<()> {
         let buf = self.to_buf()?;
@@ -486,9 +488,7 @@ impl GldfProduct {
         let parent = dest.parent().unwrap_or_else(|| Path::new("."));
         let tmp_name = format!(
             "{}.tmp.{}",
-            dest.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("gldf"),
+            dest.file_name().and_then(|n| n.to_str()).unwrap_or("gldf"),
             std::process::id()
         );
         let tmp = parent.join(tmp_name);

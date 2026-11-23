@@ -19,7 +19,6 @@ use gldf_rs::EditableGldf;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 /// State of the GLDF editor.
 ///
 /// `product` + `embedded_files` together mirror `gldf_rs::EditableGldf`. We keep
@@ -153,7 +152,6 @@ impl GldfState {
     }
 }
 
-
 /// In-place dispatcher. The Yew side cloned `*self` into `new_state`,
 /// mutated, then re-wrapped in `Rc::new`; we mutate `&mut self` directly
 /// because the Leptos `RwSignal::update(|s| s.apply(action))` closure already
@@ -163,7 +161,6 @@ impl GldfState {
     pub fn apply(&mut self, action: GldfAction) {
         let prev_modified = self.is_modified;
         self.is_modified = true;
-
 
         match action {
             GldfAction::Load(product) => {
@@ -207,10 +204,7 @@ impl GldfState {
                         );
                         self.take_from_editable(editable);
                         if let Err(e) = fill_outcome {
-                            log::warn!(
-                                "Photometry summary unavailable for {}: {}",
-                                filename, e
-                            );
+                            log::warn!("Photometry summary unavailable for {}: {}", filename, e);
                         }
                         self.last_error = None;
                     }
@@ -257,9 +251,8 @@ impl GldfState {
                 let ls = match self.product.general_definitions.light_sources.as_mut() {
                     Some(ls) => ls,
                     None => {
-                        self.last_error = Some(format!(
-                            "Set spectrum: no light sources in this GLDF"
-                        ));
+                        self.last_error =
+                            Some("Set spectrum: no light sources in this GLDF".to_string());
                         self.is_modified = prev_modified;
                         return;
                     }
@@ -303,9 +296,8 @@ impl GldfState {
                 let ls = match self.product.general_definitions.light_sources.as_mut() {
                     Some(ls) => ls,
                     None => {
-                        self.last_error = Some(
-                            "Set photometry: no light sources in this GLDF".to_string(),
-                        );
+                        self.last_error =
+                            Some("Set photometry: no light sources in this GLDF".to_string());
                         self.is_modified = prev_modified;
                         return;
                     }
@@ -374,17 +366,15 @@ impl GldfState {
                     self.is_modified = prev_modified;
                 }
             }
-            GldfAction::RemoveVariant { id } => {
-                match self.product.remove_variant(&id) {
-                    Ok(_) => {
-                        self.last_error = None;
-                    }
-                    Err(e) => {
-                        self.last_error = Some(format!("Remove variant: {}", e));
-                        self.is_modified = prev_modified;
-                    }
+            GldfAction::RemoveVariant { id } => match self.product.remove_variant(&id) {
+                Ok(_) => {
+                    self.last_error = None;
                 }
-            }
+                Err(e) => {
+                    self.last_error = Some(format!("Remove variant: {}", e));
+                    self.is_modified = prev_modified;
+                }
+            },
             GldfAction::DuplicateVariant { src_idx } => {
                 let new_id = self.product.generate_unique_id("variant");
                 let dup: Option<gldf_rs::gldf::product_definitions::Variant> = self
@@ -416,10 +406,8 @@ impl GldfState {
                         self.last_error = None;
                     }
                     None => {
-                        self.last_error = Some(format!(
-                            "Duplicate variant: index {} out of range",
-                            src_idx
-                        ));
+                        self.last_error =
+                            Some(format!("Duplicate variant: index {} out of range", src_idx));
                         self.is_modified = prev_modified;
                     }
                 }
@@ -487,9 +475,7 @@ impl GldfState {
                     if emitter_ids.is_empty() {
                         v.geometry = None;
                     } else {
-                        use gldf_rs::gldf::product_definitions::{
-                            EmitterReferenceBare, Geometry,
-                        };
+                        use gldf_rs::gldf::product_definitions::{EmitterReferenceBare, Geometry};
                         v.geometry = Some(Geometry {
                             emitter_reference: emitter_ids
                                 .into_iter()
@@ -720,8 +706,7 @@ impl GldfState {
                         ..Default::default()
                     });
                     if let Err(e) = push_spectrum {
-                        self.last_error =
-                            Some(format!("ImportSpectrumFile (add_spectrum): {}", e));
+                        self.last_error = Some(format!("ImportSpectrumFile (add_spectrum): {}", e));
                         self.is_modified = prev_modified;
                     } else {
                         self.last_error = None;
@@ -757,7 +742,10 @@ impl GldfState {
                 }
             }
             GldfAction::RenameChangeableLightSource { old_id, new_id } => {
-                match self.product.rename_changeable_light_source(&old_id, &new_id) {
+                match self
+                    .product
+                    .rename_changeable_light_source(&old_id, &new_id)
+                {
                     Ok(()) => {
                         self.last_error = None;
                     }
@@ -777,7 +765,10 @@ impl GldfState {
                 }
             }
             GldfAction::RenameMultiChannelLightSource { old_id, new_id } => {
-                match self.product.rename_multi_channel_light_source(&old_id, &new_id) {
+                match self
+                    .product
+                    .rename_multi_channel_light_source(&old_id, &new_id)
+                {
                     Ok(()) => self.last_error = None,
                     Err(e) => {
                         self.last_error = Some(format!("Rename multi-channel light source: {}", e));
@@ -799,7 +790,10 @@ impl GldfState {
                 }
             }
             GldfAction::UpdateMultiChannelLightSource { id, payload } => {
-                match self.product.update_multi_channel_light_source(&id, *payload) {
+                match self
+                    .product
+                    .update_multi_channel_light_source(&id, *payload)
+                {
                     Ok(()) => self.last_error = None,
                     Err(e) => {
                         self.last_error = Some(format!("Update multi-channel light source: {}", e));
@@ -808,11 +802,7 @@ impl GldfState {
                 }
             }
             GldfAction::AddMultiChannelChannel { ls_id, channel } => {
-                let Some(ls_collection) = self
-                    .product
-                    .general_definitions
-                    .light_sources
-                    .as_mut()
+                let Some(ls_collection) = self.product.general_definitions.light_sources.as_mut()
                 else {
                     self.last_error = Some("Add channel: no light sources".to_string());
                     self.is_modified = prev_modified;
@@ -834,11 +824,7 @@ impl GldfState {
                 self.last_error = None;
             }
             GldfAction::RemoveMultiChannelChannel { ls_id, index } => {
-                let Some(ls_collection) = self
-                    .product
-                    .general_definitions
-                    .light_sources
-                    .as_mut()
+                let Some(ls_collection) = self.product.general_definitions.light_sources.as_mut()
                 else {
                     self.last_error = Some("Remove channel: no light sources".to_string());
                     self.is_modified = prev_modified;
@@ -867,12 +853,12 @@ impl GldfState {
                     self.is_modified = prev_modified;
                 }
             }
-            GldfAction::UpdateMultiChannelChannel { ls_id, index, channel } => {
-                let Some(ls_collection) = self
-                    .product
-                    .general_definitions
-                    .light_sources
-                    .as_mut()
+            GldfAction::UpdateMultiChannelChannel {
+                ls_id,
+                index,
+                channel,
+            } => {
+                let Some(ls_collection) = self.product.general_definitions.light_sources.as_mut()
                 else {
                     self.last_error = Some("Update channel: no light sources".to_string());
                     self.is_modified = prev_modified;
@@ -948,11 +934,10 @@ impl GldfState {
             GldfAction::RemoveLightSource { id } => {
                 // Try Fixed → Changeable → MultiChannel; the three live in
                 // the same id namespace so any one of them may own the id.
-                if self.product.remove_fixed_light_source(&id).is_ok() {
-                    self.last_error = None;
-                } else if self.product.remove_changeable_light_source(&id).is_ok() {
-                    self.last_error = None;
-                } else if self.product.remove_multi_channel_light_source(&id).is_ok() {
+                if self.product.remove_fixed_light_source(&id).is_ok()
+                    || self.product.remove_changeable_light_source(&id).is_ok()
+                    || self.product.remove_multi_channel_light_source(&id).is_ok()
+                {
                     self.last_error = None;
                 } else {
                     self.last_error = Some(format!(
@@ -992,14 +977,15 @@ impl GldfState {
                 };
                 use gldf_rs::gldf::header::{Locale, LocaleFoo};
                 let id = self.product.generate_unique_id("emitter");
-                let name_locale = child_name.as_ref().filter(|s| !s.trim().is_empty()).map(|n| {
-                    LocaleFoo {
+                let name_locale = child_name
+                    .as_ref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|n| LocaleFoo {
                         locale: vec![Locale {
                             language: String::new(),
                             value: n.clone(),
                         }],
-                    }
-                });
+                    });
                 let mut emitter = Emitter {
                     id,
                     ..Default::default()
@@ -1022,20 +1008,24 @@ impl GldfState {
                         });
                     }
                     LightEmitterKind::Changeable => {
-                        emitter.changeable_light_emitter.push(ChangeableLightEmitter {
-                            name: name_locale,
-                            photometry_reference: PhotometryReference { photometry_id },
-                            ..Default::default()
-                        });
+                        emitter
+                            .changeable_light_emitter
+                            .push(ChangeableLightEmitter {
+                                name: name_locale,
+                                photometry_reference: PhotometryReference { photometry_id },
+                                ..Default::default()
+                            });
                     }
                     LightEmitterKind::MultiChannel => {
-                        emitter.multi_channel_light_emitter.push(MultiChannelLightEmitter {
-                            name: name_locale,
-                            light_source_reference: MultiChannelLightSourceReference {
-                                multi_channel_light_source_id,
-                            },
-                            ..Default::default()
-                        });
+                        emitter
+                            .multi_channel_light_emitter
+                            .push(MultiChannelLightEmitter {
+                                name: name_locale,
+                                light_source_reference: MultiChannelLightSourceReference {
+                                    multi_channel_light_source_id,
+                                },
+                                ..Default::default()
+                            });
                     }
                     LightEmitterKind::Sensor => {
                         // SensorEmitter has no <Name> in the schema; the
@@ -1055,15 +1045,13 @@ impl GldfState {
                     }
                 }
             }
-            GldfAction::RemoveEmitter { id } => {
-                match self.product.remove_emitter(&id) {
-                    Ok(_) => self.last_error = None,
-                    Err(e) => {
-                        self.last_error = Some(format!("Remove emitter: {}", e));
-                        self.is_modified = prev_modified;
-                    }
+            GldfAction::RemoveEmitter { id } => match self.product.remove_emitter(&id) {
+                Ok(_) => self.last_error = None,
+                Err(e) => {
+                    self.last_error = Some(format!("Remove emitter: {}", e));
+                    self.is_modified = prev_modified;
                 }
-            }
+            },
             GldfAction::AddFixedEmitter {
                 emitter_id,
                 child_name,
@@ -1080,14 +1068,15 @@ impl GldfState {
                 } else {
                     emitter_id
                 };
-                let name_locale = child_name.as_ref().filter(|s| !s.trim().is_empty()).map(|n| {
-                    LocaleFoo {
+                let name_locale = child_name
+                    .as_ref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|n| LocaleFoo {
                         locale: vec![Locale {
                             language: String::new(),
                             value: n.clone(),
                         }],
-                    }
-                });
+                    });
                 let emitter = Emitter {
                     id,
                     fixed_light_emitter: vec![FixedLightEmitter {
@@ -1152,10 +1141,12 @@ impl GldfState {
                     self.is_modified = prev_modified;
                     return;
                 };
-                emitter.changeable_light_emitter.push(ChangeableLightEmitter {
-                    photometry_reference: PhotometryReference { photometry_id },
-                    ..Default::default()
-                });
+                emitter
+                    .changeable_light_emitter
+                    .push(ChangeableLightEmitter {
+                        photometry_reference: PhotometryReference { photometry_id },
+                        ..Default::default()
+                    });
                 self.last_error = None;
             }
             GldfAction::AddMultiChannelLightEmitter {
@@ -1170,12 +1161,14 @@ impl GldfState {
                     self.is_modified = prev_modified;
                     return;
                 };
-                emitter.multi_channel_light_emitter.push(MultiChannelLightEmitter {
-                    light_source_reference: MultiChannelLightSourceReference {
-                        multi_channel_light_source_id,
-                    },
-                    ..Default::default()
-                });
+                emitter
+                    .multi_channel_light_emitter
+                    .push(MultiChannelLightEmitter {
+                        light_source_reference: MultiChannelLightSourceReference {
+                            multi_channel_light_source_id,
+                        },
+                        ..Default::default()
+                    });
                 self.last_error = None;
             }
             GldfAction::AddSensorEmitter {
@@ -1420,17 +1413,15 @@ impl GldfState {
                     }
                 }
             }
-            GldfAction::RemovePhotometry { id } => {
-                match self.product.remove_photometry(&id) {
-                    Ok(_) => {
-                        self.last_error = None;
-                    }
-                    Err(e) => {
-                        self.last_error = Some(format!("Remove photometry: {}", e));
-                        self.is_modified = prev_modified;
-                    }
+            GldfAction::RemovePhotometry { id } => match self.product.remove_photometry(&id) {
+                Ok(_) => {
+                    self.last_error = None;
                 }
-            }
+                Err(e) => {
+                    self.last_error = Some(format!("Remove photometry: {}", e));
+                    self.is_modified = prev_modified;
+                }
+            },
             GldfAction::AddSensor => {
                 use gldf_rs::gldf::general_definitions::sensors::{Sensor, Sensors};
                 let gd = &mut self.product.general_definitions;
@@ -1461,7 +1452,8 @@ impl GldfState {
                 use gldf_rs::gldf::general_definitions::sensors::SensorFileReference;
                 if let Some(s) = self.product.general_definitions.sensors.as_mut() {
                     if let Some(slot) = s.sensor.get_mut(index) {
-                        slot.sensor_file_reference = file_id.map(|fid| SensorFileReference { file_id: fid });
+                        slot.sensor_file_reference =
+                            file_id.map(|fid| SensorFileReference { file_id: fid });
                     }
                 }
             }
@@ -1472,7 +1464,9 @@ impl GldfState {
                         slot.detector_characteristics = if values.is_empty() {
                             None
                         } else {
-                            Some(DetectorCharacteristics { detector_characteristic: values })
+                            Some(DetectorCharacteristics {
+                                detector_characteristic: values,
+                            })
                         };
                     }
                 }
@@ -1484,7 +1478,9 @@ impl GldfState {
                         slot.detection_methods = if values.is_empty() {
                             None
                         } else {
-                            Some(DetectionMethods { detection_method: values })
+                            Some(DetectionMethods {
+                                detection_method: values,
+                            })
                         };
                     }
                 }
@@ -1496,7 +1492,9 @@ impl GldfState {
                         slot.detector_types = if values.is_empty() {
                             None
                         } else {
-                            Some(DetectorTypes { detector_type: values })
+                            Some(DetectorTypes {
+                                detector_type: values,
+                            })
                         };
                     }
                 }
@@ -1526,18 +1524,30 @@ impl GldfState {
                 // .l3d/.m3d/.r3d → geo/*, images → image/<ext>, .pdf →
                 // document/pdf). Anything else falls through to "other"
                 // — the user can edit the content_type inline afterwards.
-                let content_type = if lower.ends_with(".ies") { "ldc/ies" }
-                    else if lower.ends_with(".ldt") { "ldc/eulumdat" }
-                    else if lower.ends_with(".spd") { "spectrum/text" }
-                    else if lower.ends_with(".l3d") { "geo/l3d" }
-                    else if lower.ends_with(".m3d") { "geo/m3d" }
-                    else if lower.ends_with(".r3d") { "geo/r3d" }
-                    // GLDF rc-3 closed enum spells JPEG as "image/jpg" (no -e-).
-                    // Browsers / IANA say "image/jpeg" — we use the schema spelling.
-                    else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") { "image/jpg" }
-                    else if lower.ends_with(".png") { "image/png" }
-                    else if lower.ends_with(".pdf") { "document/pdf" }
-                    else { "other" };
+                let content_type = if lower.ends_with(".ies") {
+                    "ldc/ies"
+                } else if lower.ends_with(".ldt") {
+                    "ldc/eulumdat"
+                } else if lower.ends_with(".spd") {
+                    "spectrum/text"
+                } else if lower.ends_with(".l3d") {
+                    "geo/l3d"
+                } else if lower.ends_with(".m3d") {
+                    "geo/m3d"
+                } else if lower.ends_with(".r3d") {
+                    "geo/r3d"
+                }
+                // GLDF rc-3 closed enum spells JPEG as "image/jpg" (no -e-).
+                // Browsers / IANA say "image/jpeg" — we use the schema spelling.
+                else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+                    "image/jpg"
+                } else if lower.ends_with(".png") {
+                    "image/png"
+                } else if lower.ends_with(".pdf") {
+                    "document/pdf"
+                } else {
+                    "other"
+                };
                 let id = self.product.generate_unique_id("file");
                 let push_result = self.product.add_file(File {
                     id: id.clone(),
@@ -1582,9 +1592,7 @@ impl GldfState {
                 }) {
                     Ok(()) => {
                         self.embedded_files.insert(id.clone(), bytes);
-                        if let Some(pics) =
-                            ensure_product_meta_pictures(self, Scope::Product)
-                        {
+                        if let Some(pics) = ensure_product_meta_pictures(self, Scope::Product) {
                             pics.image.push(Image {
                                 file_id: id,
                                 image_type,
@@ -1599,8 +1607,7 @@ impl GldfState {
                 }
             }
             GldfAction::RemoveFile(id) => {
-                self
-                    .product
+                self.product
                     .general_definitions
                     .files
                     .file
@@ -1706,12 +1713,10 @@ impl GldfState {
                 ensure_descriptive_photometry(self, index).downward_flux_fraction = value;
             }
             GldfAction::SetPhotometryDownwardLOR { index, value } => {
-                ensure_descriptive_photometry(self, index).downward_light_output_ratio =
-                    value;
+                ensure_descriptive_photometry(self, index).downward_light_output_ratio = value;
             }
             GldfAction::SetPhotometryUpwardLOR { index, value } => {
-                ensure_descriptive_photometry(self, index).upward_light_output_ratio =
-                    value;
+                ensure_descriptive_photometry(self, index).upward_light_output_ratio = value;
             }
             GldfAction::SetPhotometryCutOffAngle { index, value } => {
                 ensure_descriptive_photometry(self, index).cut_off_angle = value;
@@ -1729,8 +1734,7 @@ impl GldfState {
                 ensure_descriptive_photometry(self, index).photometric_code = value;
             }
             GldfAction::SetPhotometryBugRating { index, value } => {
-                ensure_descriptive_photometry(self, index)
-                    .light_distribution_bug_rating = value;
+                ensure_descriptive_photometry(self, index).light_distribution_bug_rating = value;
             }
             GldfAction::SetProductMetaName(value) => {
                 ensure_product_meta_data(self).name = Some(value);
@@ -1841,30 +1845,30 @@ impl GldfState {
                 file_id,
                 image_type,
             } => {
-                if let Some(img) = ensure_product_meta_pictures(self, scope)
-                    .and_then(|p| p.image.get_mut(index))
+                if let Some(img) =
+                    ensure_product_meta_pictures(self, scope).and_then(|p| p.image.get_mut(index))
                 {
                     img.file_id = file_id;
                     img.image_type = image_type;
                 }
             }
             GldfAction::RemoveProductMetaPicture { scope, index } => {
-                let pics_opt: Option<&mut gldf_rs::gldf::general_definitions::Images> =
-                    match scope {
-                        Scope::Product => self
-                            .product
-                            .product_definitions
-                            .product_meta_data
-                            .as_mut()
-                            .and_then(|m| m.pictures.as_mut()),
-                        Scope::Variant(i) => self
-                            .product
-                            .product_definitions
-                            .variants
-                            .as_mut()
-                            .and_then(|vs| vs.variant.get_mut(i))
-                            .and_then(|v| v.pictures.as_mut()),
-                    };
+                let pics_opt: Option<&mut gldf_rs::gldf::general_definitions::Images> = match scope
+                {
+                    Scope::Product => self
+                        .product
+                        .product_definitions
+                        .product_meta_data
+                        .as_mut()
+                        .and_then(|m| m.pictures.as_mut()),
+                    Scope::Variant(i) => self
+                        .product
+                        .product_definitions
+                        .variants
+                        .as_mut()
+                        .and_then(|vs| vs.variant.get_mut(i))
+                        .and_then(|v| v.pictures.as_mut()),
+                };
                 if let Some(pics) = pics_opt {
                     if index < pics.image.len() {
                         pics.image.remove(index);
@@ -1885,8 +1889,8 @@ impl GldfState {
                 country_code,
                 value,
             } => {
-                if let Some(h) = ensure_hyperlinks(self, scope)
-                    .and_then(|hs| hs.hyperlink.get_mut(index))
+                if let Some(h) =
+                    ensure_hyperlinks(self, scope).and_then(|hs| hs.hyperlink.get_mut(index))
                 {
                     h.href = href;
                     h.language = language;
@@ -1974,8 +1978,7 @@ impl GldfState {
                             log::debug!("L3D MTL sync: {:?}", outcome);
                         }
                         Err(e) => {
-                            self.last_error =
-                                Some(format!("L3D MTL sync: {}", e));
+                            self.last_error = Some(format!("L3D MTL sync: {}", e));
                         }
                     }
                 }
@@ -2064,33 +2067,51 @@ impl GldfState {
             GldfAction::AddCustomProperty(scope) => {
                 use gldf_rs::gldf::product_definitions::Property;
                 if let Some(cp) = ensure_custom_properties(self, scope) {
-                    let mut p = Property::default();
-                    p.id = format!("prop-{}", cp.property.len() + 1);
+                    let p = Property {
+                        id: format!("prop-{}", cp.property.len() + 1),
+                        ..Default::default()
+                    };
                     cp.property.push(p);
                 }
             }
-            GldfAction::UpdateCustomPropertyId { scope, index, value } => {
+            GldfAction::UpdateCustomPropertyId {
+                scope,
+                index,
+                value,
+            } => {
                 if let Some(cp) = ensure_custom_properties(self, scope) {
                     if let Some(slot) = cp.property.get_mut(index) {
                         slot.id = value;
                     }
                 }
             }
-            GldfAction::UpdateCustomPropertyName { scope, index, value } => {
+            GldfAction::UpdateCustomPropertyName {
+                scope,
+                index,
+                value,
+            } => {
                 if let Some(cp) = ensure_custom_properties(self, scope) {
                     if let Some(slot) = cp.property.get_mut(index) {
                         slot.name = value;
                     }
                 }
             }
-            GldfAction::UpdateCustomPropertySource { scope, index, value } => {
+            GldfAction::UpdateCustomPropertySource {
+                scope,
+                index,
+                value,
+            } => {
                 if let Some(cp) = ensure_custom_properties(self, scope) {
                     if let Some(slot) = cp.property.get_mut(index) {
                         slot.property_source = value;
                     }
                 }
             }
-            GldfAction::UpdateCustomPropertyValue { scope, index, value } => {
+            GldfAction::UpdateCustomPropertyValue {
+                scope,
+                index,
+                value,
+            } => {
                 if let Some(cp) = ensure_custom_properties(self, scope) {
                     if let Some(slot) = cp.property.get_mut(index) {
                         // Setting Value clears any FileReference — the XSD
@@ -2185,8 +2206,7 @@ impl GldfState {
                         g.standby_power = standby_power;
                         g.dimmable = dimmable;
                         g.color_controllable = color_controllable;
-                        g.constant_light_output_start_power =
-                            constant_light_output_start_power;
+                        g.constant_light_output_start_power = constant_light_output_start_power;
                         g.constant_light_output_end_power = constant_light_output_end_power;
                         self.last_error = None;
                     } else {
@@ -2214,17 +2234,12 @@ impl GldfState {
                 let cgs_opt = self.product.general_definitions.control_gears.as_mut();
                 if let Some(cgs) = cgs_opt {
                     if cgs.control_gear.iter().any(|g| g.id == new_id) {
-                        self.last_error = Some(format!(
-                            "RenameControlGear: id '{}' already exists",
-                            new_id
-                        ));
+                        self.last_error =
+                            Some(format!("RenameControlGear: id '{}' already exists", new_id));
                         self.is_modified = prev_modified;
-                    } else if let Some(g) =
-                        cgs.control_gear.iter_mut().find(|g| g.id == old_id)
-                    {
+                    } else if let Some(g) = cgs.control_gear.iter_mut().find(|g| g.id == old_id) {
                         g.id = new_id.clone();
-                        if let Some(eqs) = self.product.general_definitions.equipments.as_mut()
-                        {
+                        if let Some(eqs) = self.product.general_definitions.equipments.as_mut() {
                             for e in eqs.equipment.iter_mut() {
                                 if let Some(cgr) = e.control_gear_reference.as_mut() {
                                     if cgr.control_gear_id == old_id {
@@ -2233,9 +2248,7 @@ impl GldfState {
                                 }
                             }
                         }
-                        if let Some(emitters) =
-                            self.product.general_definitions.emitters.as_mut()
-                        {
+                        if let Some(emitters) = self.product.general_definitions.emitters.as_mut() {
                             for em in emitters.emitter.iter_mut() {
                                 for fe in em.fixed_light_emitter.iter_mut() {
                                     if let Some(cgr) = fe.control_gear_reference.as_mut() {
@@ -2305,26 +2318,22 @@ impl GldfState {
                             light_source_id.map(|lid| EquipmentLightSourceReference {
                                 changeable_light_source_id: lid,
                             });
-                        e.control_gear_reference = control_gear_id.map(|cid| {
-                            ControlGearReference {
+                        e.control_gear_reference =
+                            control_gear_id.map(|cid| ControlGearReference {
                                 control_gear_id: cid,
                                 control_gear_count: None,
-                            }
-                        });
+                            });
                         e.rated_input_power = rated_input_power;
                         e.emergency_ballast_lumen_factor = emergency_ballast_lumen_factor;
                         e.emergency_rated_luminous_flux = emergency_rated_luminous_flux;
                         self.last_error = None;
                     } else {
-                        self.last_error = Some(format!(
-                            "UpdateEquipment: no equipment with id '{}'",
-                            id
-                        ));
+                        self.last_error =
+                            Some(format!("UpdateEquipment: no equipment with id '{}'", id));
                         self.is_modified = prev_modified;
                     }
                 } else {
-                    self.last_error =
-                        Some("UpdateEquipment: no equipments defined".to_string());
+                    self.last_error = Some("UpdateEquipment: no equipments defined".to_string());
                     self.is_modified = prev_modified;
                 }
             }
@@ -2340,14 +2349,10 @@ impl GldfState {
                 let eqs_opt = self.product.general_definitions.equipments.as_mut();
                 if let Some(eqs) = eqs_opt {
                     if eqs.equipment.iter().any(|e| e.id == new_id) {
-                        self.last_error = Some(format!(
-                            "RenameEquipment: id '{}' already exists",
-                            new_id
-                        ));
+                        self.last_error =
+                            Some(format!("RenameEquipment: id '{}' already exists", new_id));
                         self.is_modified = prev_modified;
-                    } else if let Some(e) =
-                        eqs.equipment.iter_mut().find(|e| e.id == old_id)
-                    {
+                    } else if let Some(e) = eqs.equipment.iter_mut().find(|e| e.id == old_id) {
                         e.id = new_id;
                         self.last_error = None;
                     } else {
@@ -2358,8 +2363,7 @@ impl GldfState {
                         self.is_modified = prev_modified;
                     }
                 } else {
-                    self.last_error =
-                        Some("RenameEquipment: no equipments defined".to_string());
+                    self.last_error = Some("RenameEquipment: no equipments defined".to_string());
                     self.is_modified = prev_modified;
                 }
             }
@@ -2376,9 +2380,7 @@ impl GldfState {
                 });
                 let emitters_opt = self.product.general_definitions.emitters.as_mut();
                 if let Some(emitters) = emitters_opt {
-                    if let Some(em) =
-                        emitters.emitter.iter_mut().find(|e| e.id == emitter_id)
-                    {
+                    if let Some(em) = emitters.emitter.iter_mut().find(|e| e.id == emitter_id) {
                         let hit = match kind {
                             LightEmitterKind::Fixed => em
                                 .fixed_light_emitter
@@ -2411,9 +2413,8 @@ impl GldfState {
                         self.is_modified = prev_modified;
                     }
                 } else {
-                    self.last_error = Some(
-                        "SetEmitterControlGearReference: no emitters defined".to_string(),
-                    );
+                    self.last_error =
+                        Some("SetEmitterControlGearReference: no emitters defined".to_string());
                     self.is_modified = prev_modified;
                 }
             }
@@ -2497,8 +2498,8 @@ impl GldfState {
                 hours,
                 flux,
             } => {
-                if let Some(entry) = ensure_emergency_duration(self, scope)
-                    .and_then(|d| d.flux.get_mut(index))
+                if let Some(entry) =
+                    ensure_emergency_duration(self, scope).and_then(|d| d.flux.get_mut(index))
                 {
                     entry.hours = hours;
                     entry.value = flux;
@@ -2587,13 +2588,10 @@ impl GldfState {
                 *self = GldfState::default();
             }
         }
-
     }
 }
 
 // ---- Leptos context plumbing ----
-
-/// Editor state context. A signal so any component below the provider can
 
 pub fn collect_languages(product: &GldfProduct) -> Vec<String> {
     use gldf_rs::gldf::LocaleFoo;
