@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-24
+
+### Fixed
+
+- **`gldf-rs` with the `xsd` feature did not compile from crates.io** (0.5.0): the rc-3 / rc-4 schemas were read from outside the crate. They now ship inside it (`schemas/`).
+
+### Changed
+
+- **Batch input formats are pluggable**: `gldf_rs_editor::register_container_converter` lets an application add a container format (collected as input, converted to GLDF before the template applies). The crate itself ships no converter and has no `uld` feature any more; DIALux `.uld` input lives in the local-only `extra/gldf-rs-uld` (builds `gldf-cli-uld`), because its converter is not on crates.io.
+- `gldf-rs-cli` is a library (`gldf_rs_cli::run`) plus the `gldf-cli` binary.
+- `acadlisp` comes from crates.io with the sibling checkout as a local patch. `gldf-rs-lisp`, `gldf-rs-wasm` and `gldf-bevy` need a newer acadlisp than the published 0.2.0 and stay unpublished until it is released.
+- First release of `gldf-rs-editor`, `gldf-rs-cli` and `gldf-rs-tui` on crates.io.
+
 ## [0.5.0] - 2026-11-23
 
 Everything since 0.4.0 in one release: the feature branch was merged into

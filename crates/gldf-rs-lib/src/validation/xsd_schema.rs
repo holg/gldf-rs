@@ -37,11 +37,11 @@ pub use crate::GldfSchemaVersion;
 pub const DEFAULT_VALIDATION_SCHEMA: GldfSchemaVersion = GldfSchemaVersion::Rc3;
 
 /// Embedded rc-3 XSD — the latest published schema (default target).
-const RC3_XSD: &str = include_str!("../../../../tests/data/gldf-1.0.0-rc-3.xsd");
+const RC3_XSD: &str = include_str!("../../schemas/gldf-1.0.0-rc-3.xsd");
 
 /// Embedded rc-4 XSD — the proposed schema (globallightingdata/gldf#30),
 /// bundled from the PR branch so rc-4 features can be validated pre-merge.
-const RC4_XSD: &str = include_str!("../../../../tests/data/gldf-1.0.0-rc-4.xsd");
+const RC4_XSD: &str = include_str!("../../schemas/gldf-1.0.0-rc-4.xsd");
 
 /// One XSD violation as reported by the validator.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,5 +193,29 @@ mod tests {
     fn empty_xml_is_an_error() {
         let r = validate_product_xml("");
         assert!(matches!(r, Err(XsdError::BadXml(_))));
+    }
+}
+
+#[cfg(test)]
+mod schema_copies {
+    /// `schemas/` holds the crate's own copies of the XSDs (a published
+    /// crate can only embed its own files). In the repository they must
+    /// equal the files the other tests read from `tests/data`.
+    #[test]
+    fn embedded_schemas_match_tests_data() {
+        let data = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data");
+        if !data.is_dir() {
+            return;
+        }
+        for (name, embedded) in [
+            ("gldf-1.0.0-rc-3.xsd", super::RC3_XSD),
+            ("gldf-1.0.0-rc-4.xsd", super::RC4_XSD),
+        ] {
+            let original = std::fs::read_to_string(data.join(name)).unwrap();
+            assert!(
+                original == embedded,
+                "schemas/{name} differs from tests/data/{name}"
+            );
+        }
     }
 }

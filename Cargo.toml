@@ -19,7 +19,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["Holger Trahe <trahe@mac.com>"]
 license = "AGPL-3.0-or-later"
@@ -28,13 +28,13 @@ homepage = "https://github.com/holg/gldf-rs"
 
 [workspace.dependencies]
 # Core library
-gldf-rs = { version = "0.5.0", path = "crates/gldf-rs-lib", default-features = false }
+gldf-rs = { version = "0.5.1", path = "crates/gldf-rs-lib", default-features = false }
 # Editor API (frontend-agnostic) — all consumers (WASM, TUI, CLI, Python, FFI) drive this.
-gldf-rs-editor = { version = "0.5.0", path = "crates/gldf-rs-editor" }
-gldf-rs-lisp = { version = "0.5.0", path = "crates/gldf-rs-lisp" }
+gldf-rs-editor = { version = "0.5.1", path = "crates/gldf-rs-editor" }
+gldf-rs-lisp = { version = "0.5.1", path = "crates/gldf-rs-lisp" }
 # Translation store (gldf.* keys + RAL Classic names). Frontends depend on this crate;
 # the lib only references its Translator trait.
-gldf-rs-i18n = { version = "0.5.0", path = "crates/gldf-rs-i18n" }
+gldf-rs-i18n = { version = "0.5.1", path = "crates/gldf-rs-i18n" }
 
 # Serde helper for binary fields (Vec<u8> → JSON byte arrays without UTF-8 lossy detour).
 serde_bytes = "0.11"
