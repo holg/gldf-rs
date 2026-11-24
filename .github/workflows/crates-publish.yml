@@ -18,6 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -48,6 +56,14 @@ jobs:
     needs: publish-lib
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,6 +94,14 @@ jobs:
     needs: publish-lib
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -110,6 +134,14 @@ jobs:
     needs: publish-lib
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -140,6 +172,14 @@ jobs:
     needs: publish-lib
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

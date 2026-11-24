@@ -45,11 +45,11 @@ jobs:
             target: x86_64-unknown-linux-gnu
             suffix: linux-x86_64
             ext: ""
-          - os: macos-14
+          - os: macos-latest
             target: x86_64-apple-darwin
             suffix: macos-x86_64
             ext: ""
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             suffix: macos-aarch64
             ext: ""
@@ -60,6 +60,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -104,6 +112,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -141,16 +157,16 @@ jobs:
             target: x86_64-unknown-linux-gnu
             lib_name: libgldf_ffi.so
             platform: linux
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             lib_name: libgldf_ffi.dylib
             platform: macos
           # iOS platforms
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-ios
             lib_name: libgldf_ffi.a
             platform: ios
-          - os: macos-14
+          - os: macos-latest
             target: x86_64-apple-ios
             lib_name: libgldf_ffi.a
             platform: ios-simulator
@@ -173,6 +189,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -228,6 +252,14 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
 
       - name: Determine version
         id: version

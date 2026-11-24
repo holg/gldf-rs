@@ -35,6 +35,14 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -62,6 +70,14 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -87,6 +103,14 @@ jobs:
             target: x64
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -108,12 +132,20 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: macos-14
+          - runner: macos-latest
             target: x86_64
-          - runner: macos-14
+          - runner: macos-latest
             target: aarch64
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -133,6 +165,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Local builds take sibling checkouts through [patch.crates-io] (the last
+      # section of Cargo.toml); CI and releases use the crates.io versions.
+      - name: Remove the local patch section
+        shell: python
+        run: |
+          import re, pathlib
+          p = pathlib.Path("Cargo.toml")
+          p.write_text(re.sub(r'\n\[patch\.crates-io\].*', '\n', p.read_text(), flags=re.DOTALL))
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
