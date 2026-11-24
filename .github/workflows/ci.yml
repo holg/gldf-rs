@@ -47,11 +47,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: wasm32-unknown-unknown
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # gldf-rs-wasm is a browser crate: its native build needs the Blitz
+      # renderer of a Leptos fork that is not on crates.io, so it is checked
+      # for wasm32 only.
+      - run: cargo clippy --workspace --exclude gldf-rs-wasm --all-targets -- -D warnings
+      - run: cargo clippy -p gldf-rs-wasm --target wasm32-unknown-unknown -- -D warnings
 
   # Build and test on multiple platforms
   build:
@@ -81,11 +86,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
+      # gldf-rs-wasm: wasm32 only (see the Clippy job). gldf-rs-egui on macOS:
+      # three-d's winit 0.28 pulls an objc2 beta that Rust 1.100 no longer
+      # compiles; Linux and Windows build it.
       - name: Build workspace
-        run: cargo build --workspace --release
+        shell: bash
+        run: cargo build --workspace --release $EXCLUDE
+        env:
+          EXCLUDE: ${{ matrix.os == 'macos-latest' && '--exclude gldf-rs-wasm --exclude gldf-rs-egui' || '--exclude gldf-rs-wasm' }}
 
       - name: Run tests
-        run: cargo test --workspace --release
+        shell: bash
+        run: cargo test --workspace --release $EXCLUDE
+        env:
+          EXCLUDE: ${{ matrix.os == 'macos-latest' && '--exclude gldf-rs-wasm --exclude gldf-rs-egui' || '--exclude gldf-rs-wasm' }}
 
   # Build WASM
   build-wasm:
@@ -133,7 +147,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
-      - run: cargo doc --workspace --no-deps
+      - run: cargo doc --workspace --exclude gldf-rs-wasm --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
 

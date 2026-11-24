@@ -339,7 +339,6 @@ pub fn files(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
             if ui.button("Remove").clicked() {
                 app.dispatch(GldfAction::RemoveFile(sel_id.clone()));
                 app.sel_file = None;
-                return;
             }
         });
         ui.separator();
@@ -483,7 +482,6 @@ pub fn photometries(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
             }
             if ui.button("Remove").clicked() {
                 app.dispatch(GldfAction::RemovePhotometry { id: row.id.clone() });
-                return;
             }
         });
         ui.separator();
@@ -588,6 +586,7 @@ pub fn light_sources(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
 
     // Changeable / MultiChannel — listed read-only for now; the typed
     // add flows exist in the reducer and can be wired the same way.
+    #[allow(clippy::type_complexity)]
     let (changeable, multi): (Vec<(String, String)>, Vec<(String, String)>) = app
         .state
         .product
@@ -873,7 +872,6 @@ pub fn variants(app: &mut GldfEditorApp, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui.button("Remove variant").clicked() {
                 app.dispatch(GldfAction::RemoveVariant { id: row.id.clone() });
-                return;
             }
         });
 

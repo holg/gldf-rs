@@ -168,7 +168,7 @@ pub fn leo_plan_picker(
     //     joint-local and can collapse onto one point), mirroring the
     //     WASM picker. ---
     const CELL: f32 = 104.0;
-    let cols = leos.len().min(3).max(1);
+    let cols = leos.len().clamp(1, 3);
     let rows = leos.len().div_ceil(cols);
     let desired = egui::vec2(cols as f32 * CELL, rows as f32 * CELL);
     let (grid_rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
