@@ -124,7 +124,7 @@ eulumdat-i18n = "0.8"
 l3d_rs = "0.2.4"
 # AutoLISP engine behind gldf-rs-lisp; crates.io version here, the sibling
 # checkout through `[patch.crates-io]` for local builds.
-acadlisp = "0.2"
+acadlisp = "0.3"
 
 # ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
 # `cfb 0.10` which pins `uuid = ^1` to 1.19.0; published Bevy 0.19

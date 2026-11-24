@@ -17,9 +17,8 @@ name = "gldf-lisp"
 path = "src/main.rs"
 
 [dependencies]
-# Interpreter. Sibling crate, path dep (matches `bimifc-lisp`'s
-# `../../../acadlisp`). When we publish, version pinning the matching
-# released acadlisp will replace the path.
+# Interpreter (crates.io; the sibling checkout for local builds, see the
+# workspace's `[patch.crates-io]`).
 acadlisp = { workspace = true }
 # Core GLDF model: load / query / serialize. Eulumdat + L3D pulled in
 # because the export functions need to drive them.
