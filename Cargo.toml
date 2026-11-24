@@ -122,6 +122,9 @@ eulumdat-i18n = "0.8"
 # 0.2.4 carries the `fbx-export` feature (ASCII FBX 7.4 writer) used by
 # gldf-unreal.
 l3d_rs = "0.2.4"
+# AutoLISP engine behind gldf-rs-lisp; crates.io version here, the sibling
+# checkout through `[patch.crates-io]` for local builds.
+acadlisp = "0.2"
 
 # ULD/ROLF file conversion — parked. The legacy `../uld-rs` pulls
 # `cfb 0.10` which pins `uuid = ^1` to 1.19.0; published Bevy 0.19
@@ -197,6 +200,7 @@ eulumdat = { path = "../eulumdat-rs/crates/eulumdat" }
 eulumdat-bevy = { path = "../eulumdat-rs/crates/eulumdat-bevy" }
 eulumdat-i18n = { path = "../eulumdat-rs/crates/eulumdat-i18n" }
 l3d_rs = { path = "../l3d-rs/crates/l3d_rs" }
+acadlisp = { path = "../acadlisp" }
 leptos = { path = "../leptos/leptos" }
 leptos_dom = { path = "../leptos/leptos_dom" }
 leptos_macro = { path = "../leptos/leptos_macro" }

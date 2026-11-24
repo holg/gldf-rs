@@ -34,7 +34,7 @@ gldf-rs-editor = { workspace = true }
 # Lisp scripting engine (acadlisp + gldf-rs glue). Drives the floating
 # REPL overlay in the WASM editor.
 gldf-rs-lisp = { workspace = true }
-acadlisp = { path = "../../../acadlisp" }
+acadlisp = { workspace = true }
 
 # Error handling
 anyhow.workspace = true

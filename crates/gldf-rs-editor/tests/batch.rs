@@ -229,42 +229,59 @@ fn template_draft_roundtrips_and_converts() {
     );
 }
 
-/// With the `uld` feature, a DIALux .uld container is silently accepted:
-/// converted to a complete GLDF (geometry included) with the wizard
-/// template contributing only header overrides.
-#[cfg(feature = "uld")]
+/// A registered container converter makes the pipeline accept its
+/// format: the converted GLDF is the working product and a wizard
+/// template contributes only header overrides.
 #[test]
-fn uld_input_converts_with_header_overrides() {
-    let uld =
-        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/test_1.uld"))
-            .expect("read tests/data/test_1.uld");
+fn registered_container_converts_with_header_overrides() {
+    fn demo(
+        _bytes: &[u8],
+        filename: &str,
+    ) -> Option<anyhow::Result<gldf_rs_editor::ConvertedContainer>> {
+        if !filename.to_ascii_lowercase().ends_with(".democontainer") {
+            return None;
+        }
+        let gldf = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/alurays.gldf"),
+        )
+        .expect("read tests/data/alurays.gldf");
+        Some(Ok(gldf_rs_editor::ConvertedContainer {
+            gldf_bytes: gldf,
+            product_name: "Demo".into(),
+            ..Default::default()
+        }))
+    }
+    gldf_rs_editor::register_container_converter("democontainer", demo);
+
     let template = BatchTemplate::parse(
-        r#"{"header_author": "batch: {input.stem}", "header_created_with": "uld-batch"}"#,
+        r#"{"header_author": "batch: {input.stem}", "header_created_with": "container-batch"}"#,
     )
     .unwrap();
     let files = HashMap::new();
     let resolver = MemoryResolver::new(&files);
     let out = process_one(
-        &uld,
-        "test_1.uld",
+        b"anything",
+        "one.democontainer",
         &template,
         &resolver,
         &BatchOptions {
             write_gldf: true,
-            write_ifc: true,
+            write_ifc: false,
         },
     )
-    .expect("process_one on .uld");
+    .expect("process_one on a registered container");
 
     let loaded =
         gldf_rs::GldfProduct::load_gldf_from_buf_all(out.gldf.expect("gldf")).expect("re-load");
-    assert_eq!(loaded.gldf.header.author, "batch: test_1");
-    assert_eq!(loaded.gldf.header.created_with_application, "uld-batch");
+    assert_eq!(loaded.gldf.header.author, "batch: one");
+    assert_eq!(
+        loaded.gldf.header.created_with_application,
+        "container-batch"
+    );
     assert!(
         !loaded.files.is_empty(),
-        "converted GLDF carries embedded files (geometry etc.)"
+        "the converted GLDF keeps its files"
     );
-    assert!(out.ifc.expect("ifc").contains("IFCLIGHTFIXTURETYPE"));
 }
 
 /// Returning `false` from the callback cancels the run after the

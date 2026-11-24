@@ -348,13 +348,13 @@ impl TemplateDraft {
 /// Convert one input file through the template. Platform-agnostic:
 /// bytes in, bytes out; the caller owns all I/O.
 ///
-/// Inputs are `.ldt` / `.ies` photometries; with the `uld` feature,
-/// DIALux `.uld` containers are also accepted (detected by OLE magic or
-/// extension). A ULD already carries a complete product, so it is
-/// converted to GLDF first and the template then applies on top: wizard
+/// Inputs are `.ldt` / `.ies` photometries, plus whatever container
+/// formats the application registered a converter for
+/// ([`register_container_converter`]). A converted container already
+/// carries a complete product, so wizard
 /// templates contribute only their header overrides (author,
 /// manufacturer, created-with, language — the construction steps would
-/// duplicate what the ULD defines), while action scripts apply in full.
+/// duplicate what the container defines), while action scripts apply in full.
 pub fn process_one(
     input_bytes: &[u8],
     input_filename: &str,
@@ -362,9 +362,16 @@ pub fn process_one(
     resolver: &dyn FileResolver,
     options: &BatchOptions,
 ) -> Result<BatchOutput> {
-    #[cfg(feature = "uld")]
-    if light_convert::is_uld(input_bytes) || input_filename.to_ascii_lowercase().ends_with(".uld") {
-        return process_uld(input_bytes, input_filename, template, resolver, options);
+    if let Some(converted) = convert_container(input_bytes, input_filename) {
+        let conv = converted.map_err(|e| anyhow!("convert {}: {}", input_filename, e))?;
+        return process_container(
+            conv,
+            input_bytes,
+            input_filename,
+            template,
+            resolver,
+            options,
+        );
     }
 
     let meta = ldt_metadata(input_bytes)
@@ -443,18 +450,67 @@ fn finish_outputs(
     })
 }
 
-/// ULD path: convert the container to GLDF via `light-convert`, load it
-/// as the working product, then layer the template on top.
-#[cfg(feature = "uld")]
-fn process_uld(
+/// A complete GLDF made from another container format by a converter the
+/// application registered with [`register_container_converter`].
+#[derive(Debug, Clone, Default)]
+pub struct ConvertedContainer {
+    /// The GLDF archive.
+    pub gldf_bytes: Vec<u8>,
+    /// Product name read from the source container.
+    pub product_name: String,
+    /// Manufacturer, when the source names one.
+    pub manufacturer: Option<String>,
+    /// Article / catalogue number, when the source names one.
+    pub article_number: Option<String>,
+}
+
+/// Turns the bytes of a foreign luminaire container into a GLDF. Returns
+/// `None` when the input (bytes, file name) is not its format.
+pub type ContainerConverter = fn(&[u8], &str) -> Option<Result<ConvertedContainer>>;
+
+static CONTAINER_CONVERTERS: std::sync::RwLock<Vec<(&'static str, ContainerConverter)>> =
+    std::sync::RwLock::new(Vec::new());
+
+/// Make the batch pipeline accept another container format: files with
+/// `extension` (without the dot) are collected as inputs, and
+/// [`process_one`] offers every input to `convert` before it tries to
+/// read it as photometry. This crate ships no converter; an application
+/// registers the ones it links.
+pub fn register_container_converter(extension: &'static str, convert: ContainerConverter) {
+    if let Ok(mut list) = CONTAINER_CONVERTERS.write() {
+        if !list.iter().any(|(e, _)| e.eq_ignore_ascii_case(extension)) {
+            list.push((extension, convert));
+        }
+    }
+}
+
+/// The first registered converter that recognises the input, if any.
+fn convert_container(input: &[u8], filename: &str) -> Option<Result<ConvertedContainer>> {
+    let converters: Vec<ContainerConverter> = CONTAINER_CONVERTERS
+        .read()
+        .map(|list| list.iter().map(|(_, c)| *c).collect())
+        .unwrap_or_default();
+    converters.into_iter().find_map(|c| c(input, filename))
+}
+
+/// Whether a registered converter takes files with this extension.
+fn is_container_extension(extension: &str) -> bool {
+    CONTAINER_CONVERTERS
+        .read()
+        .map(|list| list.iter().any(|(e, _)| e.eq_ignore_ascii_case(extension)))
+        .unwrap_or(false)
+}
+
+/// Container path: the converter delivered a complete GLDF; load it as
+/// the working product, then layer the template on top.
+fn process_container(
+    conv: ConvertedContainer,
     input_bytes: &[u8],
     input_filename: &str,
     template: &BatchTemplate,
     resolver: &dyn FileResolver,
     options: &BatchOptions,
 ) -> Result<BatchOutput> {
-    let conv = light_convert::convert_to_gldf_full(input_bytes, Some(input_filename), None)
-        .map_err(|e| anyhow!("convert {}: {}", input_filename, e))?;
     let loaded = gldf_rs::GldfProduct::load_gldf_from_buf_all(conv.gldf_bytes)
         .map_err(|e| anyhow!("re-load converted GLDF for {}: {}", input_filename, e))?;
     let mut embedded_files = std::collections::HashMap::new();
@@ -469,7 +525,7 @@ fn process_uld(
         embedded_files,
     });
 
-    // Map the ULD's product metadata onto the same placeholder keys the
+    // Map the container's product metadata onto the same placeholder keys the
     // LDT path fills, so one template serves both input kinds.
     let meta = LdtMetadata {
         name: conv.product_name.clone(),
@@ -502,9 +558,8 @@ fn process_uld(
 }
 
 /// Apply only the header fields of a wizard template to an
-/// already-complete product (the ULD path). Blank fields leave the
+/// already-complete product (the container path). Blank fields leave the
 /// product's own values alone.
-#[cfg(feature = "uld")]
 fn apply_header_overrides(state: &mut GldfState, draft: &WizardDraft) -> Result<()> {
     let mut dispatch = |action: GldfAction| -> Result<()> {
         state.apply(action);
@@ -583,8 +638,8 @@ mod fs_impl {
     }
 
     /// Expand a mixed list of files and directories into the input
-    /// files to convert: `.ldt` / `.ies` (case-insensitive; plus `.uld`
-    /// with the `uld` feature), directories walked recursively. Sorted
+    /// files to convert: `.ldt` / `.ies` (case-insensitive; plus the extensions of
+    /// registered container converters), directories walked recursively. Sorted
     /// and deduplicated.
     pub fn collect_inputs(paths: &[PathBuf]) -> Vec<PathBuf> {
         fn is_photometry(path: &Path) -> bool {
@@ -593,7 +648,7 @@ mod fs_impl {
                 .map(|e| {
                     e.eq_ignore_ascii_case("ldt")
                         || e.eq_ignore_ascii_case("ies")
-                        || (cfg!(feature = "uld") && e.eq_ignore_ascii_case("uld"))
+                        || super::is_container_extension(e)
                 })
                 .unwrap_or(false)
         }

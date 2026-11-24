@@ -7,13 +7,17 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lib]
+name = "gldf_rs_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "gldf-cli"
 path = "src/main.rs"
 
 [dependencies]
 gldf-rs = { workspace = true, features = ["eulumdat", "xsd"] }
-gldf-rs-editor = { workspace = true, features = ["uld"] }
+gldf-rs-editor = { workspace = true }
 l3d_rs = { workspace = true }
 zip = { workspace = true }
 clap = { workspace = true }

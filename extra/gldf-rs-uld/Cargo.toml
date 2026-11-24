@@ -1,0 +1,32 @@
+# Local only: DIALux .uld input for the gldf-rs batch pipeline.
+#
+# The converter (`light-convert`, in the sibling light-other-rs checkout) is
+# not on crates.io, and a published crate cannot name an unpublished one,
+# so this crate lives outside the gldf-rs workspace and is never published.
+# It registers the converter with gldf-rs-editor and builds `gldf-cli-uld`,
+# the normal gldf-cli with .uld input.
+#
+#   cargo run --manifest-path extra/gldf-rs-uld/Cargo.toml --bin gldf-cli-uld -- batch …
+[package]
+name = "gldf-rs-uld"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-or-later"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+gldf-rs-editor = { path = "../../crates/gldf-rs-editor" }
+gldf-rs-cli = { path = "../../crates/gldf-rs-cli" }
+light-convert = { path = "../../../light-other-rs/crates/light-convert", default-features = false }
+
+[dev-dependencies]
+gldf-rs = { path = "../../crates/gldf-rs-lib" }
+
+# One copy of each sibling crate, as in the gldf-rs workspace.
+[patch.crates-io]
+eulumdat = { path = "../../../eulumdat-rs/crates/eulumdat" }
+eulumdat-i18n = { path = "../../../eulumdat-rs/crates/eulumdat-i18n" }
+l3d_rs = { path = "../../../l3d-rs/crates/l3d_rs" }

@@ -31,6 +31,7 @@ pub use action::{GldfAction, LightEmitterKind, ModelEmitterBinding, Scope};
 #[cfg(not(target_arch = "wasm32"))]
 pub use batch::{collect_inputs, run_batch, BatchEvent, BatchJob, FileReport};
 pub use batch::{process_one, BatchOptions, BatchOutput, BatchTemplate, TemplateDraft};
+pub use batch::{register_container_converter, ContainerConverter, ConvertedContainer};
 pub use emitter_draft::EmitterDraft;
 #[cfg(not(target_arch = "wasm32"))]
 pub use script::FsResolver;

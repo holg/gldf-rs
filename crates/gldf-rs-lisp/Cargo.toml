@@ -20,7 +20,7 @@ path = "src/main.rs"
 # Interpreter. Sibling crate, path dep (matches `bimifc-lisp`'s
 # `../../../acadlisp`). When we publish, version pinning the matching
 # released acadlisp will replace the path.
-acadlisp = { path = "../../../acadlisp" }
+acadlisp = { workspace = true }
 # Core GLDF model: load / query / serialize. Eulumdat + L3D pulled in
 # because the export functions need to drive them.
 gldf-rs = { workspace = true, features = ["eulumdat", "l3d"] }
