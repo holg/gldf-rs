@@ -494,6 +494,7 @@ fn convert_container(input: &[u8], filename: &str) -> Option<Result<ConvertedCon
 }
 
 /// Whether a registered converter takes files with this extension.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_container_extension(extension: &str) -> bool {
     CONTAINER_CONVERTERS
         .read()
